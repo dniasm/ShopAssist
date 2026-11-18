@@ -1,0 +1,110 @@
+// ShopAssist gRPC contracts. Owned by the planner (Opus). Do not change field
+// numbers or names without asking; both the orchestrator and services depend on them.
+syntax = "proto3";
+
+package shopassist.v1;
+
+// ---------- Product service (owns products.db) ----------
+
+message Product {
+  string product_id = 1;   // e.g. "P-1001"
+  string name = 2;
+  string category = 3;     // e.g. "headphones", "hoodies"
+  string color = 4;
+  double price = 5;        // USD
+  string description = 6;
+}
+
+message SearchProductsRequest {
+  string text = 1;         // free-text keywords; empty = no keyword filter
+  string category = 2;     // optional exact category; empty = any
+  double max_price = 3;    // 0 = no limit
+  int32 limit = 4;         // 0 = default (10)
+}
+
+message SearchProductsResponse {
+  repeated Product products = 1;
+}
+
+message GetProductRequest {
+  string product_id = 1;
+}
+
+service ProductService {
+  rpc SearchProducts(SearchProductsRequest) returns (SearchProductsResponse);
+  // NOT_FOUND status if the product does not exist.
+  rpc GetProduct(GetProductRequest) returns (Product);
+}
+
+// ---------- Inventory service (owns inventory.db) ----------
+
+message StockRequest {
+  string product_id = 1;
+  string size = 2;         // optional; empty = all sizes
+}
+
+message StockLevel {
+  string product_id = 1;
+  string size = 2;         // "S","M","L","XL" or "ONE" for unsized items
+  int32 quantity = 3;
+}
+
+message StockResponse {
+  repeated StockLevel levels = 1;  // empty if product unknown to inventory
+}
+
+service InventoryService {
+  rpc GetStock(StockRequest) returns (StockResponse);
+}
+
+// ---------- Order service (owns orders.db) ----------
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  PLACED = 1;
+  PACKED = 2;
+  SHIPPED = 3;
+  OUT_FOR_DELIVERY = 4;
+  DELIVERED = 5;
+  CANCELLED = 6;
+}
+
+message OrderItem {
+  string product_id = 1;
+  string size = 2;
+  int32 quantity = 3;
+  double unit_price = 4;
+}
+
+message Order {
+  string order_id = 1;     // e.g. "1042"
+  string customer_name = 2;
+  OrderStatus status = 3;
+  repeated OrderItem items = 4;
+  double total = 5;
+  string updated_at = 6;   // ISO-8601 UTC
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message TrackOrderRequest {
+  string order_id = 1;
+}
+
+message OrderStatusUpdate {
+  string order_id = 1;
+  OrderStatus status = 2;
+  string message = 3;      // human-readable, e.g. "Left the warehouse in Dallas"
+  string timestamp = 4;    // ISO-8601 UTC
+}
+
+service OrderService {
+  // NOT_FOUND status if the order does not exist.
+  rpc GetOrder(GetOrderRequest) returns (Order);
+  // Server-streaming. Sends the current status first, then each later change,
+  // and ends the stream once the order reaches DELIVERED or CANCELLED.
+  // NOT_FOUND status if the order does not exist.
+  rpc TrackOrder(TrackOrderRequest) returns (stream OrderStatusUpdate);
+}
