@@ -129,3 +129,38 @@ Windows + PowerShell/Git Bash: use `pathlib`, no POSIX-only calls.
 5. `orchestrator/` contains no `sqlite3` import and no DB path (a test asserts this).
 6. Each intent in the table above works end to end.
 7. README explains the architecture, setup, run and the LLM env vars.
+
+## Phase 2 — Groq gpt-oss-120b with multi-key rotation
+
+Provider facts (checked against console.groq.com docs on 2026-11-18):
+- Base URL `https://api.groq.com/openai/v1`, model `openai/gpt-oss-120b`.
+- Four per-key limits (Developer base values; the user's org may differ): **30 RPM, 1000 RPD, 8000 TPM, 200000 TPD**.
+- Every response carries `x-ratelimit-remaining-requests` / `x-ratelimit-reset-requests` (that is **RPD**) and
+  `x-ratelimit-remaining-tokens` / `x-ratelimit-reset-tokens` (that is **TPM**). Reset format is a Go-style duration,
+  e.g. `2m59.56s`, `7.66s`, `1h2m3s`, `250ms`. A 429 adds `retry-after` (seconds). **RPM and TPD are not in headers.**
+- gpt-oss supports `reasoning_effort` (`low|medium|high`), `include_reasoning` (bool), strict `json_schema`
+  structured outputs (all props required, nullable via `["string","null"]`, `additionalProperties:false`; no streaming/tools).
+  `reasoning_format` is NOT supported for gpt-oss and must not be sent.
+
+Env vars (exact names):
+| Var | Default |
+|---|---|
+| `LLM_BASE_URL` | `https://api.groq.com/openai/v1` |
+| `LLM_API_KEYS` | empty; comma-separated keys. Legacy `LLM_API_KEY` (single) still accepted and merged. No keys → rules only. |
+| `LLM_MODEL` | `openai/gpt-oss-120b` |
+| `LLM_REASONING_EFFORT` | `low` |
+| `LLM_MAX_TOKENS` | `1024` (sent as `max_completion_tokens`) |
+| `LLM_TIMEOUT` | `10` — total wall-clock budget for one detection, across all key attempts |
+| `LLM_LIMIT_RPM` / `LLM_LIMIT_RPD` / `LLM_LIMIT_TPM` / `LLM_LIMIT_TPD` | `30` / `1000` / `8000` / `200000` |
+
+Key-pool behaviour:
+- Before a call, a key is eligible only if it has headroom on **all four** limits for this request
+  (estimated tokens = prompt chars/4 + `LLM_MAX_TOKENS`). Headroom comes from the latest headers where Groq gives
+  them (RPD, TPM, with their reset times) and from local sliding counters for RPM (60 s) and TPD (24 h, fed by
+  `usage.total_tokens`). Pick the eligible key with the most remaining headroom; ties → round-robin.
+- 429 → cool the key until `retry-after` (or the relevant reset), immediately retry the same request on the next
+  eligible key. 401/403 → disable that key for the process lifetime. Timeout/5xx/bad JSON → don't blame the key; at
+  most one retry on another key if budget remains, else fall back to rules.
+- No eligible key, or budget exhausted → `LLMError` → rules (`intent_detected.source = "rules"`).
+- Keys are never logged, returned, or put in exceptions; refer to keys as `key#<index>` (+ last 4 chars at most).
+- `GET /llm/status` → `{"enabled", "model", "keys":[{"key":"key#1 …abcd","state":"ok|cooling|disabled","rpm_left","rpd_left","tpm_left","tpd_left","cooling_until"}]}`.

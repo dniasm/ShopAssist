@@ -132,24 +132,86 @@ Order 1042 is shipped, 1043 is placed, 1044 is delivered and 1045 is cancelled.
 
 ## How questions are understood
 
-The orchestrator first tries an LLM to detect the intent and entities. If no LLM is
-configured, or the call times out or fails, it uses a deterministic rule-based parser.
-The `intent_detected` event says which path was used in its `source` field (`llm` or `rules`).
+The orchestrator first asks the Groq LLM (`openai/gpt-oss-120b`) to detect the intent and
+entities. If no key can serve the request, or the call fails or times out, it uses a
+deterministic rule-based parser. The `intent_detected` event's `source` field says which path
+answered: `llm` or `rules`.
 
 The rule-based path needs no key and no network, so the whole demo works offline.
 
 ## LLM configuration (optional)
 
-Any OpenAI-compatible Chat Completions provider works. Set these in `.env`:
+The LLM is Groq's `openai/gpt-oss-120b`, called through Groq's OpenAI-compatible API. It is
+optional. With no keys, the app uses the rule-based parser and works fully.
 
-| Variable | Meaning |
-|---|---|
-| `LLM_BASE_URL` | Base URL of the provider, e.g. `https://api.openai.com/v1` |
-| `LLM_API_KEY` | API key. Leave it empty to use the rule-based parser only. |
-| `LLM_MODEL` | Model name, e.g. `gpt-4o-mini` |
-| `LLM_TIMEOUT` | Seconds to wait for the LLM before falling back to rules (default `10`) |
+### Settings
 
-Never commit a real key. `.env` is in `.gitignore`.
+Set these in `.env`. Copy `.env.example` to start.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Groq API base URL |
+| `LLM_API_KEYS` | empty | Comma-separated Groq keys. Empty means rules only. |
+| `LLM_MODEL` | `openai/gpt-oss-120b` | Model name |
+| `LLM_REASONING_EFFORT` | `low` | `low`, `medium` or `high` |
+| `LLM_MAX_TOKENS` | `1024` | Maximum completion tokens per request |
+| `LLM_TIMEOUT` | `10` | Total seconds for one intent detection, across all key attempts |
+| `LLM_LIMIT_RPM` | `30` | Requests per minute, per key |
+| `LLM_LIMIT_RPD` | `1000` | Requests per day, per key |
+| `LLM_LIMIT_TPM` | `8000` | Tokens per minute, per key |
+| `LLM_LIMIT_TPD` | `200000` | Tokens per day, per key |
+
+The four `LLM_LIMIT_*` values are Groq's base limits for a developer key. Your organisation may
+have different ones. Check console.groq.com/settings/limits and match them. The app uses these
+numbers to decide when a key has room, so wrong values make it wait too long or hit Groq's limits.
+
+The legacy single-key variable `LLM_API_KEY` still works. Its value is merged into `LLM_API_KEYS`.
+
+### Adding several keys
+
+Put all the keys on one line, separated by commas:
+
+```
+LLM_API_KEYS=gsk_first_key,gsk_second_key,gsk_third_key
+```
+
+Keys from the same Groq account share the same limits, so they add no capacity. To get more
+capacity, use keys from different accounts or organisations.
+
+### How key rotation works
+
+Before each request, the app picks a key that has room on all four limits: requests per minute
+and per day, and tokens per minute and per day. If several keys have room, it uses the one with
+the most room left. Equal keys take turns.
+
+- **Skipping:** a key is skipped before it runs out on any of the four limits.
+- **Rate limited (429):** that key cools down until Groq's reset time, and the same request is
+  retried at once on the next key.
+- **Invalid key (401/403):** that key is disabled until the app restarts.
+- **Timeout, server error or malformed reply:** the key is not blamed. The app tries one more key
+  if time remains.
+- **No key can serve:** the rule-based parser answers, so the app never breaks.
+
+Keys are never printed or returned. Logs and the status endpoint refer to them as `key#1`,
+`key#2` and so on.
+
+### Checking the key pool
+
+`GET /llm/status` shows the state of each key:
+
+```powershell
+curl http://localhost:8000/llm/status
+```
+
+The response has `enabled`, `model` and a list of `keys`. Each key shows its masked form (for
+example `key#1 …abcd`), its state (`ok`, `cooling` or `disabled`), the requests and tokens left in
+each window, and when a cooling key comes back. Full keys are never shown.
+
+### Keep your keys out of git
+
+Never commit a real key. Put keys only in `.env`, which is listed in `.gitignore`. Never put them
+in `.env.example`, because git tracks that file. Before you commit, run `git status` and check
+that `.env` is not listed.
 
 ## Other settings
 

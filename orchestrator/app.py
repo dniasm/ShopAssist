@@ -26,7 +26,7 @@ class QueryIn(BaseModel):
 
 def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
-    if llm is None and settings.llm_api_key:
+    if llm is None and settings.llm_api_keys:
         llm = LLMClient(settings)
     store = QueryStore()
     tasks: set[asyncio.Task] = set()  # strong refs so background queries are not garbage collected
@@ -46,6 +46,12 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -
     @app.get("/health")
     async def health():
         return {"status": "ok"}
+
+    @app.get("/llm/status")
+    async def llm_status():
+        """Per-key pool state. Keys are shown only as key#N plus their last 4 characters."""
+        keys = await llm.pool.status() if llm is not None else []
+        return {"enabled": llm is not None and len(keys) > 0, "model": settings.llm_model, "keys": keys}
 
     @app.post("/query", status_code=202)
     async def post_query(body: QueryIn):
