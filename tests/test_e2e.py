@@ -155,6 +155,17 @@ def test_product_search(client):
     assert names == ["Budget Earbuds", "Wireless Headphones"]  # the $199 pair is excluded
 
 
+def test_slang_keyword_is_relaxed_end_to_end(client):
+    events = collect(client, post(client, "Show me cans under $100 headphones")[1])
+    check_order(events)
+    assert [(e["data"]["service"], e["data"]["method"]) for e in events if e["type"] == "service_call"] == [
+        ("ProductService", "SearchProducts"), ("ProductService", "SearchProducts")]
+    final = events[-1]["data"]
+    assert final["data"]["relaxed"] is True
+    assert [p["name"] for p in final["data"]["products"]] == ["Budget Earbuds", "Wireless Headphones"]
+    assert final["answer"].startswith("No exact match for 'cans', but here are headphones up to $100.00:")
+
+
 def test_stock_check_chains_product_then_inventory(client):
     qid, ws_url = post(client, "Do you have the blue hoodie in size M?")
     events = collect(client, ws_url)

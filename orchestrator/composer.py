@@ -67,13 +67,20 @@ def track_order(entities: dict, data: dict) -> str:
     return f"Order {oid} {STATUS_TEXT[last['status']]}. Progress seen: {steps}."
 
 
+def _dropped(entities: dict) -> str:
+    return ", ".join(f"'{k}'" for k in entities.get("keywords", []))
+
+
 def product_search(entities: dict, data: dict) -> str:
     products = data.get("products", [])
     if not products:
         return "I couldn't find any products matching that. Try a different category, colour or price."
-    head = f"I found {len(products)} product{'s' if len(products) != 1 else ''}"
-    if "max_price" in entities:
-        head += f" up to {_money(entities['max_price'])}"
+    price = f" up to {_money(entities['max_price'])}" if "max_price" in entities else ""
+    if data.get("relaxed"):  # the search words matched nothing, so they were dropped and the other filters kept
+        what = " ".join(x for x in (entities.get("color"), entities.get("category") or "products") if x)
+        head = f"No exact match for {_dropped(entities)}, but here are {what}{price}"
+    else:
+        head = f"I found {len(products)} product{'s' if len(products) != 1 else ''}{price}"
     lines = [head + ":"]
     for p in products:
         lines.append(f"- {p['name']} ({p['product_id']}), {p['color']}, {_money(p['price'])}")
@@ -89,7 +96,10 @@ def stock_check(entities: dict, data: dict) -> str:
     for r in results:
         p = r["product"]
         lines.append(f"- {p['name']} ({p['product_id']}): {_stock_text(r['stock'], size)}")
-    return ("Here is the stock I found:\n" if len(lines) > 1 else "Stock check:\n") + "\n".join(lines)
+    intro = "Here is the stock I found:\n" if len(lines) > 1 else "Stock check:\n"
+    if data.get("relaxed"):
+        intro = f"No exact match for {_dropped(entities)}, but here is what I found:\n"
+    return intro + "\n".join(lines)
 
 
 def product_info(entities: dict, data: dict) -> str:

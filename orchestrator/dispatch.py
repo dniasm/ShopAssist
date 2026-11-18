@@ -20,8 +20,27 @@ async def _call(rec: QueryRecord, service: str, method: str) -> None:
     await rec.emit("service_call", {"service": service, "method": method})
 
 
-def _search_text(entities: dict) -> str:
-    return " ".join(([entities["color"]] if "color" in entities else []) + entities.get("keywords", []))
+def _search_text(entities: dict, with_keywords: bool = True) -> str:
+    words = [entities["color"]] if "color" in entities else []
+    return " ".join(words + (entities.get("keywords", []) if with_keywords else []))
+
+
+async def _search(rec: QueryRecord, clients: Clients, entities: dict, limit: int = 0) -> tuple[list, bool]:
+    """SearchProducts; returns (products, relaxed).
+
+    Search words must all match, so a slang/filler keyword from the user or the LLM ("cans") can empty an
+    otherwise good search. If a search WITH keywords finds nothing and there is another filter (category, color
+    or max_price), repeat once without the keywords. Keywords alone are never relaxed.
+    """
+    filters = dict(category=entities.get("category", ""), max_price=entities.get("max_price", 0.0), limit=limit)
+    await _call(rec, "ProductService", "SearchProducts")
+    products = await clients.search_products(text=_search_text(entities), **filters)
+    has_other_filter = any(k in entities for k in ("category", "color", "max_price"))
+    if products or not entities.get("keywords") or not has_other_filter:
+        return products, False
+    await _call(rec, "ProductService", "SearchProducts")  # second call: keep the event stream honest
+    products = await clients.search_products(text=_search_text(entities, with_keywords=False), **filters)
+    return products, bool(products)
 
 
 async def order_status(rec: QueryRecord, clients: Clients, entities: dict) -> dict:
@@ -64,16 +83,16 @@ async def track_order(rec: QueryRecord, clients: Clients, entities: dict) -> dic
 
 
 async def product_search(rec: QueryRecord, clients: Clients, entities: dict) -> dict:
-    await _call(rec, "ProductService", "SearchProducts")
-    products = await clients.search_products(
-        text=_search_text(entities), category=entities.get("category", ""), max_price=entities.get("max_price", 0.0)
-    )
+    products, relaxed = await _search(rec, clients, entities)
     data = {"products": [to_dict(p) for p in products]}
+    if relaxed:
+        data["relaxed"] = True
     await rec.emit("partial_result", data)
     return data
 
 
 async def stock_check(rec: QueryRecord, clients: Clients, entities: dict) -> dict:
+    relaxed = False
     if "product_id" in entities:
         await _call(rec, "ProductService", "GetProduct")
         try:
@@ -81,11 +100,7 @@ async def stock_check(rec: QueryRecord, clients: Clients, entities: dict) -> dic
         except NotFound:
             products = []
     else:
-        await _call(rec, "ProductService", "SearchProducts")
-        products = await clients.search_products(
-            text=_search_text(entities), category=entities.get("category", ""),
-            max_price=entities.get("max_price", 0.0), limit=STOCK_CHECK_LIMIT,
-        )
+        products, relaxed = await _search(rec, clients, entities, limit=STOCK_CHECK_LIMIT)
     results = []
     for p in products:
         await _call(rec, "InventoryService", "GetStock")
@@ -93,7 +108,7 @@ async def stock_check(rec: QueryRecord, clients: Clients, entities: dict) -> dic
         result = {"product": to_dict(p), "stock": [to_dict(lv) for lv in levels]}
         results.append(result)
         await rec.emit("partial_result", result)
-    return {"results": results}
+    return {"results": results, **({"relaxed": True} if relaxed else {})}
 
 
 async def product_info(rec: QueryRecord, clients: Clients, entities: dict) -> dict:
