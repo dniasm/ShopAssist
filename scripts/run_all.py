@@ -2,15 +2,19 @@
 
 Usage (from the repo root):
     python scripts/run_all.py
+    python scripts/run_all.py --reset     # delete the three SQLite DBs first
 
 - Uses the same Python interpreter that runs this script.
 - Loads .env from the repo root if it exists.
 - Prefixes every child's output with its name, e.g. [product] ...
 - Ctrl+C, or any child exiting, stops all of them.
+- --reset deletes the databases so the seed data is loaded again. Order tracking
+  writes status changes to orders.db, so run --reset to repeat a live-tracking demo.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 import sys
@@ -31,12 +35,42 @@ PROCESSES = [
 STOP_TIMEOUT_SECONDS = 5
 POLL_INTERVAL_SECONDS = 0.5
 
+# (env var, default path) for each service database. Same rules as services/common:
+# the env var wins, and a relative path is resolved against the repo root.
+DB_SETTINGS = [
+    ("PRODUCT_DB", "data/products.db"),
+    ("INVENTORY_DB", "data/inventory.db"),
+    ("ORDER_DB", "data/orders.db"),
+]
+
+# SQLite may leave these sidecar files next to a database (WAL and journal modes).
+DB_SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"]
+
 _print_lock = threading.Lock()
 
 
 def _say(line: str) -> None:
     with _print_lock:
         print(line, flush=True)
+
+
+def _db_path(env_name: str, default: str) -> Path:
+    raw = os.environ.get(env_name) or default
+    p = Path(raw)
+    return p if p.is_absolute() else REPO_ROOT / p
+
+
+def reset_databases() -> None:
+    """Delete the three service databases (and any sidecar files) so they re-seed on start."""
+    for env_name, default in DB_SETTINGS:
+        db = _db_path(env_name, default)
+        candidates = [db] + [Path(str(db) + s) for s in DB_SIDECAR_SUFFIXES]
+        for path in candidates:
+            if path.exists():
+                path.unlink()
+                _say(f"[run_all] removed {path}")
+            elif path == db:
+                _say(f"[run_all] nothing to remove at {path}")
 
 
 def _load_dotenv() -> None:
@@ -98,11 +132,22 @@ def _stop_all(children: list[tuple[str, subprocess.Popen]]) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Start the ShopAssist services and orchestrator.")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="delete the service databases before starting, so seed data is loaded again",
+    )
+    args = parser.parse_args()
+
     # Make Windows consoles tolerate any characters a child prints.
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
 
     _load_dotenv()
+
+    if args.reset:
+        reset_databases()
 
     children: list[tuple[str, subprocess.Popen]] = []
     exit_code = 0

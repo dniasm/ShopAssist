@@ -32,7 +32,7 @@ _SIZE_CAPS_RE = re.compile(r"\b(XS|S|M|L|XL|XXL)\b")  # case-sensitive: avoids "
 _ORDER_WORDS = {"order", "orders", "package", "parcel", "shipment", "delivery"}
 _TRACK_WORDS = {"track", "tracking", "live", "follow", "watch", "realtime", "real-time", "stream"}
 _STOCK_PHRASES = ("in stock", "stock", "available", "availability", "how many", "left in")
-_SEARCH_WORDS = {"show", "find", "search", "looking", "browse", "list", "buy", "recommend", "cheap", "cheapest", "need", "want"}
+_SEARCH_WORDS = {"show", "find", "search", "looking", "browse", "list", "buy", "recommend", "cheap", "cheapest"}
 
 _STOPWORDS = set("""
 a an the any some me my i we you your do does did have has had is are was were be there it its this that these those
@@ -42,6 +42,7 @@ many much more most less than under below within up max maximum cheaper cheap ch
 tell about info information details detail describe more
 size sizes stock available availability left
 dollars dollar usd bucks price priced cost costs
+something anything everything stuff thing things item items product products between over around about some any
 order orders package parcel shipment delivery track tracking live follow watch
 """.split())
 
@@ -122,7 +123,7 @@ def parse_rules(text: str) -> tuple[str, dict]:
         return "stock_check", entities
     if pm:
         return "product_info", entities
-    if category or max_price is not None or (wordset & _SEARCH_WORDS and has_product_ref):
+    if category or max_price is not None or bool(wordset & _SEARCH_WORDS):
         return "product_search", entities
     return "unknown", {}
 

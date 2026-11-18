@@ -3,6 +3,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
 from orchestrator.dispatch import run_query
@@ -39,6 +40,8 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -
         await app.state.clients.close()
 
     app = FastAPI(title="ShopAssist orchestrator", lifespan=lifespan)
+    # client/index.html is opened from file:// (Origin: null), so allow any origin. No cookies/credentials are used.
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
 
     @app.get("/health")
     async def health():

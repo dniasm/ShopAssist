@@ -74,6 +74,18 @@ def test_health(client):
     assert client.get("/health").json() == {"status": "ok"}
 
 
+def test_cors_allows_file_origin(client):
+    pre = client.options("/query", headers={"Origin": "null", "Access-Control-Request-Method": "POST",
+                                            "Access-Control-Request-Headers": "content-type"})
+    assert pre.status_code == 200
+    assert pre.headers["access-control-allow-origin"] == "*"
+    assert "POST" in pre.headers["access-control-allow-methods"]
+    assert "access-control-allow-credentials" not in pre.headers
+    r = client.post("/query", json={"text": "hello"}, headers={"Origin": "null"})
+    assert r.status_code == 202 and r.headers["access-control-allow-origin"] == "*"
+    assert client.get("/health", headers={"Origin": "null"}).headers["access-control-allow-origin"] == "*"
+
+
 def test_blank_query_rejected(client):
     assert client.post("/query", json={"text": "   "}).status_code == 422
     assert client.post("/query", json={}).status_code == 422

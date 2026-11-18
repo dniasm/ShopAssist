@@ -60,7 +60,8 @@ Only edit files you own. Need a change in someone else's file → say so in your
 - `WS /ws/{query_id}` → server sends JSON events, then closes normally:
   `{"type": <event>, "query_id": "...", "data": {...}, "ts": "<ISO-8601 UTC>"}`
   Event types, in order: `accepted` → `intent_detected` (`{intent, entities, source: "llm"|"rules"}`)
-  → one or more `service_call` (`{service, method}`) → zero or more `partial_result`
+  → zero or more `service_call` (`{service, method}`, proto names e.g. `OrderService`/`GetOrder`; none for `unknown`
+  or when a required id is missing) → zero or more `partial_result`
   → zero or more `order_update` (track_order only, one per gRPC stream message)
   → exactly one terminal event: `final_answer` (`{answer, data}`) or `error` (`{message}`).
   Unknown query id → send one `error` event, then close.
@@ -92,6 +93,7 @@ advances the order one step at a time (PLACED→PACKED→SHIPPED→OUT_FOR_DELIV
 **writing each step to orders.db**, sleeping `ORDER_SIM_STEP_SECONDS` (default 2; tests use ~0.05)
 between steps, and ends the stream at DELIVERED. CANCELLED orders: one update, then end.
 Unknown order → `NOT_FOUND`.
+Steps persist, so a repeated demo shows an already-delivered order; `python scripts/run_all.py --reset` recreates the DBs from seed.
 
 ## Seed data contract (Haiku writes JSON, Sonnet's services load it)
 

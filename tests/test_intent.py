@@ -47,3 +47,18 @@ def test_keywords_extracted():
 def test_order_intent_without_number():
     assert parse_rules("where is my order?") == ("order_status", {})
     assert parse_rules("track my package")[0] == "track_order"
+
+
+def test_filler_words_do_not_become_keywords():
+    intent, ent = parse_rules("show me something cheap")
+    assert intent == "product_search" and "keywords" not in ent
+    intent, ent = parse_rules("hoodies between 40 and 50")
+    assert intent == "product_search" and ent == {"category": "hoodies"}  # range prices are out of scope
+    for text in ("show me anything", "find items", "list products", "any stuff"):
+        assert "keywords" not in parse_rules(text)[1], text
+
+
+def test_need_or_want_alone_is_not_a_product_search():
+    for text in ("I need help", "I want a refund", "I want to talk to a human"):
+        assert parse_rules(text) == ("unknown", {}), text
+    assert parse_rules("I want a black backpack")[0] == "product_search"  # a product word still wins
