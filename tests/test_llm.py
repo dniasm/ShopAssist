@@ -328,7 +328,8 @@ def _events(client, ws_url):
 
 def test_status_without_keys_and_queries_use_rules():
     with TestClient(create_app(Settings())) as c:
-        assert c.get("/llm/status").json() == {"enabled": False, "model": "openai/gpt-oss-120b", "keys": []}
+        assert c.get("/llm/status").json() == {"enabled": False, "model": "openai/gpt-oss-120b", "keys": [],
+                                              "limits": {"rpm": 30, "rpd": 1000, "tpm": 8000, "tpd": 200000}}
         r = c.post("/query", json={"text": "What's the weather?"})
         events = _events(c, r.json()["ws_url"])
         assert events[1]["type"] == "intent_detected" and events[1]["data"]["source"] == "rules"

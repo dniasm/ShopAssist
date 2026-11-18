@@ -55,6 +55,72 @@ The orchestrator listens on `http://localhost:8000` by default. Check it with:
 curl http://localhost:8000/health
 ```
 
+`GET /services/health` checks each gRPC service and returns its status and latency. The System page
+reads it, as described under **Frontend** below.
+
+### Frontend
+
+With `python scripts/run_all.py` running, open **http://localhost:8000/** in a browser, or use the port
+from `ORCHESTRATOR_PORT` if you set one. The orchestrator serves two pages from `frontend/`: the
+**Assistant** at `/` and the **System** page at `/system.html`. Both are plain HTML, CSS and JavaScript
+modules. There is no build step and no Node. Everything is served locally, including the IBM Plex Sans
+font (SIL Open Font License, in `frontend/fonts/`), so the pages need no internet connection. They do
+need the local servers that `run_all.py` starts. To point a page at another orchestrator, add
+`?api=http://localhost:8010` to its URL.
+
+The header on both pages has a one-line status readout, such as `3 services up · Groq 4/4 keys`. It
+says when a service is down or the backend can't be reached. Clicking it opens the System page.
+
+**Assistant** (`/`) asks questions and shows the answers:
+
+- **Route.** Beside each answer is a route with one node per real event:
+  - *Question accepted* (REST, `POST /query`).
+  - *Intent detected* (WebSocket), with an `llm` or `rules` badge and the entities it found.
+  - One node per gRPC call to a service, such as *Product service*, with its method.
+  - *Answer sent* (WebSocket, `final_answer`).
+
+  Each node shows its time in milliseconds. The route can be collapsed. On a phone-width screen it
+  folds away once the answer arrives.
+- **Answer cards**, one for each kind of question:
+  - **Order status:** a progress line from Placed to Delivered, a table of items with unit prices,
+    subtotals and the total, and a status badge. A cancelled order shows "This order was cancelled."
+  - **Live tracking:** the same progress line, a live status line and a timeline. Each order update
+    moves the progress and adds a timeline row. Updates appear at least half a second apart, so a
+    burst of replayed updates still animates. The badge ends on *Delivered* or *Cancelled*.
+  - **Product search:** a grid of product tiles. Clicking a tile asks for that product's details. If a
+    keyword matched nothing, a note says so and shows the closest products.
+  - **Stock check:** for each product, a tile per size. In-stock tiles show the quantity. Low stock
+    (2 or fewer) is shown in the warning colour. Out-of-stock sizes are dashed, greyed and struck through.
+  - **Product details:** the price, colour, category, description and size availability.
+  - **Question not supported:** a plain reply, then a "Questions it can answer" list to try.
+  - **Errors:** a *Failed* card with the message and a **Retry** button. This covers an unreachable
+    backend, a dropped connection and an error from the server.
+- **Questions to try.** A list beside the conversation, and the same list on the empty page, which
+  also shows a faint route to hint at what an answer brings. The questions are: order status, live
+  tracking, product search, stock check, product details, and one unsupported question to see the fallback.
+
+**System** (`/system.html`) shows how the system works, live:
+
+- **Where a question goes.** A diagram of the browser, the orchestrator and the three services, each
+  with its own database. The orchestrator has no database. Each service box is coloured Up or Down by
+  the live check.
+- **Service health.** Each service's address, status, latency, its average latency during this visit,
+  and how many checks have run. The page checks every 10 seconds, and **Check now** runs a check at
+  once. A check is one short gRPC call per service. A "not found" reply counts as up, because it shows
+  the service answered.
+- **Groq key pool.** Each key with its state (OK, Cooling or Disabled) and four meters: requests and
+  tokens per minute and per day, each showing what is left against its cap. A meter under 20% left
+  turns to the warning colour. A cooling key shows when it comes back. A disabled key is marked as
+  rejected by Groq.
+- **What happens to a question.** A table of the events, when each one is sent, and what the Assistant
+  draws from it.
+
+A sentence at the top of the System page sums up the state, for example "All 3 services answer, the
+slowest in 12 ms."
+
+Animations and transitions are turned off when your system asks for reduced motion. Both pages follow
+your system's light or dark setting.
+
 ### Reset the data
 
 ```powershell
@@ -66,7 +132,7 @@ python scripts/run_all.py --reset
 start. The services then rebuild them from `data/seed/`. The script prints each file it removes.
 
 Use it when you want to repeat a live-tracking demo. Order tracking writes each status step
-(PLACED → PACKED → SHIPPED → OUT_FOR_DELIVERY → DELIVERED) to `orders.db` permanently. Without
+(PLACED → PACKED → SHIPPED → OUT_FOR_DELIVERY → DELIVERED) to `data/orders.db` permanently. Without
 a reset, order 1043 stays DELIVERED after the first "Track order 1043 live", and the demo can't
 show the steps again. `--reset` only touches the database files. The seed JSON files are never changed.
 
@@ -85,8 +151,10 @@ python client/cli.py "Track order 1043 live"
 Each event is printed on one line, and the final answer is printed at the end. Add
 `--base http://localhost:8000` to point at a different orchestrator.
 
-Or open `client/index.html` in a browser, type a question, and press Send. It shows the
-same event stream in a list.
+`client/index.html` is a minimal debug client. It shows the raw WebSocket events as a plain list,
+so you can see exactly what the orchestrator sends. Open it straight from disk (`file://`), type a
+question and press Send. Its **Orchestrator URL** box defaults to `http://localhost:8000`, and you
+can change it to another base URL. `client/cli.py` remains the terminal client.
 
 ## How a query flows
 
@@ -203,9 +271,10 @@ Keys are never printed or returned. Logs and the status endpoint refer to them a
 curl http://localhost:8000/llm/status
 ```
 
-The response has `enabled`, `model` and a list of `keys`. Each key shows its masked form (for
-example `key#1 …abcd`), its state (`ok`, `cooling` or `disabled`), the requests and tokens left in
-each window, and when a cooling key comes back. Full keys are never shown.
+The response has `enabled`, `model`, `limits` (the four caps: `rpm`, `rpd`, `tpm` and `tpd`) and a
+list of `keys`. Each key shows its masked form (for example `key#1 …abcd`), its state (`ok`, `cooling`
+or `disabled`), the requests and tokens left in each window, and when a cooling key comes back. Full
+keys are never shown.
 
 ### Keep your keys out of git
 
@@ -239,22 +308,28 @@ stops every other process, so nothing is left running. Pick another port:
 To find what is using port 8000 on Windows, run `netstat -ano | findstr :8000` and look up the
 PID in Task Manager.
 
+If `http://localhost:8000/` shows a different app, another server owns that port. Set
+`ORCHESTRATOR_PORT=8011` in `.env`, restart `run_all.py`, and open `http://localhost:8011/`.
+
 ## Tests
 
 ```powershell
 pytest
 ```
 
-There are 60 tests, and they need no network and no LLM key. Everything runs locally against
-temporary files and mocked HTTP. The test files in `tests/` are:
+There are 135 tests, and they need no network and no LLM key. Everything runs locally against
+temporary files, a fake clock and mocked HTTP. The test files in `tests/` are:
 
 | File | What it checks |
 |---|---|
 | `test_intent.py` | The rule-based parser: each intent from the example table, entity extraction, and edge cases such as a price being mistaken for an order ID. |
 | `test_llm.py` | The LLM intent path with the HTTP call mocked: a successful reply, and each failure that must fall back to rules. |
+| `test_keypool.py` | The key pool: parsing Groq's reset durations such as `2m59.56s`, headroom from the rate-limit headers, the local per-minute and per-day counters, cooling after a 429, disabling a key after a 401/403, round-robin between equal keys, and keys never appearing in status, logs or settings output. |
 | `test_composer.py` | The answer templates, as pure functions of the entities and data. |
+| `test_relaxed_search.py` | The relaxed product search: when a keyword matches nothing, it is dropped once and the answer says so, and colour and other filters are kept. |
 | `test_services.py` | Each gRPC service through a real channel, against a temporary database. Includes order tracking to DELIVERED and the seed-only-when-empty rule. |
 | `test_e2e.py` | End to end: real gRPC servers on free ports, with the REST and WebSocket endpoints through FastAPI's test client. Covers the event order, late and two-socket replay, and the friendly not-found and unreachable-service paths. |
+| `test_frontend.py` | Both pages (`/` and `/system.html`), the shared header and module imports, the fonts, the `/services/health` and `/llm/status` endpoints, and CORS. It also checks the frontend statically: no DOM built from HTML strings, no external resources, no Node toolchain, the CSS house rules, and that the System page's event names and the final-answer shapes match the real code. |
 | `test_isolation.py` | The orchestrator has no `sqlite3` import and no database paths. It only talks gRPC. |
 
 Run a single file with `pytest tests/test_e2e.py`.

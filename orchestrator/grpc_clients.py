@@ -1,4 +1,6 @@
 """Async gRPC clients for the three services. The orchestrator talks to data only through these."""
+import asyncio
+import time
 from collections.abc import AsyncIterator
 
 import grpc
@@ -8,6 +10,8 @@ from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
 
 UNARY_TIMEOUT = 5.0  # seconds
+HEALTH_TIMEOUT = 1.5  # seconds: a health probe must answer quickly or count as down
+HEALTH_PROBE_ID = "__health__"  # an id no service holds: NOT_FOUND proves the service is up and answering
 
 
 class ServiceError(Exception):
@@ -38,6 +42,33 @@ class Clients:
         self._product = pb_grpc.ProductServiceStub(self._channels[0])
         self._inventory = pb_grpc.InventoryServiceStub(self._channels[1])
         self._order = pb_grpc.OrderServiceStub(self._channels[2])
+
+    async def probe(self, name: str) -> dict:
+        """Check one service over gRPC with a short deadline. No database is touched from here.
+
+        Calls an RPC on an id that cannot exist. NOT_FOUND (Product, Order) or an empty answer (Inventory) means the
+        service is up; UNAVAILABLE, a timeout or any other failure means down.
+        """
+        service, method = {"product": ("ProductService", "GetProduct"), "inventory": ("InventoryService", "GetStock"),
+                           "order": ("OrderService", "GetOrder")}[name]
+        calls = {
+            "product": lambda: self._product.GetProduct(pb.GetProductRequest(product_id=HEALTH_PROBE_ID), timeout=HEALTH_TIMEOUT),
+            "inventory": lambda: self._inventory.GetStock(pb.StockRequest(product_id=HEALTH_PROBE_ID), timeout=HEALTH_TIMEOUT),
+            "order": lambda: self._order.GetOrder(pb.GetOrderRequest(order_id=HEALTH_PROBE_ID), timeout=HEALTH_TIMEOUT),
+        }
+        started = time.perf_counter()
+        error = None
+        try:
+            await calls[name]()
+        except grpc.aio.AioRpcError as err:
+            if err.code() != grpc.StatusCode.NOT_FOUND:
+                error = err.code().name
+        elapsed = round((time.perf_counter() - started) * 1000, 1)
+        return {"name": name, "service": service, "method": method, "address": self._addrs[name],
+                "status": "down" if error else "up", "latency_ms": None if error else elapsed, "error": error}
+
+    async def health(self) -> list[dict]:
+        return list(await asyncio.gather(*(self.probe(n) for n in ("product", "inventory", "order"))))
 
     async def close(self) -> None:
         for ch in self._channels:

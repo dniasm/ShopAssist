@@ -1,16 +1,20 @@
 """FastAPI app: REST in, WebSocket event stream out, gRPC to the services. No database access here."""
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
 from orchestrator.dispatch import run_query
 from orchestrator.grpc_clients import Clients
 from orchestrator.llm import LLMClient
 from orchestrator.settings import Settings
-from orchestrator.store import QueryStore, make_event
+from orchestrator.store import QueryStore, make_event, now_iso
+
+FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
 
 class QueryIn(BaseModel):
@@ -51,7 +55,15 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -
     async def llm_status():
         """Per-key pool state. Keys are shown only as key#N plus their last 4 characters."""
         keys = await llm.pool.status() if llm is not None else []
-        return {"enabled": llm is not None and len(keys) > 0, "model": settings.llm_model, "keys": keys}
+        limits = {"rpm": settings.llm_limit_rpm, "rpd": settings.llm_limit_rpd,
+                  "tpm": settings.llm_limit_tpm, "tpd": settings.llm_limit_tpd}  # the caps each key's "left" counts down from
+        return {"enabled": llm is not None and len(keys) > 0, "model": settings.llm_model, "limits": limits, "keys": keys}
+
+    @app.get("/services/health")
+    async def services_health():
+        """Is each gRPC service answering? One short-deadline gRPC call per service; always 200, the body says who is down."""
+        services = await app.state.clients.health()
+        return {"all_up": all(s["status"] == "up" for s in services), "checked_at": now_iso(), "services": services}
 
     @app.post("/query", status_code=202)
     async def post_query(body: QueryIn):
@@ -85,5 +97,9 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -
             await websocket.close()
         except WebSocketDisconnect:
             pass
+
+    # Mounted last so every API route above keeps priority; serves the single-page frontend at /.
+    if FRONTEND_DIR.is_dir():
+        app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
     return app
