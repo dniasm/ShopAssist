@@ -1,0 +1,20 @@
+/* Grid arithmetic at 1440: canvas 1200 = filter column 264 + gap 24 + results 912.
+   912 holds four 200px+ cards with three 16px gaps (4 x 216 + 48 = 912). */
+.layout { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: var(--gap); align-items: start; }
+.results { display: grid; gap: 16px; min-width: 0; }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
+.chips { flex: 1 1 240px; min-width: 0; }
+.chips:empty { display: none; }
+.bar > .filtersButton { display: none; }
+.fuzzy { padding: 10px 14px; border-radius: var(--radius-control); background: var(--raised); }
+.more { display: grid; justify-items: center; gap: 10px; padding-top: 8px; }
+.moreError { color: var(--negative); }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .bar > .filtersButton { display: inline-flex; }
+  .chips { order: 3; flex-basis: 100%; }
+}
+@media (max-width: 640px) {
+  .filtersButton { flex: 1; }
+}

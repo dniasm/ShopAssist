@@ -1,0 +1,9 @@
+.group { display: inline-flex; align-items: stretch; height: 40px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); overflow: hidden; }
+.button { width: 40px; display: grid; place-items: center; border: 0; background: transparent; }
+.button:hover:not(:disabled) { background: var(--raised); }
+.button:disabled { color: var(--faint); cursor: not-allowed; }
+.input { width: 44px; border: 0; background: transparent; text-align: center; font-weight: 500; appearance: textfield; -moz-appearance: textfield; }
+.input::-webkit-outer-spin-button, .input::-webkit-inner-spin-button { appearance: none; margin: 0; }
+.input:disabled { color: var(--faint); }
+.group:focus-within { outline: 2px solid var(--data); outline-offset: 2px; }
+.group :focus-visible { outline: none; }

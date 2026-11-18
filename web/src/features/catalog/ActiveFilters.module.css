@@ -1,0 +1,8 @@
+.row { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 10px; max-width: 100%;
+  border: 1px solid var(--control); border-radius: 999px; background: var(--surface);
+  transition: background-color 150ms ease;
+}
+.chip:hover { background: var(--raised); }
+.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

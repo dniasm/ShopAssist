@@ -1,0 +1,23 @@
+/* A dialog floats, so it may carry the one shadow in the app. The scrim is flat. */
+.dialog {
+  width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; margin: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--surface); color: var(--text); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.dialog::backdrop { background: var(--scrim); }
+.body { display: grid; gap: 16px; padding: 20px; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.head p { margin-top: 2px; }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 8px 10px; text-align: left;
+  border: 0; border-radius: var(--radius-control); background: transparent;
+  transition: background-color 150ms ease;
+}
+.row:hover:not(:disabled) { background: var(--raised); }
+.row:disabled { cursor: progress; opacity: 0.6; }
+.who { display: grid; min-width: 0; flex: 1; }
+.who > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.name { font-weight: 500; }
+.skelRow { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 10px; }
+.failure { color: var(--negative); }

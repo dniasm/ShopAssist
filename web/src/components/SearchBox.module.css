@@ -1,0 +1,10 @@
+.form { position: relative; flex: 1 1 auto; max-width: 520px; min-width: 0; }
+.glyph { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--faint); display: grid; pointer-events: none; }
+.input {
+  width: 100%; height: 36px; padding: 0 10px 0 32px;
+  border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--text);
+  appearance: none;
+}
+.input:hover { border-color: var(--faint); }
+.input::-webkit-search-cancel-button { cursor: pointer; }
+@media (max-width: 720px) { .input { height: 40px; } }

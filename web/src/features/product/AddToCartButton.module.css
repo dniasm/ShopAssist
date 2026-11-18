@@ -1,0 +1,10 @@
+.wrap { position: relative; display: inline-block; }
+/* a tooltip floats, so it may carry a shadow */
+.tip {
+  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 10; width: max-content; max-width: 260px; padding: 8px 10px;
+  border-radius: var(--radius-control); background: var(--primary); color: var(--primary-ink); font-size: var(--fs-small); line-height: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  opacity: 0; visibility: hidden; transform: translateY(2px); transition: opacity 120ms ease, transform 120ms ease, visibility 120ms;
+  pointer-events: none;
+}
+.wrap:hover .tip, .wrap:focus-within .tip { opacity: 1; visibility: visible; transform: none; }

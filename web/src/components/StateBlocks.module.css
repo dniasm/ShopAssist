@@ -1,0 +1,13 @@
+.error {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 14px;
+  border-radius: var(--radius-control); background: var(--pill-negative-bg); color: var(--pill-negative-ink);
+}
+.error p { flex: 1 1 280px; }
+.error :global(.btn) { height: 28px; background: var(--surface); color: var(--text); }
+
+.empty {
+  display: grid; justify-items: center; align-content: center; gap: 6px; min-height: 160px; padding: 24px 16px;
+  border: 1px dashed var(--control); border-radius: var(--radius-card); text-align: center; color: var(--muted);
+}
+.emptyTitle { font-size: var(--fs-section); line-height: 24px; font-weight: 600; color: var(--text); }
+.emptyAction { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }

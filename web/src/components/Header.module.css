@@ -1,0 +1,35 @@
+/* Desktop: one 56px row   [brand] [Shop System] [ search ........ ] [Cart] [user]
+   Phone:   brand | nav | actions on row one, the search on its own full-width row two. */
+
+.header { position: sticky; top: 0; z-index: 20; background: var(--ground); border-bottom: 1px solid var(--border); }
+.inner {
+  max-width: var(--canvas); margin: 0 auto; min-height: var(--header-height); padding: 0 var(--pad);
+  display: flex; align-items: center; gap: 20px;
+}
+.brand { display: flex; align-items: center; gap: 8px; text-decoration: none; flex: none; }
+.brandName { font-size: var(--fs-section); font-weight: 600; letter-spacing: -0.01em; }
+.nav { display: flex; gap: 20px; flex: none; }
+.link { text-decoration: none; color: var(--muted); padding: 17px 0; transition: color 150ms ease; }
+.link:hover { color: var(--text); }
+.link[aria-current="page"] { color: var(--text); font-weight: 500; }   /* the current page: a change of text colour, not a pill */
+.search { flex: 1 1 auto; min-width: 0; display: flex; justify-content: center; }
+.actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+.search + .actions { margin-left: 0; }
+.cart {
+  display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px;
+  border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); font-weight: 500;
+}
+.cart:hover, .cart[aria-expanded="true"] { background: var(--raised); }
+
+@media (max-width: 720px) {
+  .header { position: static; }
+  .inner { flex-wrap: wrap; gap: 0 12px; padding-top: 4px; padding-bottom: 12px; min-height: 0; }
+  .brand { order: 1; min-height: 44px; }
+  .nav { order: 2; margin-left: auto; gap: 16px; }
+  .link { padding: 12px 0; }
+  .actions { order: 3; margin-left: 0; gap: 4px; }
+  .search { order: 4; flex-basis: 100%; }
+  .search > * { max-width: none; }
+  .cartText { display: none; }
+  .cart { width: 40px; padding: 0; justify-content: center; border-color: transparent; background: transparent; height: 40px; }
+}

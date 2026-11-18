@@ -1,0 +1,2 @@
+/* The tile fills whatever square its parent gives it. */
+.tile { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: var(--radius-control); }

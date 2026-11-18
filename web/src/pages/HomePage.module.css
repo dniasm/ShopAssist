@@ -1,0 +1,22 @@
+/* Grid at 1440: canvas 1200 = categories 280 + gap 24 + top-rated 896 (three 200px+ cards: 3 x 288 + 2 x 16 = 896). */
+.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--gap); align-items: start; }
+.cats, .top { display: grid; gap: 12px; min-width: 0; }
+.cats { padding: 16px 16px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.top > ul { grid-template-columns: repeat(3, minmax(0, 1fr)); }   /* six cards: two full rows at every width above a phone */
+.topHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+
+.list { list-style: none; margin: 0; padding: 0; display: grid; }
+.row { display: grid; gap: 6px; padding: 10px 0; text-decoration: none; min-height: 44px; border-radius: var(--radius-control); }
+.row:hover .rowName { text-decoration: underline; text-underline-offset: 3px; }
+.rowTop { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.rowName { font-weight: 500; }
+.track { display: block; height: 2px; }
+.bar { display: block; height: 2px; background: var(--control); }
+.bar[data-top="true"] { background: var(--text); }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+}
+@media (max-width: 640px) { .top > ul { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .list { grid-template-columns: minmax(0, 1fr); } }

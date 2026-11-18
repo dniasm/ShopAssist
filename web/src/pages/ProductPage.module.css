@@ -1,0 +1,6 @@
+.skeleton { display: grid; gap: 20px; }
+.skelGrid { display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 48px; align-items: start; }
+.skelTile { aspect-ratio: 1 / 1; background: var(--raised); border-radius: var(--radius-card); }
+.skelDetails { display: grid; gap: 14px; max-width: 560px; }
+@media (max-width: 1000px) { .skelGrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; } }
+@media (max-width: 760px) { .skelGrid { grid-template-columns: minmax(0, 1fr); gap: 24px; } .skelTile { max-width: 480px; } }

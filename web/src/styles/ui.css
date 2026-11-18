@@ -1,0 +1,40 @@
+/* Shared controls used by every page: buttons, pills, text fields, flat loading bars. */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: var(--control-height); padding: 0 14px;
+  border-radius: var(--radius-control); border: 1px solid var(--control); background: var(--surface);
+  font-weight: 500; line-height: 1; text-decoration: none; white-space: nowrap;
+  transition: background-color 150ms ease, transform 120ms var(--ease-out);
+}
+.btn:hover { background: var(--raised); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled, .btn[aria-disabled="true"] { color: var(--faint); cursor: not-allowed; background: var(--ground); transform: none; }
+.btn.primary { background: var(--primary); color: var(--primary-ink); border-color: transparent; }
+.btn.primary:hover { filter: brightness(1.15); }
+.btn.primary:disabled, .btn.primary[aria-disabled="true"] { background: var(--raised); color: var(--faint); filter: none; border-color: var(--border); }
+.btn.large { height: 40px; padding: 0 20px; }
+.btn.text { border-color: transparent; background: transparent; padding: 0 4px; text-decoration: underline; text-underline-offset: 3px; }
+.btn.text:hover { background: transparent; }
+.btn.icon { width: var(--control-height); padding: 0; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px;
+  font-size: var(--fs-small); font-weight: 500; white-space: nowrap; flex: none;
+  background: var(--pill-neutral-bg); color: var(--pill-neutral-ink);
+}
+.pill.pos { background: var(--pill-positive-bg); color: var(--pill-positive-ink); }
+.pill.neg { background: var(--pill-negative-bg); color: var(--pill-negative-ink); }
+.pill.warn { background: var(--pill-warning-bg); color: var(--pill-warning-ink); }
+
+.field {
+  height: var(--control-height); padding: 0 10px; width: 100%;
+  border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--text);
+}
+.field:hover { border-color: var(--faint); }
+
+/* Loading: the final layout with flat grey bars at real size. No shimmer. */
+.skel { display: block; height: 14px; border-radius: 4px; background: var(--raised); }
+
+.link { color: var(--text); text-underline-offset: 3px; }
+.link:hover { text-decoration-thickness: 2px; }

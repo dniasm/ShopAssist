@@ -313,10 +313,10 @@ plus context (`path`, `product_id`, cart summary). No key / limits / errors → 
   SPA with sign-in picker, catalog (search, facets with counts, sort, pagination, URL-synced filters) and product
   page (variant picker, live stock).
 - **5.2 Cart + checkout saga.** Carts, Payment, reservations, Order.Checkout with compensation and recovery;
-  cart drawer; checkout page with live saga steps. Tests: 20 concurrent checkouts for 1 unit → exactly 1 success
+  session WebSocket `/api/ws` with replay (channels `checkout` and `system`); cart drawer; checkout page with live saga steps. Tests: 20 concurrent checkouts for 1 unit → exactly 1 success
   and stock never negative; decline → reservation released; repeated idempotency key → one charge;
   crash mid-saga → compensated by recovery.
-- **5.3 Events + tracking.** Outbox, NOTIFY, fulfilment worker, WatchOrders, cancel; session WS with replay;
+- **5.3 Events + tracking.** Outbox NOTIFY, fulfilment worker, WatchOrders, cancel; WS channel `order`;
   orders list and live order page. Two viewers → each step happens once; refresh → no gaps, no duplicates.
 - **5.4 Agent.** Tools, memory, proposals; chat drawer on every page; eval set (~120 labelled queries) + scorer.
 - **5.5 Proof.** Locust load-test numbers, README, docs; old `frontend/`, v1 API and v1 tests removed.

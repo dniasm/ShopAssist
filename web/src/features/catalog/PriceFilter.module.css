@@ -1,0 +1,12 @@
+.form { display: grid; gap: 8px; }
+.row { display: flex; align-items: center; gap: 6px; }
+.field { position: relative; flex: 1; min-width: 0; display: block; }
+.prefix { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.input {
+  width: 100%; height: var(--control-height); padding: 0 8px 0 20px;
+  border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--text);
+}
+.input:hover { border-color: var(--faint); }
+.input[aria-invalid="true"] { border-color: var(--negative); }
+.error { color: var(--negative); font-size: var(--fs-small); line-height: 16px; }
+.row :global(.btn) { padding: 0 10px; }

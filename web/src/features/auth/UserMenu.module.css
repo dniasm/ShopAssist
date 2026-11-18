@@ -1,0 +1,35 @@
+.root { position: relative; }
+.signIn {
+  display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 14px; font-weight: 500;
+  border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface);
+}
+.signIn:hover { background: var(--raised); }
+.signInIcon { display: none; }
+.trigger {
+  display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 4px; max-width: 220px;
+  border: 1px solid transparent; border-radius: var(--radius-control); background: transparent;
+}
+.trigger:hover, .trigger[aria-expanded="true"] { background: var(--raised); }
+.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+
+/* a menu floats, so it gets the one shadow */
+.panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 240px; padding: 6px; display: grid; gap: 2px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+.who { display: grid; gap: 1px; padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--rule); }
+.item {
+  display: block; width: 100%; padding: 0 10px; height: 34px; text-align: left; border: 0; border-radius: var(--radius-control);
+  background: transparent;
+}
+.item:hover { background: var(--raised); }
+
+@media (max-width: 720px) {
+  .signInText { display: none; }
+  .signInIcon { display: grid; }
+  .signIn { width: 40px; height: 40px; padding: 0; border-color: transparent; background: transparent; }
+  .signIn:hover { background: var(--raised); }
+  .name { display: none; }
+  .trigger { padding: 0 6px 0 2px; }
+}

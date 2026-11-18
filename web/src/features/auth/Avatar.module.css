@@ -1,0 +1,7 @@
+.avatar {
+  display: inline-grid; place-items: center; flex: none; border-radius: 50%; font-weight: 600; letter-spacing: 0;
+  background: hsl(var(--h) 45% 86%); color: hsl(var(--h) 55% 20%);
+}
+@media (prefers-color-scheme: dark) {
+  .avatar { background: hsl(var(--h) 22% 24%); color: hsl(var(--h) 55% 86%); }
+}

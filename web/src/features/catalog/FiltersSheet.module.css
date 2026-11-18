@@ -1,0 +1,24 @@
+/* wide: a sticky column.  narrow (<= 1000px): hidden until opened, then a full-screen sheet. */
+.sheet {
+  position: sticky; top: calc(var(--header-height) + 16px); align-self: start;
+  max-height: calc(100dvh - var(--header-height) - 32px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 4px 16px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
+}
+.head, .foot { display: none; }
+.body { display: block; }
+
+@media (max-width: 1000px) {
+  .sheet { display: none; }
+  .sheet[data-open="true"] {
+    display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 70; max-height: none; padding: 0; align-self: stretch;
+    border: 0; border-radius: 0; background: var(--ground); overflow: hidden;
+  }
+  .head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none;
+    min-height: var(--header-height); padding: 0 var(--pad); background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .head h2:focus { outline: none; }
+  .body { flex: 1; overflow-y: auto; padding: 8px var(--pad) 24px; background: var(--surface); }
+  .foot { display: block; flex: none; padding: 12px var(--pad); background: var(--surface); border-top: 1px solid var(--border); }
+  .foot :global(.btn) { width: 100%; }
+}
