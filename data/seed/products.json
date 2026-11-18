@@ -1,0 +1,17 @@
+[
+  {"product_id": "P-1001", "name": "Wireless Headphones", "category": "headphones", "color": "black", "price": 89.99, "description": "Over-ear Bluetooth headphones with 30-hour battery life."},
+  {"product_id": "P-1002", "name": "Studio Headphones", "category": "headphones", "color": "silver", "price": 149.99, "description": "Studio-grade wired headphones with a flat, detailed sound profile."},
+  {"product_id": "P-1003", "name": "Budget Earbuds", "category": "headphones", "color": "white", "price": 39.99, "description": "Lightweight in-ear earbuds with a charging case."},
+  {"product_id": "P-1004", "name": "Sport Earbuds", "category": "headphones", "color": "blue", "price": 59.00, "description": "Sweat-resistant earbuds with secure ear hooks for running."},
+  {"product_id": "P-1005", "name": "Classic Pullover Hoodie", "category": "hoodies", "color": "blue", "price": 45.00, "description": "Soft fleece pullover hoodie with a kangaroo pocket."},
+  {"product_id": "P-1006", "name": "Zip-Up Hoodie", "category": "hoodies", "color": "black", "price": 55.00, "description": "Full-zip hoodie with brushed interior and two side pockets."},
+  {"product_id": "P-1007", "name": "Heather Grey Hoodie", "category": "hoodies", "color": "grey", "price": 42.00, "description": "Relaxed-fit cotton blend hoodie in heather grey."},
+  {"product_id": "P-1008", "name": "Road Running Shoes", "category": "shoes", "color": "white", "price": 79.99, "description": "Cushioned road running shoes with a breathable mesh upper."},
+  {"product_id": "P-1009", "name": "Canvas Sneakers", "category": "shoes", "color": "black", "price": 49.99, "description": "Low-top canvas sneakers for everyday wear."},
+  {"product_id": "P-1010", "name": "Trail Hiking Boots", "category": "shoes", "color": "brown", "price": 119.99, "description": "Waterproof mid-cut boots with a grippy outsole for trails."},
+  {"product_id": "P-1011", "name": "Everyday Daypack 20L", "category": "backpacks", "color": "black", "price": 39.99, "description": "20-litre daypack with padded straps and a laptop sleeve."},
+  {"product_id": "P-1012", "name": "Laptop Backpack 30L", "category": "backpacks", "color": "grey", "price": 69.99, "description": "30-litre commuter backpack with a padded 16-inch laptop compartment."},
+  {"product_id": "P-1013", "name": "Hiking Backpack 45L", "category": "backpacks", "color": "green", "price": 109.99, "description": "45-litre hiking pack with a rain cover and hydration sleeve."},
+  {"product_id": "P-1014", "name": "Insulated Water Bottle", "category": "accessories", "color": "silver", "price": 18.50, "description": "750 ml stainless steel bottle that keeps drinks cold for 24 hours."},
+  {"product_id": "P-1015", "name": "Phone Case", "category": "accessories", "color": "clear", "price": 14.99, "description": "Slim clear protective case with raised camera edges."}
+]

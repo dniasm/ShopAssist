@@ -1,0 +1,12 @@
+[
+  {"order_id": 1040, "customer_name": "Alice Moreno", "status": "DELIVERED", "items": [{"product_id": "P-1001", "size": "ONE", "quantity": 1, "unit_price": 89.99}], "updated_at": "2026-11-02T14:10:00Z"},
+  {"order_id": 1041, "customer_name": "Ben Carter", "status": "OUT_FOR_DELIVERY", "items": [{"product_id": "P-1005", "size": "M", "quantity": 1, "unit_price": 45.00}, {"product_id": "P-1011", "size": "ONE", "quantity": 1, "unit_price": 39.99}], "updated_at": "2026-11-16T08:05:00Z"},
+  {"order_id": 1042, "customer_name": "Chloe Nguyen", "status": "SHIPPED", "items": [{"product_id": "P-1008", "size": "L", "quantity": 1, "unit_price": 79.99}, {"product_id": "P-1015", "size": "ONE", "quantity": 2, "unit_price": 14.99}], "updated_at": "2026-11-15T17:45:00Z"},
+  {"order_id": 1043, "customer_name": "Dev Patel", "status": "PLACED", "items": [{"product_id": "P-1002", "size": "ONE", "quantity": 1, "unit_price": 149.99}], "updated_at": "2026-11-17T10:00:00Z"},
+  {"order_id": 1044, "customer_name": "Ella Rossi", "status": "DELIVERED", "items": [{"product_id": "P-1006", "size": "L", "quantity": 1, "unit_price": 55.00}, {"product_id": "P-1014", "size": "ONE", "quantity": 1, "unit_price": 18.50}], "updated_at": "2026-11-12T12:20:00Z"},
+  {"order_id": 1045, "customer_name": "Farid Haidari", "status": "CANCELLED", "items": [{"product_id": "P-1013", "size": "ONE", "quantity": 1, "unit_price": 109.99}], "updated_at": "2026-11-11T09:00:00Z"},
+  {"order_id": 1046, "customer_name": "Grace Kim", "status": "PACKED", "items": [{"product_id": "P-1009", "size": "M", "quantity": 1, "unit_price": 49.99}, {"product_id": "P-1004", "size": "ONE", "quantity": 1, "unit_price": 59.00}], "updated_at": "2026-11-16T15:30:00Z"},
+  {"order_id": 1047, "customer_name": "Hugo Silva", "status": "PLACED", "items": [{"product_id": "P-1012", "size": "ONE", "quantity": 1, "unit_price": 69.99}], "updated_at": "2026-11-17T18:40:00Z"},
+  {"order_id": 1048, "customer_name": "Iris Lindqvist", "status": "SHIPPED", "items": [{"product_id": "P-1010", "size": "L", "quantity": 1, "unit_price": 119.99}], "updated_at": "2026-11-16T11:15:00Z"},
+  {"order_id": 1049, "customer_name": "Jonah Brooks", "status": "DELIVERED", "items": [{"product_id": "P-1007", "size": "M", "quantity": 2, "unit_price": 42.00}], "updated_at": "2026-11-09T19:05:00Z"}
+]
