@@ -24,7 +24,7 @@ Intents: order_status (where is / status of an order), track_order (follow an or
 product_search (find products), stock_check (is a product in stock, optionally a size),
 product_info (details of one product), unknown (anything else).
 Entities (use null for any that are absent): order_id (digits as a string), product_id (like "P-1003"),
-category (one of headphones, hoodies, shoes, backpacks), color (lowercase), size (S, M, L, XL),
+category (one of headphones, hoodies, shoes, backpacks, accessories), color (lowercase), size (S, M, L, XL),
 max_price (number), keywords (list of other search words)."""
 
 CATEGORIES = sorted(set(CATEGORY_WORDS.values()))

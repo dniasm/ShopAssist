@@ -115,7 +115,7 @@ DB paths: `data/products.db`, `data/inventory.db`, `data/orders.db` (overridable
 ## Stack
 
 Python 3.14 (local), venv at `.venv`. FastAPI + uvicorn, `websockets`, grpcio/grpcio-tools,
-httpx, python-dotenv, pytest + pytest-asyncio. SQLite via stdlib `sqlite3`. No Docker.
+httpx, python-dotenv, pytest (async code is driven with `asyncio.run`, so no pytest-asyncio). SQLite via stdlib `sqlite3`. No Docker.
 Windows + PowerShell/Git Bash: use `pathlib`, no POSIX-only calls.
 
 ## Definition of done (Opus will check every item)
@@ -163,4 +163,12 @@ Key-pool behaviour:
   most one retry on another key if budget remains, else fall back to rules.
 - No eligible key, or budget exhausted → `LLMError` → rules (`intent_detected.source = "rules"`).
 - Keys are never logged, returned, or put in exceptions; refer to keys as `key#<index>` (+ last 4 chars at most).
-- `GET /llm/status` → `{"enabled", "model", "keys":[{"key":"key#1 …abcd","state":"ok|cooling|disabled","rpm_left","rpd_left","tpm_left","tpd_left","cooling_until"}]}`.
+- `GET /llm/status` → `{"enabled", "model", "limits":{"rpm","rpd","tpm","tpd"}, "keys":[{"key":"key#1 …abcd","state":"ok|cooling|disabled","rpm_left","rpd_left","tpm_left","tpd_left","cooling_until"}]}`.
+  `limits` are the configured caps each key's `*_left` counts down from.
+
+## Phase 3–4 — Frontend and service health
+
+- The orchestrator serves `frontend/` (plain HTML/CSS/JS, no build step): Assistant at `/`, System at `/system.html`.
+- `GET /services/health` → one short gRPC call per service (a lookup of an id that cannot exist; NOT_FOUND counts as up)
+  → `{"all_up", "checked_at", "services":[{"name","service","method","address","status":"up|down","latency_ms","error"}]}`.
+  No database access; the orchestrator still reaches data only through gRPC.

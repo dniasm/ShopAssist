@@ -109,7 +109,7 @@ def test_schema_is_strict_compliant():
     props = RESPONSE_SCHEMA["properties"]
     assert props["intent"]["enum"] == list(INTENTS)
     ents = props["entities"]["properties"]
-    assert ents["category"]["enum"] == ["backpacks", "headphones", "hoodies", "shoes", None]
+    assert ents["category"]["enum"] == ["accessories", "backpacks", "headphones", "hoodies", "shoes", None]
     assert all("null" in p["type"] for p in ents.values())  # optional entities are nullable unions
 
 

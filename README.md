@@ -317,7 +317,7 @@ If `http://localhost:8000/` shows a different app, another server owns that port
 pytest
 ```
 
-There are 135 tests, and they need no network and no LLM key. Everything runs locally against
+There are 136 tests, and they need no network and no LLM key. Everything runs locally against
 temporary files, a fake clock and mocked HTTP. The test files in `tests/` are:
 
 | File | What it checks |

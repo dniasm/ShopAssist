@@ -11,6 +11,7 @@ CATEGORY_WORDS = {
     "shoes": "shoes", "shoe": "shoes", "sneakers": "shoes", "sneaker": "shoes", "trainers": "shoes",
     "backpacks": "backpacks", "backpack": "backpacks", "bags": "backpacks", "bag": "backpacks",
     "rucksack": "backpacks", "rucksacks": "backpacks",
+    "accessories": "accessories", "accessory": "accessories",
 }
 COLORS = {
     "black", "white", "blue", "red", "green", "gray", "grey", "navy", "pink", "yellow", "orange",

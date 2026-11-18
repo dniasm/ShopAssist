@@ -62,3 +62,8 @@ def test_need_or_want_alone_is_not_a_product_search():
     for text in ("I need help", "I want a refund", "I want to talk to a human"):
         assert parse_rules(text) == ("unknown", {}), text
     assert parse_rules("I want a black backpack")[0] == "product_search"  # a product word still wins
+
+
+def test_accessories_category_is_recognised():
+    intent, ent = parse_rules("show me accessories under $20")
+    assert intent == "product_search" and ent["category"] == "accessories" and ent["max_price"] == 20.0
