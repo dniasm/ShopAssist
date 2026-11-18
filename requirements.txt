@@ -1,8 +1,12 @@
 grpcio==1.85.3
 grpcio-tools==1.85.3
+grpcio-health-checking==1.85.3
 fastapi==0.163.2
 uvicorn[standard]==0.54.0
 websockets==17.4
 httpx==0.28.1
 python-dotenv==1.2.4
+itsdangerous==2.2.0
+psycopg[binary]==3.3.9
+psycopg-pool==3.3.3
 pytest==9.2.0

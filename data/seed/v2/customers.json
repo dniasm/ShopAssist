@@ -1,0 +1,40 @@
+{
+  "users": [
+    {
+      "user_id": "U-01",
+      "name": "Priya Raman",
+      "email": "priya.raman@example.com",
+      "city": "Leeds"
+    },
+    {
+      "user_id": "U-02",
+      "name": "Tomas Lindqvist",
+      "email": "tomas.lindqvist@example.com",
+      "city": "Gothenburg"
+    },
+    {
+      "user_id": "U-03",
+      "name": "Hana Mori",
+      "email": "hana.mori@example.com",
+      "city": "Osaka"
+    },
+    {
+      "user_id": "U-04",
+      "name": "Daniel Osei",
+      "email": "daniel.osei@example.com",
+      "city": "Accra"
+    },
+    {
+      "user_id": "U-05",
+      "name": "Lucia Ferrand",
+      "email": "lucia.ferrand@example.com",
+      "city": "Lyon"
+    },
+    {
+      "user_id": "U-06",
+      "name": "Samuel Adeyemi",
+      "email": "samuel.adeyemi@example.com",
+      "city": "Ibadan"
+    }
+  ]
+}

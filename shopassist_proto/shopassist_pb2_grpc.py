@@ -25,7 +25,7 @@ if _version_not_supported:
     )
 
 
-class ProductServiceStub:
+class CatalogServiceStub:
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -34,60 +34,92 @@ class ProductServiceStub:
         Args:
             channel: A grpc.Channel.
         """
-        self.SearchProducts = channel.unary_unary(
-                '/shopassist.v1.ProductService/SearchProducts',
-                request_serializer=shopassist__proto_dot_shopassist__pb2.SearchProductsRequest.SerializeToString,
-                response_deserializer=shopassist__proto_dot_shopassist__pb2.SearchProductsResponse.FromString,
+        self.ListProducts = channel.unary_unary(
+                '/shopassist.v2.CatalogService/ListProducts',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ListProductsRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ListProductsResponse.FromString,
                 _registered_method=True)
         self.GetProduct = channel.unary_unary(
-                '/shopassist.v1.ProductService/GetProduct',
+                '/shopassist.v2.CatalogService/GetProduct',
                 request_serializer=shopassist__proto_dot_shopassist__pb2.GetProductRequest.SerializeToString,
                 response_deserializer=shopassist__proto_dot_shopassist__pb2.Product.FromString,
                 _registered_method=True)
+        self.GetProducts = channel.unary_unary(
+                '/shopassist.v2.CatalogService/GetProducts',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.GetProductsRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.GetProductsResponse.FromString,
+                _registered_method=True)
+        self.GetSkus = channel.unary_unary(
+                '/shopassist.v2.CatalogService/GetSkus',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.GetSkusRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.GetSkusResponse.FromString,
+                _registered_method=True)
 
 
-class ProductServiceServicer:
+class CatalogServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
-    def SearchProducts(self, request, context):
+    def ListProducts(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetProduct(self, request, context):
-        """NOT_FOUND status if the product does not exist.
+        """NOT_FOUND if unknown
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetProducts(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
-def add_ProductServiceServicer_to_server(servicer, server):
+    def GetSkus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_CatalogServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'SearchProducts': grpc.unary_unary_rpc_method_handler(
-                    servicer.SearchProducts,
-                    request_deserializer=shopassist__proto_dot_shopassist__pb2.SearchProductsRequest.FromString,
-                    response_serializer=shopassist__proto_dot_shopassist__pb2.SearchProductsResponse.SerializeToString,
+            'ListProducts': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListProducts,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ListProductsRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ListProductsResponse.SerializeToString,
             ),
             'GetProduct': grpc.unary_unary_rpc_method_handler(
                     servicer.GetProduct,
                     request_deserializer=shopassist__proto_dot_shopassist__pb2.GetProductRequest.FromString,
                     response_serializer=shopassist__proto_dot_shopassist__pb2.Product.SerializeToString,
             ),
+            'GetProducts': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetProducts,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.GetProductsRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.GetProductsResponse.SerializeToString,
+            ),
+            'GetSkus': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSkus,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.GetSkusRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.GetSkusResponse.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'shopassist.v1.ProductService', rpc_method_handlers)
+            'shopassist.v2.CatalogService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('shopassist.v1.ProductService', rpc_method_handlers)
+    server.add_registered_method_handlers('shopassist.v2.CatalogService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class ProductService:
+class CatalogService:
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def SearchProducts(request,
+    def ListProducts(request,
             target,
             options=(),
             channel_credentials=None,
@@ -100,9 +132,9 @@ class ProductService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/shopassist.v1.ProductService/SearchProducts',
-            shopassist__proto_dot_shopassist__pb2.SearchProductsRequest.SerializeToString,
-            shopassist__proto_dot_shopassist__pb2.SearchProductsResponse.FromString,
+            '/shopassist.v2.CatalogService/ListProducts',
+            shopassist__proto_dot_shopassist__pb2.ListProductsRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ListProductsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -127,9 +159,63 @@ class ProductService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/shopassist.v1.ProductService/GetProduct',
+            '/shopassist.v2.CatalogService/GetProduct',
             shopassist__proto_dot_shopassist__pb2.GetProductRequest.SerializeToString,
             shopassist__proto_dot_shopassist__pb2.Product.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetProducts(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.CatalogService/GetProducts',
+            shopassist__proto_dot_shopassist__pb2.GetProductsRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.GetProductsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetSkus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.CatalogService/GetSkus',
+            shopassist__proto_dot_shopassist__pb2.GetSkusRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.GetSkusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -151,9 +237,29 @@ class InventoryServiceStub:
             channel: A grpc.Channel.
         """
         self.GetStock = channel.unary_unary(
-                '/shopassist.v1.InventoryService/GetStock',
-                request_serializer=shopassist__proto_dot_shopassist__pb2.StockRequest.SerializeToString,
-                response_deserializer=shopassist__proto_dot_shopassist__pb2.StockResponse.FromString,
+                '/shopassist.v2.InventoryService/GetStock',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.GetStockRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.GetStockResponse.FromString,
+                _registered_method=True)
+        self.Reserve = channel.unary_unary(
+                '/shopassist.v2.InventoryService/Reserve',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ReserveRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ReserveResponse.FromString,
+                _registered_method=True)
+        self.Commit = channel.unary_unary(
+                '/shopassist.v2.InventoryService/Commit',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.CommitRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.CommitResponse.FromString,
+                _registered_method=True)
+        self.Release = channel.unary_unary(
+                '/shopassist.v2.InventoryService/Release',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ReleaseRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ReleaseResponse.FromString,
+                _registered_method=True)
+        self.Restock = channel.unary_unary(
+                '/shopassist.v2.InventoryService/Restock',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.RestockRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.RestockResponse.FromString,
                 _registered_method=True)
 
 
@@ -166,19 +272,63 @@ class InventoryServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Reserve(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Commit(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Release(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Restock(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_InventoryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetStock': grpc.unary_unary_rpc_method_handler(
                     servicer.GetStock,
-                    request_deserializer=shopassist__proto_dot_shopassist__pb2.StockRequest.FromString,
-                    response_serializer=shopassist__proto_dot_shopassist__pb2.StockResponse.SerializeToString,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.GetStockRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.GetStockResponse.SerializeToString,
+            ),
+            'Reserve': grpc.unary_unary_rpc_method_handler(
+                    servicer.Reserve,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ReserveRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ReserveResponse.SerializeToString,
+            ),
+            'Commit': grpc.unary_unary_rpc_method_handler(
+                    servicer.Commit,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.CommitRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.CommitResponse.SerializeToString,
+            ),
+            'Release': grpc.unary_unary_rpc_method_handler(
+                    servicer.Release,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ReleaseRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ReleaseResponse.SerializeToString,
+            ),
+            'Restock': grpc.unary_unary_rpc_method_handler(
+                    servicer.Restock,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.RestockRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.RestockResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'shopassist.v1.InventoryService', rpc_method_handlers)
+            'shopassist.v2.InventoryService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('shopassist.v1.InventoryService', rpc_method_handlers)
+    server.add_registered_method_handlers('shopassist.v2.InventoryService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -199,9 +349,477 @@ class InventoryService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/shopassist.v1.InventoryService/GetStock',
-            shopassist__proto_dot_shopassist__pb2.StockRequest.SerializeToString,
-            shopassist__proto_dot_shopassist__pb2.StockResponse.FromString,
+            '/shopassist.v2.InventoryService/GetStock',
+            shopassist__proto_dot_shopassist__pb2.GetStockRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.GetStockResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Reserve(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.InventoryService/Reserve',
+            shopassist__proto_dot_shopassist__pb2.ReserveRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ReserveResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Commit(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.InventoryService/Commit',
+            shopassist__proto_dot_shopassist__pb2.CommitRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.CommitResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Release(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.InventoryService/Release',
+            shopassist__proto_dot_shopassist__pb2.ReleaseRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ReleaseResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Restock(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.InventoryService/Restock',
+            shopassist__proto_dot_shopassist__pb2.RestockRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.RestockResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
+class CustomerServiceStub:
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.ListUsers = channel.unary_unary(
+                '/shopassist.v2.CustomerService/ListUsers',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ListUsersRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ListUsersResponse.FromString,
+                _registered_method=True)
+        self.GetUser = channel.unary_unary(
+                '/shopassist.v2.CustomerService/GetUser',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.GetUserRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.User.FromString,
+                _registered_method=True)
+        self.GetCart = channel.unary_unary(
+                '/shopassist.v2.CustomerService/GetCart',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.GetCartRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.Cart.FromString,
+                _registered_method=True)
+        self.SetCartLine = channel.unary_unary(
+                '/shopassist.v2.CustomerService/SetCartLine',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.SetCartLineRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.Cart.FromString,
+                _registered_method=True)
+        self.ClearCart = channel.unary_unary(
+                '/shopassist.v2.CustomerService/ClearCart',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ClearCartRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.Cart.FromString,
+                _registered_method=True)
+
+
+class CustomerServiceServicer:
+    """Missing associated documentation comment in .proto file."""
+
+    def ListUsers(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetUser(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetCart(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetCartLine(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ClearCart(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_CustomerServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'ListUsers': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListUsers,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ListUsersRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ListUsersResponse.SerializeToString,
+            ),
+            'GetUser': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetUser,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.GetUserRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.User.SerializeToString,
+            ),
+            'GetCart': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCart,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.GetCartRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.Cart.SerializeToString,
+            ),
+            'SetCartLine': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetCartLine,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.SetCartLineRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.Cart.SerializeToString,
+            ),
+            'ClearCart': grpc.unary_unary_rpc_method_handler(
+                    servicer.ClearCart,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ClearCartRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.Cart.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'shopassist.v2.CustomerService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('shopassist.v2.CustomerService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class CustomerService:
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def ListUsers(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.CustomerService/ListUsers',
+            shopassist__proto_dot_shopassist__pb2.ListUsersRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ListUsersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetUser(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.CustomerService/GetUser',
+            shopassist__proto_dot_shopassist__pb2.GetUserRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.User.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCart(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.CustomerService/GetCart',
+            shopassist__proto_dot_shopassist__pb2.GetCartRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.Cart.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetCartLine(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.CustomerService/SetCartLine',
+            shopassist__proto_dot_shopassist__pb2.SetCartLineRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.Cart.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ClearCart(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.CustomerService/ClearCart',
+            shopassist__proto_dot_shopassist__pb2.ClearCartRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.Cart.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
+class PaymentServiceStub:
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.Charge = channel.unary_unary(
+                '/shopassist.v2.PaymentService/Charge',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ChargeRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ChargeResponse.FromString,
+                _registered_method=True)
+        self.Refund = channel.unary_unary(
+                '/shopassist.v2.PaymentService/Refund',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.RefundRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.RefundResponse.FromString,
+                _registered_method=True)
+
+
+class PaymentServiceServicer:
+    """Missing associated documentation comment in .proto file."""
+
+    def Charge(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Refund(self, request, context):
+        """FAILED_PRECONDITION if the payment did not succeed
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_PaymentServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'Charge': grpc.unary_unary_rpc_method_handler(
+                    servicer.Charge,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ChargeRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ChargeResponse.SerializeToString,
+            ),
+            'Refund': grpc.unary_unary_rpc_method_handler(
+                    servicer.Refund,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.RefundRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.RefundResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'shopassist.v2.PaymentService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('shopassist.v2.PaymentService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class PaymentService:
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def Charge(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.PaymentService/Charge',
+            shopassist__proto_dot_shopassist__pb2.ChargeRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ChargeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Refund(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.PaymentService/Refund',
+            shopassist__proto_dot_shopassist__pb2.RefundRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.RefundResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -222,32 +840,62 @@ class OrderServiceStub:
         Args:
             channel: A grpc.Channel.
         """
+        self.Checkout = channel.unary_stream(
+                '/shopassist.v2.OrderService/Checkout',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.CheckoutRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.CheckoutEvent.FromString,
+                _registered_method=True)
+        self.ListOrders = channel.unary_unary(
+                '/shopassist.v2.OrderService/ListOrders',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ListOrdersRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ListOrdersResponse.FromString,
+                _registered_method=True)
         self.GetOrder = channel.unary_unary(
-                '/shopassist.v1.OrderService/GetOrder',
+                '/shopassist.v2.OrderService/GetOrder',
                 request_serializer=shopassist__proto_dot_shopassist__pb2.GetOrderRequest.SerializeToString,
                 response_deserializer=shopassist__proto_dot_shopassist__pb2.Order.FromString,
                 _registered_method=True)
-        self.TrackOrder = channel.unary_stream(
-                '/shopassist.v1.OrderService/TrackOrder',
-                request_serializer=shopassist__proto_dot_shopassist__pb2.TrackOrderRequest.SerializeToString,
-                response_deserializer=shopassist__proto_dot_shopassist__pb2.OrderStatusUpdate.FromString,
+        self.CancelOrder = channel.unary_unary(
+                '/shopassist.v2.OrderService/CancelOrder',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.CancelOrderRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.Order.FromString,
+                _registered_method=True)
+        self.WatchOrders = channel.unary_stream(
+                '/shopassist.v2.OrderService/WatchOrders',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.WatchOrdersRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.OrderEvent.FromString,
                 _registered_method=True)
 
 
 class OrderServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
-    def GetOrder(self, request, context):
-        """NOT_FOUND status if the order does not exist.
-        """
+    def Checkout(self, request, context):
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def TrackOrder(self, request, context):
-        """Server-streaming. Sends the current status first, then each later change,
-        and ends the stream once the order reaches DELIVERED or CANCELLED.
-        NOT_FOUND status if the order does not exist.
+    def ListOrders(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetOrder(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelOrder(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def WatchOrders(self, request, context):
+        """never ends on its own
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -256,26 +904,95 @@ class OrderServiceServicer:
 
 def add_OrderServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'Checkout': grpc.unary_stream_rpc_method_handler(
+                    servicer.Checkout,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.CheckoutRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.CheckoutEvent.SerializeToString,
+            ),
+            'ListOrders': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListOrders,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ListOrdersRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ListOrdersResponse.SerializeToString,
+            ),
             'GetOrder': grpc.unary_unary_rpc_method_handler(
                     servicer.GetOrder,
                     request_deserializer=shopassist__proto_dot_shopassist__pb2.GetOrderRequest.FromString,
                     response_serializer=shopassist__proto_dot_shopassist__pb2.Order.SerializeToString,
             ),
-            'TrackOrder': grpc.unary_stream_rpc_method_handler(
-                    servicer.TrackOrder,
-                    request_deserializer=shopassist__proto_dot_shopassist__pb2.TrackOrderRequest.FromString,
-                    response_serializer=shopassist__proto_dot_shopassist__pb2.OrderStatusUpdate.SerializeToString,
+            'CancelOrder': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelOrder,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.CancelOrderRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.Order.SerializeToString,
+            ),
+            'WatchOrders': grpc.unary_stream_rpc_method_handler(
+                    servicer.WatchOrders,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.WatchOrdersRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.OrderEvent.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'shopassist.v1.OrderService', rpc_method_handlers)
+            'shopassist.v2.OrderService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('shopassist.v1.OrderService', rpc_method_handlers)
+    server.add_registered_method_handlers('shopassist.v2.OrderService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
 class OrderService:
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def Checkout(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/shopassist.v2.OrderService/Checkout',
+            shopassist__proto_dot_shopassist__pb2.CheckoutRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.CheckoutEvent.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListOrders(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.OrderService/ListOrders',
+            shopassist__proto_dot_shopassist__pb2.ListOrdersRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ListOrdersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def GetOrder(request,
@@ -291,7 +1008,7 @@ class OrderService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/shopassist.v1.OrderService/GetOrder',
+            '/shopassist.v2.OrderService/GetOrder',
             shopassist__proto_dot_shopassist__pb2.GetOrderRequest.SerializeToString,
             shopassist__proto_dot_shopassist__pb2.Order.FromString,
             options,
@@ -305,7 +1022,34 @@ class OrderService:
             _registered_method=True)
 
     @staticmethod
-    def TrackOrder(request,
+    def CancelOrder(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.OrderService/CancelOrder',
+            shopassist__proto_dot_shopassist__pb2.CancelOrderRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.Order.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def WatchOrders(request,
             target,
             options=(),
             channel_credentials=None,
@@ -318,9 +1062,9 @@ class OrderService:
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/shopassist.v1.OrderService/TrackOrder',
-            shopassist__proto_dot_shopassist__pb2.TrackOrderRequest.SerializeToString,
-            shopassist__proto_dot_shopassist__pb2.OrderStatusUpdate.FromString,
+            '/shopassist.v2.OrderService/WatchOrders',
+            shopassist__proto_dot_shopassist__pb2.WatchOrdersRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.OrderEvent.FromString,
             options,
             channel_credentials,
             insecure,

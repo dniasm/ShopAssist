@@ -5,3 +5,6 @@ __pycache__/
 data/*.db
 .pytest_cache/
 .taste-skill/
+web/node_modules/
+web/dist/
+*.log

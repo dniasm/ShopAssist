@@ -172,3 +172,162 @@ Key-pool behaviour:
 - `GET /services/health` → one short gRPC call per service (a lookup of an id that cannot exist; NOT_FOUND counts as up)
   → `{"all_up", "checked_at", "services":[{"name","service","method","address","status":"up|down","latency_ms","error"}]}`.
   No database access; the orchestrator still reaches data only through gRPC.
+
+
+---
+
+# Phase 5 — ShopAssist v2: a working shop (supersedes the v1 contract above)
+
+v1 was retrieval only. v2 adds a browsable catalog, a cart, a checkout that writes across
+services as a saga, event-driven tracking, and an assistant that uses the services as tools.
+The v1 `/query` + `/ws/{id}` API and the `frontend/` folder are removed when v2 replaces them.
+gRPC contract: `protos/shopassist_proto/shopassist.proto` (package `shopassist.v2`) — read its header comment first.
+
+## Architecture
+
+```
+Browser: web/ (Vite + React + TypeScript + React Router, single-page app)
+  | REST /api/*   +   ONE WebSocket per signed-in tab: /api/ws
+  v
+Orchestrator (FastAPI :8011): gateway + agent. NO database driver, ever.
+  | gRPC (+ metadata x-user-id)
+  +-- CatalogService    :50051  db "catalog"    products, skus, full-text search
+  +-- InventoryService  :50052  db "inventory"  stock per sku, reservations (TTL)
+  +-- OrderService      :50053  db "orders"     orders, checkout saga, fulfilment worker, outbox
+  |        +-- gRPC --> Catalog (prices), Inventory (reserve/commit/release/restock), Payment
+  +-- CustomerService   :50054  db "customer"   demo users, carts
+  +-- PaymentService    :50055  db "payment"    simulated charges/refunds
+```
+
+## Stack changes
+
+- **PostgreSQL 17.12**, native binaries (no Docker, no Windows service) at `PG_BIN`, cluster at `PG_DATA`
+  (both in `.env`), listening on `localhost:5432`. EDB installer downloads are blocked on this network; the
+  binaries came from Maven Central (zonky, SHA1-verified). `scripts/pg.py start|stop|status` manages it.
+- One server, **five databases** (`catalog, inventory, orders, customer, payment`), one login role per service
+  that can connect ONLY to its own database (`REVOKE CONNECT ON DATABASE … FROM PUBLIC`, grant to its role).
+- Driver: `psycopg[binary]` 3.3 + `psycopg-pool` (async; verified importable on Python 3.14). All services become
+  **`grpc.aio` servers**. Windows: psycopg async needs a selector loop —
+  `asyncio.run(main(), loop_factory=asyncio.SelectorEventLoop)`. Spike this with grpc.aio FIRST; if it fails,
+  use the sync pool via `asyncio.to_thread` and report.
+- Schema: numbered SQL files `services/<svc>/migrations/NNN_name.sql`, applied by `services/common/migrate.py`,
+  recorded in `schema_migrations`.
+- Health: every gRPC server registers `grpc.health.v1` (`grpcio-health-checking`).
+- Frontend: Node 22, Vite, React 18, TypeScript strict, React Router 6. Plain CSS with the tokens from
+  `frontend/styles.css` (taste-skill app-screen rules still apply). API types generated with `openapi-typescript`
+  from `/openapi.json` — no hand-written API shapes.
+- FastAPI serves `web/dist` at `/` with SPA fallback (non-`/api` unknown paths → `index.html`).
+
+## Env vars (.env, never committed; `.env.example` lists names with empty secrets)
+
+| Var | Default / meaning |
+|---|---|
+| `PG_ADMIN_URL` | superuser URL; used only by `scripts/db_setup.py` and the test fixture |
+| `PG_BIN`, `PG_DATA` | Postgres binaries and cluster directory, used by `scripts/pg.py` |
+| `CATALOG_DATABASE_URL`, `INVENTORY_DATABASE_URL`, `ORDER_DATABASE_URL`, `CUSTOMER_DATABASE_URL`, `PAYMENT_DATABASE_URL` | per-service role URLs, written to `.env` by `db_setup.py` with random passwords |
+| `CATALOG_ADDR` … `PAYMENT_ADDR` | `localhost:50051` … `localhost:50055` |
+| `ORCHESTRATOR_PORT` | `8011` |
+| `SESSION_SECRET` | random, written by `db_setup.py` if missing; signs session tokens |
+| `RESERVATION_TTL_SECONDS` | `600` |
+| `FULFILMENT_STEP_SECONDS` | `8` (tests ~0.05) |
+| `PAYMENT_LATENCY_MS` | `300` |
+| `LLM_*` | unchanged from Phase 2 |
+
+## Database rules
+
+- Money: `bigint` cents. Timestamps: `timestamptz`. IDs: prefixed text (`P-`, `SKU-`, `U-`, `O-`, `PAY-`, `RF-`).
+- Stock invariant: `on_hand - reserved >= 0` enforced by a `CHECK` constraint AND by the atomic update
+  `UPDATE stock SET reserved = reserved + $q WHERE sku_id = $s AND on_hand - reserved >= $q`.
+  Reserve is all-or-nothing in one transaction; touch rows in `sku_id` order to avoid deadlocks.
+- Idempotency: every write table has a `UNIQUE` idempotency key; a repeat returns the stored result.
+- Outbox (orders): `order_events(event_id bigserial, order_id, user_id, status, message, created_at)` written in the
+  SAME transaction as the status change, followed by `NOTIFY order_events, '<event_id>'`.
+  `WatchOrders` = replay `event_id > after_event_id`, then `LISTEN` for new ones.
+- Saga state persists on the order row (`saga_step`, `payment_id`; reservation_id = order_id). On startup and every
+  30 s a recovery task finishes or compensates PENDING orders older than 60 s.
+- Fulfilment worker: takes due orders with `FOR UPDATE SKIP LOCKED`; advances CONFIRMED→PACKED→SHIPPED→
+  OUT_FOR_DELIVERY→DELIVERED one step per `FULFILMENT_STEP_SECONDS`, each step an outbox event.
+  **Reading an order never writes.**
+
+## Auth (demo, no passwords)
+
+`POST /api/session {"user_id"}` → user must exist (`CustomerService.GetUser`) → `{"token","user"}`. Token =
+`itsdangerous`-signed `{user_id}` with 12 h max age, key `SESSION_SECRET`. All `/api/*` except `/api/health*`,
+`/api/users`, `/api/session`, `/api/products*` need `Authorization: Bearer <token>`; the WebSocket takes `?token=`.
+The orchestrator forwards the user as gRPC metadata `x-user-id`; services enforce ownership.
+
+## REST contract (orchestrator, all under /api, JSON)
+
+Errors: HTTP status + `{"error": {"code", "message", "details"?}}`. Codes: `invalid` 422, `unauthenticated` 401,
+`not_found` 404, `conflict` 409, `out_of_stock` 409, `payment_declined` 402, `unavailable` 503
+(`details.service` names the gRPC service). Money fields are integer cents named `*_cents`; the client formats.
+
+| Method + path | Body / query | Response |
+|---|---|---|
+| GET `/api/health` | | `{"status":"ok"}` |
+| GET `/api/health/services` | | `{"all_up","checked_at","services":[{"name","service","address","status":"up"/"down","latency_ms","error"}]}` via grpc.health.v1 |
+| GET `/api/llm/status` | | as Phase 2 |
+| GET `/api/users` | | `{"users":[User]}` |
+| POST `/api/session` | `{"user_id"}` | `{"token","user"}` |
+| GET `/api/me` | | `{"user"}` |
+| GET `/api/products` | `q, category*, brand*, color*, size*, min_price_cents, max_price_cents, sort` (`relevance, price_asc, price_desc, rating, newest`), `page_size, page_token`; `*` = repeatable | `{"products":[ProductCard],"total","next_page_token","facets":[{"field","values":[{"value","count"}]}],"price_min_cents","price_max_cents"}`; ProductCard = Product without `skus` plus `"in_stock"` (one batched GetStock per page) |
+| GET `/api/products/{id}` | | `{"product": Product, "stock":[{"sku_id","size","color","available"}]}` |
+| GET `/api/cart` | | `{"lines":[{"sku_id","product_id","name","size","color","quantity","unit_price_cents","line_total_cents","available"}],"subtotal_cents","shipping_cents","total_cents","version"}` |
+| PUT `/api/cart/lines/{sku_id}` | `{"quantity"}` (0 removes, max 10) | cart |
+| DELETE `/api/cart/lines/{sku_id}` | | cart |
+| POST `/api/checkout` | `{"idempotency_key","payment_method"}` (lines come from the cart) | 202 `{"order_id"}`; progress on WS channel `checkout`; on success the cart is cleared with `if_version` |
+| GET `/api/orders` | `page_size, page_token` | `{"orders":[Order without history],"next_page_token"}` |
+| GET `/api/orders/{id}` | | `{"order": Order}` |
+| POST `/api/orders/{id}/cancel` | `{"idempotency_key"}` | `{"order"}` |
+| POST `/api/chat` | `{"message","context":{"path","product_id"?}}` | 202 `{"turn_id"}`; progress on WS channel `chat` |
+| POST `/api/chat/proposals/{proposal_id}/confirm` | | 202 `{"ok":true}`; runs the proposed write as the user; result on WS |
+| POST `/api/chat/proposals/{proposal_id}/dismiss` | | `{"ok":true}` |
+
+## WebSocket `/api/ws?token=…&after=<seq>`
+
+One socket per signed-in tab, server → client. Envelope: `{"seq","channel","type","data","ts"}` with channel
+`chat | checkout | order | system`. `seq` is per user and strictly increasing. The orchestrator keeps the last 500
+events per user in memory (dropped 1 h after that user's last socket closes); `after=N` replays `seq > N` first;
+if N is older than the buffer it sends `system/resync` and the client refetches. While a user has a socket open the
+orchestrator holds one `OrderService.WatchOrders` stream for them.
+
+| channel | types → data |
+|---|---|
+| `checkout` | `step {order_id, step, state, message, shortages?}` · `done {order}` · `failed {order_id, reason, shortages?}` |
+| `order` | `status {order_id, status, message, event_id}` |
+| `chat` | `turn_started {turn_id}` · `tool_call {turn_id, tool, args}` · `tool_result {turn_id, tool, summary}` · `message {turn_id, text, cards:[{kind, data}]}` (kind: products, product, stock, cart, order, orders) · `proposal {turn_id, proposal_id, action, args, summary}` · `turn_done {turn_id, source:"llm"/"rules"}` · `error {turn_id, message}` |
+| `system` | `hello {user, seq}` · `resync` |
+
+## Agent (5.4)
+
+Per turn, at most 4 steps; the model returns strict JSON `{"action": "<tool>" | "reply", "args": {…}, "reply": "…"}`.
+Tools: `search_products, get_product, get_stock, get_cart, add_to_cart, remove_from_cart, list_orders, get_order,
+propose_checkout, propose_cancel_order`. Cart edits run directly (reversible and visible). **Money / irreversible
+actions are proposals only — the user's click confirms; the LLM cannot execute them.** Memory per user: last 6 turns
+plus context (`path`, `product_id`, cart summary). No key / limits / errors → rules parser (`source:"rules"`).
+
+## Phases and acceptance (Opus verifies each one live before committing)
+
+- **5.1 Data + catalog + shop shell.** ~400 products, 10 categories, size×colour SKUs; Postgres setup; Catalog,
+  Inventory and Customer (users) services; `/api/users, /api/session, /api/me, /api/products*, /api/health*`;
+  SPA with sign-in picker, catalog (search, facets with counts, sort, pagination, URL-synced filters) and product
+  page (variant picker, live stock).
+- **5.2 Cart + checkout saga.** Carts, Payment, reservations, Order.Checkout with compensation and recovery;
+  cart drawer; checkout page with live saga steps. Tests: 20 concurrent checkouts for 1 unit → exactly 1 success
+  and stock never negative; decline → reservation released; repeated idempotency key → one charge;
+  crash mid-saga → compensated by recovery.
+- **5.3 Events + tracking.** Outbox, NOTIFY, fulfilment worker, WatchOrders, cancel; session WS with replay;
+  orders list and live order page. Two viewers → each step happens once; refresh → no gaps, no duplicates.
+- **5.4 Agent.** Tools, memory, proposals; chat drawer on every page; eval set (~120 labelled queries) + scorer.
+- **5.5 Proof.** Locust load-test numbers, README, docs; old `frontend/`, v1 API and v1 tests removed.
+
+## Ownership (v2)
+
+| Path | Owner |
+|---|---|
+| `protos/**`, `docs/PLAN.md` | Opus |
+| `services/**`, `orchestrator/**`, `tests/**` (except `tests/eval/queries.jsonl`) | Sonnet-A (backend) |
+| `web/**` | Sonnet-B (frontend) |
+| `scripts/gen_data.py`, `scripts/validate_data.py`, `scripts/db_setup.py`, `scripts/pg.py`, `scripts/run_all.py`, `data/seed/**`, `tests/eval/queries.jsonl`, `loadtest/**`, `README.md`, `requirements.txt`, `.env.example`, `.gitignore` | Haiku |
+
+Nobody commits or pushes except Opus. Reports must paste the commands run and their real output.

@@ -7,7 +7,6 @@ import time
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from orchestrator.app import create_app
 from orchestrator.intent import INTENTS, detect_intent
@@ -314,25 +313,12 @@ def test_legacy_llm_api_key_is_merged_with_llm_api_keys(monkeypatch):
     assert (Settings.from_env().llm_limit_rpm, Settings.from_env().llm_max_tokens) == (5, 256)
 
 
-# ---------------- app: /llm/status and queries ----------------
+# ---------------- app: /api/llm/status ----------------
 
-def _events(client, ws_url):
-    events = []
-    with client.websocket_connect(ws_url) as ws:
-        while True:
-            try:
-                events.append(ws.receive_json())
-            except WebSocketDisconnect:
-                return events
-
-
-def test_status_without_keys_and_queries_use_rules():
+def test_status_without_keys():
     with TestClient(create_app(Settings())) as c:
-        assert c.get("/llm/status").json() == {"enabled": False, "model": "openai/gpt-oss-120b", "keys": [],
-                                              "limits": {"rpm": 30, "rpd": 1000, "tpm": 8000, "tpd": 200000}}
-        r = c.post("/query", json={"text": "What's the weather?"})
-        events = _events(c, r.json()["ws_url"])
-        assert events[1]["type"] == "intent_detected" and events[1]["data"]["source"] == "rules"
+        assert c.get("/api/llm/status").json() == {"enabled": False, "model": "openai/gpt-oss-120b", "keys": [],
+                                                  "limits": {"rpm": 30, "rpd": 1000, "tpm": 8000, "tpd": 200000}}
 
 
 def test_status_and_logs_never_contain_a_full_key(caplog):
@@ -340,10 +326,10 @@ def test_status_and_logs_never_contain_a_full_key(caplog):
     up = Upstream({K1: [rate_limited("30")], K2: [ok(intent="unknown", entities={})]})
     s = settings()
     client = up.client(s)
+    intent, _entities = asyncio.run(client.detect("What's the weather?"))  # K1 is rate limited, so K2 answers
+    assert intent == "unknown" and up.calls == [K1, K2]
     with TestClient(create_app(s, llm=client)) as c:
-        events = _events(c, c.post("/query", json={"text": "What's the weather?"}).json()["ws_url"])
-        assert events[1]["data"]["source"] == "llm" and up.calls == [K1, K2]
-        status = c.get("/llm/status")
+        status = c.get("/api/llm/status")
     body = status.json()
     assert body["enabled"] is True and body["model"] == "openai/gpt-oss-120b"
     assert [k["key"] for k in body["keys"]] == ["key#1 …abcd", "key#2 …wxyz"]

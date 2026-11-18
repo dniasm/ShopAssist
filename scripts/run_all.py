@@ -1,174 +1,526 @@
-"""Start the three gRPC microservices and the orchestrator as subprocesses.
+"""Start the ShopAssist v2 stack: Postgres, the gRPC services, the orchestrator (and optionally the web app).
 
 Usage (from the repo root):
-    python scripts/run_all.py
-    python scripts/run_all.py --reset     # delete the three SQLite DBs first
+    python scripts/run_all.py            # start everything; Ctrl+C stops it all
+    python scripts/run_all.py --reset    # db_setup.py --reset first; services re-seed on start
+    python scripts/run_all.py --web      # also run `npm run dev` in web/ (Vite, port 5173)
 
-- Uses the same Python interpreter that runs this script.
-- Loads .env from the repo root if it exists.
-- Prefixes every child's output with its name, e.g. [product] ...
-- Ctrl+C, or any child exiting, stops all of them.
-- --reset deletes the databases so the seed data is loaded again. Order tracking
-  writes status changes to orders.db, so run --reset to repeat a live-tracking demo.
+What happens, in order:
+  1. Postgres is started with scripts/pg.py if it is stopped.
+  2. The five *_DATABASE_URL values must exist in .env (else: run scripts/db_setup.py, exit 1).
+  3. Every target port must be free (else: refuse, naming the port, exit 1). Nothing is killed.
+  4. Each process starts only after the previous one is ready: gRPC services answer grpc.health.v1
+     Check with SERVING, the orchestrator answers GET /api/health with 200.
+  5. Output of every child is prefixed with its name. Colour only on a terminal.
+  6. Ctrl+C, or any child exiting, stops every child we started (graceful, then terminate, then kill).
+     The script exits 1 if a child crashed.
+
+Only processes this script started are ever signalled or killed.
 """
 
 from __future__ import annotations
 
 import argparse
+import errno
+import importlib.util
 import os
+import shutil
+import signal
+import socket
 import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
+import grpc
+from dotenv import dotenv_values, load_dotenv
+from grpc_health.v1 import health_pb2, health_pb2_grpc
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
+ENV_FILE = REPO_ROOT / ".env"
+SCRIPTS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPTS_DIR))
+import pg  # noqa: E402  (scripts/pg.py: the same start/stop/status logic)
 
-# (name, module) pairs. Started in this order.
-PROCESSES = [
-    ("product", "services.product.server"),
-    ("inventory", "services.inventory.server"),
-    ("order", "services.order.server"),
-    ("orchestrator", "orchestrator.main"),
+READY_TIMEOUT_SECONDS = 15.0
+WEB_READY_TIMEOUT_SECONDS = 30.0
+STOP_GRACE_SECONDS = 5.0
+POLL_SECONDS = 0.25
+NAME_WIDTH = 12
+CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+IS_WINDOWS = os.name == "nt"
+
+DATABASE_URL_VARS = [
+    "CATALOG_DATABASE_URL", "INVENTORY_DATABASE_URL", "ORDER_DATABASE_URL",
+    "CUSTOMER_DATABASE_URL", "PAYMENT_DATABASE_URL",
 ]
 
-STOP_TIMEOUT_SECONDS = 5
-POLL_INTERVAL_SECONDS = 0.5
 
-# (env var, default path) for each service database. Same rules as services/common:
-# the env var wins, and a relative path is resolved against the repo root.
-DB_SETTINGS = [
-    ("PRODUCT_DB", "data/products.db"),
-    ("INVENTORY_DB", "data/inventory.db"),
-    ("ORDER_DB", "data/orders.db"),
+@dataclass(frozen=True)
+class Proc:
+    """One process in the stack.
+
+    addr_env: env var holding the address. gRPC: "host:port" (e.g. CATALOG_ADDR). HTTP: a bare port.
+    default:  value used when that env var is not set.
+    kind:     "grpc" (health check) or "http" (GET ready_path must return 200).
+    optional: start only when `module` exists (enabled_if_module_exists).
+    """
+    name: str
+    module: str
+    addr_env: str | None
+    default: str
+    kind: str
+    optional: bool = False
+    ready_path: str = "/"
+    ready_host: str = "127.0.0.1"  # Vite listens on localhost, which can be IPv6-only (::1) on Windows
+
+
+# Start order. Ports: catalog 50051, inventory 50052, order 50053, customer 50054, payment 50055, orchestrator 8011.
+PROCESSES: list[Proc] = [
+    Proc("catalog", "services.catalog.server", "CATALOG_ADDR", "localhost:50051", "grpc"),
+    Proc("inventory", "services.inventory.server", "INVENTORY_ADDR", "localhost:50052", "grpc"),
+    Proc("order", "services.order.server", "ORDER_ADDR", "localhost:50053", "grpc", optional=True),
+    Proc("customer", "services.customer.server", "CUSTOMER_ADDR", "localhost:50054", "grpc"),
+    Proc("payment", "services.payment.server", "PAYMENT_ADDR", "localhost:50055", "grpc", optional=True),
+    Proc("orchestrator", "orchestrator.main", "ORCHESTRATOR_PORT", "8011", "http", ready_path="/api/health"),
 ]
+WEB = Proc("web", "", None, "5173", "http", ready_path="/", ready_host="localhost")  # `npm run dev` in web/, only with --web
 
-# SQLite may leave these sidecar files next to a database (WAL and journal modes).
-DB_SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"]
+# Colours cycle per process name, used only when stdout is a terminal.
+COLOURS = ["36", "33", "35", "32", "34", "96", "93", "95", "92", "94"]
 
+
+# ----------------------------------------------------------------------------- pure helpers
+def configured_value(proc: Proc, env: Mapping[str, str]) -> str:
+    """The address (gRPC) or port (HTTP) this process will use."""
+    if proc.addr_env:
+        value = env.get(proc.addr_env)
+        if value:
+            return value
+    return proc.default
+
+
+def port_of(value: str) -> int:
+    """'localhost:50051' -> 50051; '8011' -> 8011."""
+    return int(value.rsplit(":", 1)[-1])
+
+
+def build_plan(env: Mapping[str, str], module_exists: Callable[[str], bool],
+               include_web: bool, web_available: bool) -> tuple[list[Proc], list[str]]:
+    """Which processes to start, in order, and why any were skipped."""
+    plan: list[Proc] = []
+    skipped: list[str] = []
+    for proc in PROCESSES:
+        if proc.optional and not module_exists(proc.module):
+            skipped.append(f"{proc.name}: {proc.module} does not exist yet (optional, skipped)")
+            continue
+        plan.append(proc)
+    if include_web:
+        if web_available:
+            plan.append(WEB)
+        else:
+            skipped.append("web: web/package.json not found")
+    return plan, skipped
+
+
+def module_exists(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):  # a missing parent package raises ModuleNotFoundError (an ImportError)
+        return False
+
+
+def port_in_use(port: int, host_candidates: tuple[str, ...] = ("127.0.0.1", "::1")) -> bool:
+    """True if something already accepts connections on the port, or holds it for binding."""
+    for host in host_candidates:
+        family = socket.AF_INET6 if ":" in host else socket.AF_INET
+        try:
+            probe = socket.socket(family, socket.SOCK_STREAM)  # no IPv6 on this host: skip that address
+        except OSError:
+            continue
+        try:
+            probe.settimeout(0.3)
+            if probe.connect_ex((host, port)) == 0:
+                return True
+        except OSError:
+            pass
+        finally:
+            probe.close()
+        bind = socket.socket(family, socket.SOCK_STREAM)
+        try:
+            bind.bind((host, port))
+        except OSError as exc:
+            if exc.errno in (errno.EADDRINUSE, 10048):  # 10048 = WSAEADDRINUSE on Windows
+                return True
+        finally:
+            bind.close()
+    return False
+
+
+def grpc_serving(address: str, timeout: float = 1.0) -> bool:
+    with grpc.insecure_channel(address) as channel:
+        try:
+            response = health_pb2_grpc.HealthStub(channel).Check(
+                health_pb2.HealthCheckRequest(service=""), timeout=timeout)
+        except grpc.RpcError:
+            return False
+        return response.status == health_pb2.HealthCheckResponse.SERVING
+
+
+def http_ok(url: str, timeout: float = 1.0) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return response.status == 200
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def wait_ready(check: Callable[[], bool], timeout: float, alive: Callable[[], bool]) -> float | None:
+    """Poll check() until it is true. Returns the elapsed ms, or None on timeout or if the process died."""
+    start = time.monotonic()
+    deadline = start + timeout
+    while True:
+        if not alive():
+            return None
+        if check():
+            return (time.monotonic() - start) * 1000
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(POLL_SECONDS)
+
+
+def format_tag(name: str, colour: str | None) -> str:
+    tag = f"[{name:<{NAME_WIDTH}}]"
+    return f"\x1b[{colour}m{tag}\x1b[0m" if colour else tag
+
+
+def ready_line(name: str, port: int, ms: float) -> str:
+    return f"{name:<{NAME_WIDTH}} port {port:<6} ready in {ms:.0f} ms"
+
+
+# ----------------------------------------------------------------------------- processes
 _print_lock = threading.Lock()
+_colour = False
 
 
-def _say(line: str) -> None:
+def say(line: str) -> None:
     with _print_lock:
         print(line, flush=True)
 
 
-def _db_path(env_name: str, default: str) -> Path:
-    raw = os.environ.get(env_name) or default
-    p = Path(raw)
-    return p if p.is_absolute() else REPO_ROOT / p
+@dataclass
+class Child:
+    proc: Proc
+    popen: subprocess.Popen
+    port: int
+    colour: str | None
+
+    @property
+    def name(self) -> str:
+        return self.proc.name
+
+    def alive(self) -> bool:
+        return self.popen.poll() is None
 
 
-def reset_databases() -> None:
-    """Delete the three service databases (and any sidecar files) so they re-seed on start."""
-    for env_name, default in DB_SETTINGS:
-        db = _db_path(env_name, default)
-        candidates = [db] + [Path(str(db) + s) for s in DB_SIDECAR_SUFFIXES]
-        for path in candidates:
-            if path.exists():
-                path.unlink()
-                _say(f"[run_all] removed {path}")
-            elif path == db:
-                _say(f"[run_all] nothing to remove at {path}")
-
-
-def _load_dotenv() -> None:
-    env_file = REPO_ROOT / ".env"
-    if not env_file.is_file():
-        return
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        _say("[run_all] python-dotenv not installed; skipping .env")
-        return
-    load_dotenv(env_file, override=False)
-    _say(f"[run_all] loaded {env_file}")
-
-
-def _pump(name: str, stream) -> None:
-    """Copy one child's output to our stdout, one prefixed line at a time."""
+def _pump(tag: str, stream) -> None:
     try:
         for raw in iter(stream.readline, b""):
             text = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-            _say(f"[{name}] {text}")
+            say(f"{tag} {text}")
     finally:
         stream.close()
 
 
-def _start(name: str, module: str) -> subprocess.Popen:
-    env = os.environ.copy()
-    env["PYTHONUNBUFFERED"] = "1"
-    proc = subprocess.Popen(
-        [sys.executable, "-m", module],
-        cwd=REPO_ROOT,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-    threading.Thread(target=_pump, args=(name, proc.stdout), daemon=True).start()
-    _say(f"[run_all] started {name} (pid {proc.pid}): {sys.executable} -m {module}")
-    return proc
+_job_handle = None  # kept open for the whole run: closing it kills every child still in the job
+_stop_requested = threading.Event()  # set by Ctrl+C / Ctrl+Break on Windows; the main loop then stops everything
+_console_handler = None  # keeps the ctypes callback alive
 
 
-def _stop_all(children: list[tuple[str, subprocess.Popen]]) -> None:
-    for name, proc in children:
-        if proc.poll() is None:
-            try:
-                proc.terminate()
-            except OSError:
-                pass
-    deadline = time.monotonic() + STOP_TIMEOUT_SECONDS
-    for name, proc in children:
+def _install_console_handler() -> None:
+    """Ctrl+C / Ctrl+Break set a flag and return. Children are told to ignore those events (see start_child),
+    so run_all decides how they stop instead of each child dying on its own."""
+    global _console_handler
+    if not IS_WINDOWS:
+        return
+    import ctypes
+    from ctypes import wintypes
+    routine = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+
+    def on_console_event(event: int) -> bool:
+        _stop_requested.set()
+        return True
+
+    _console_handler = routine(on_console_event)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.SetConsoleCtrlHandler.argtypes = [ctypes.c_void_p, wintypes.BOOL]
+    kernel32.SetConsoleCtrlHandler(_console_handler, True)
+
+
+def _children_ignore_ctrl(on: bool) -> None:
+    """Processes created while this is on inherit 'ignore Ctrl+C'. Used only around each spawn."""
+    if not IS_WINDOWS:
+        return
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.SetConsoleCtrlHandler.argtypes = [ctypes.c_void_p, wintypes.BOOL]
+    kernel32.SetConsoleCtrlHandler(None, on)
+
+
+def _create_kill_on_close_job() -> int | None:
+    """Windows job object with KILL_ON_JOB_CLOSE. If run_all dies for any reason, the OS kills the whole tree."""
+    if not IS_WINDOWS:
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class BasicLimits(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class IoCounters(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_uint64) for name in (
+            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+            "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+    class ExtendedLimits(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", BasicLimits), ("IoInfo", IoCounters),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    job = kernel32.CreateJobObjectW(None, None)
+    if not job:
+        return None
+    info = ExtendedLimits()
+    info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    ok = kernel32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info))  # 9 = ExtendedLimitInformation
+    if not ok:
+        kernel32.CloseHandle(job)
+        return None
+    return job
+
+
+def _assign_to_job(popen: subprocess.Popen) -> None:
+    if _job_handle is None:
+        return
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    if not kernel32.AssignProcessToJobObject(_job_handle, int(popen._handle)):
+        say(f"{format_tag('run_all', None)} warning: could not put pid {popen.pid} in the job object")
+
+
+def _npm() -> str | None:
+    return shutil.which("npm")
+
+
+def start_child(proc: Proc, env: dict[str, str], colour: str | None) -> subprocess.Popen:
+    if proc.module:
+        command, cwd = [sys.executable, "-m", proc.module], REPO_ROOT
+    else:
+        command, cwd = [_npm() or "npm", "run", "dev"], REPO_ROOT / "web"
+    _children_ignore_ctrl(True)
+    try:
+        popen = subprocess.Popen(
+            command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            creationflags=CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0,
+        )
+    finally:
+        _children_ignore_ctrl(False)
+    _assign_to_job(popen)
+    threading.Thread(target=_pump, args=(format_tag(proc.name, colour), popen.stdout), daemon=True).start()
+    say(f"{format_tag('run_all', None)} started {proc.name} (pid {popen.pid})")
+    return popen
+
+
+def _wait_all(children: list[Child], seconds: float) -> None:
+    deadline = time.monotonic() + seconds
+    for child in children:
         remaining = max(0.0, deadline - time.monotonic())
         try:
-            proc.wait(timeout=remaining)
+            child.popen.wait(timeout=remaining)
         except subprocess.TimeoutExpired:
-            _say(f"[run_all] {name} did not stop in time; killing")
-            proc.kill()
-            proc.wait()
-    for name, proc in children:
-        _say(f"[run_all] {name} exited with code {proc.returncode}")
+            pass
+
+
+def _kill_tree(child: Child) -> None:
+    """Kill the child we started. On Windows also its children (npm -> node), by PID tree only."""
+    if IS_WINDOWS:
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(child.popen.pid)],
+                       capture_output=True, text=True)
+    else:
+        child.popen.kill()
+
+
+def stop_children(children: list[Child]) -> None:
+    """Stop in reverse start order: graceful signal, wait 5 s, terminate, wait 5 s, kill."""
+    started = time.monotonic()
+    running = [c for c in reversed(children) if c.alive()]
+    for child in running:
+        if not child.proc.module:  # npm run dev: cmd.exe would ask "Terminate batch job?", so tree-kill it
+            continue
+        try:
+            if IS_WINDOWS:
+                child.popen.send_signal(signal.CTRL_BREAK_EVENT)  # works: child has its own process group
+            else:
+                child.popen.send_signal(signal.SIGINT)
+        except (OSError, ValueError):
+            pass
+    _wait_all([c for c in running if c.proc.module], STOP_GRACE_SECONDS)
+    for child in running:
+        if not child.proc.module and child.alive():
+            _kill_tree(child)
+    _wait_all(running, 0)
+    for child in running:
+        if child.alive():
+            try:
+                child.popen.terminate()
+            except OSError:
+                pass
+    _wait_all(running, STOP_GRACE_SECONDS)
+    for child in running:
+        if child.alive():
+            say(f"{format_tag('run_all', None)} {child.name} did not stop in time; killing it")
+            _kill_tree(child)
+            child.popen.wait()
+    for child in children:
+        say(f"{format_tag('run_all', None)} {child.name} exited with code {child.popen.returncode}")
+    say(f"{format_tag('run_all', None)} all processes stopped in {time.monotonic() - started:.1f} s")
+
+
+# ----------------------------------------------------------------------------- steps
+def ensure_postgres() -> None:
+    exe, data, log = pg._config()
+    if pg._state(exe, data) == "running":
+        say(f"{format_tag('postgres', None)} running, port {pg.PORT}")
+        return
+    if pg.cmd_start(exe, data, log) != 0:
+        sys.exit(1)
+
+
+def missing_database_urls() -> list[str]:
+    values = dotenv_values(ENV_FILE) if ENV_FILE.is_file() else {}
+    return [name for name in DATABASE_URL_VARS if not (values.get(name) or os.environ.get(name))]
+
+
+def run_db_reset() -> None:
+    result = subprocess.run([sys.executable, str(SCRIPTS_DIR / "db_setup.py"), "--reset"], cwd=REPO_ROOT)
+    if result.returncode != 0:
+        sys.exit("run_all: db_setup.py --reset failed; not starting services")
+    load_dotenv(ENV_FILE, override=True)  # --reset rewrites the URLs in .env
+
+
+def _break_as_interrupt(signum, frame) -> None:
+    raise KeyboardInterrupt  # Ctrl+Break gets the same clean shutdown as Ctrl+C
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Start the ShopAssist services and orchestrator.")
-    parser.add_argument(
-        "--reset",
-        action="store_true",
-        help="delete the service databases before starting, so seed data is loaded again",
-    )
+    global _colour, _job_handle
+    parser = argparse.ArgumentParser(description="Start the ShopAssist v2 stack.")
+    parser.add_argument("--reset", action="store_true",
+                        help="run db_setup.py --reset first (databases are dropped and re-seeded)")
+    parser.add_argument("--web", action="store_true", help="also run `npm run dev` in web/")
     args = parser.parse_args()
 
-    # Make Windows consoles tolerate any characters a child prints.
+    _colour = sys.stdout.isatty()
+    if _colour and IS_WINDOWS:
+        os.system("")  # enables ANSI escape handling in the Windows console
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, _break_as_interrupt)
+    _install_console_handler()
+    _job_handle = _create_kill_on_close_job()
+    if IS_WINDOWS and _job_handle is None:
+        say(f"{format_tag('run_all', None)} warning: no job object; children rely on graceful stop only")
 
-    _load_dotenv()
+    load_dotenv(ENV_FILE, override=False)
+    ensure_postgres()
+
+    missing = missing_database_urls()
+    if missing:
+        say(f"run_all: missing {', '.join(missing)} in .env")
+        say("run_all: run `python scripts/db_setup.py` first, then start again")
+        return 1
+
+    web_available = (REPO_ROOT / "web" / "package.json").is_file()
+    plan, skipped = build_plan(os.environ, module_exists, args.web, web_available)
+    for line in skipped:
+        say(f"{format_tag('run_all', None)} skipped {line}")
+    if args.web and WEB in plan and _npm() is None:
+        sys.exit("run_all: npm not found on PATH (needed for --web)")
+
+    busy = [(p.name, port_of(configured_value(p, os.environ))) for p in plan
+            if port_in_use(port_of(configured_value(p, os.environ)))]
+    if busy:
+        for name, port in busy:
+            say(f"run_all: refusing to start: port {port} ({name}) is already in use")
+        say("run_all: stop the process holding that port (or wait and retry); nothing was killed")
+        return 1
 
     if args.reset:
-        reset_databases()
+        run_db_reset()
 
-    children: list[tuple[str, subprocess.Popen]] = []
+    colours = {p.name: (COLOURS[i % len(COLOURS)] if _colour else None) for i, p in enumerate(plan)}
+    children: list[Child] = []
     exit_code = 0
     try:
-        for name, module in PROCESSES:
-            children.append((name, _start(name, module)))
+        for proc in plan:
+            value = configured_value(proc, os.environ)
+            port = port_of(value)
+            child_env = dict(os.environ, PYTHONUNBUFFERED="1")
+            popen = start_child(proc, child_env, colours[proc.name])
+            child = Child(proc, popen, port, colours[proc.name])
+            children.append(child)
+            if proc.kind == "grpc":
+                check = lambda v=value: grpc_serving(v)  # noqa: E731
+                timeout = READY_TIMEOUT_SECONDS
+            else:
+                url = f"http://{proc.ready_host}:{port}{proc.ready_path}"
+                check = lambda u=url: http_ok(u)  # noqa: E731
+                timeout = WEB_READY_TIMEOUT_SECONDS if proc.name == "web" else READY_TIMEOUT_SECONDS
+            ms = wait_ready(check, timeout, lambda c=child: c.alive() and not _stop_requested.is_set())
+            if _stop_requested.is_set():
+                say(f"{format_tag('run_all', None)} Ctrl+C received during startup; stopping all processes")
+                return 0
+            if ms is None:
+                reason = "exited" if not child.alive() else f"not ready after {timeout:.0f} s"
+                say(f"{format_tag('run_all', None)} {proc.name} {reason}; stopping everything")
+                exit_code = 1
+                return exit_code
+            say(f"{format_tag('run_all', colours[proc.name])} {ready_line(proc.name, port, ms)}")
 
-        # Wait until something dies or the user presses Ctrl+C.
+        say(f"{format_tag('run_all', None)} {len(children)} processes ready; Ctrl+C stops them all")
         while True:
-            for name, proc in children:
-                code = proc.poll()
+            if _stop_requested.is_set():
+                say(f"{format_tag('run_all', None)} Ctrl+C received; stopping all processes")
+                return 0
+            for child in children:
+                code = child.popen.poll()
                 if code is not None:
-                    _say(f"[run_all] {name} stopped on its own (exit code {code}); stopping the rest")
-                    exit_code = code or 1
+                    say(f"{format_tag('run_all', None)} {child.name} stopped on its own (exit code {code}); stopping the rest")
+                    exit_code = code if code != 0 else 1
                     return exit_code
-            time.sleep(POLL_INTERVAL_SECONDS)
+            time.sleep(POLL_SECONDS)
     except KeyboardInterrupt:
-        _say("[run_all] Ctrl+C received; stopping all processes")
+        say(f"{format_tag('run_all', None)} Ctrl+C received; stopping all processes")
         return 0
     finally:
-        _stop_all(children)
+        stop_children(children)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,1343 @@
+[
+  {
+    "order_id": "O-10001",
+    "user_id": "U-04",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-100632",
+        "product_id": "P-1089",
+        "name": "Corvane Vintage Clubmaster Sunglasses",
+        "size": "ONE",
+        "color": "white",
+        "quantity": 1,
+        "unit_price_cents": 12900,
+        "line_total_cents": 12900
+      }
+    ],
+    "subtotal_cents": 12900,
+    "shipping_cents": 0,
+    "total_cents": 12900,
+    "created_at": "2025-05-21T14:24:00Z",
+    "updated_at": "2025-05-23T08:24:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-05-21T14:24:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2025-05-22T07:24:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2025-05-22T14:24:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2025-05-23T03:24:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2025-05-23T08:24:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10002",
+    "user_id": "U-05",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-100528",
+        "product_id": "P-1077",
+        "name": "Lorrimere Clean Henley T-Shirt",
+        "size": "L",
+        "color": "green",
+        "quantity": 2,
+        "unit_price_cents": 2499,
+        "line_total_cents": 4998
+      },
+      {
+        "sku_id": "SKU-102354",
+        "product_id": "P-1325",
+        "name": "Brevlan Essential Bootcut Jeans",
+        "size": "30",
+        "color": "green",
+        "quantity": 2,
+        "unit_price_cents": 9099,
+        "line_total_cents": 18198
+      }
+    ],
+    "subtotal_cents": 23196,
+    "shipping_cents": 0,
+    "total_cents": 23196,
+    "created_at": "2025-05-26T10:31:00Z",
+    "updated_at": "2025-05-29T14:31:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-05-26T10:31:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2025-05-27T03:31:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2025-05-28T01:31:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2025-05-29T00:31:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2025-05-29T14:31:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10003",
+    "user_id": "U-05",
+    "status": "PACKED",
+    "lines": [
+      {
+        "sku_id": "SKU-102048",
+        "product_id": "P-1283",
+        "name": "Brevlan Compact Relaxed Jeans",
+        "size": "32",
+        "color": "white",
+        "quantity": 1,
+        "unit_price_cents": 5699,
+        "line_total_cents": 5699
+      }
+    ],
+    "subtotal_cents": 5699,
+    "shipping_cents": 0,
+    "total_cents": 5699,
+    "created_at": "2025-06-19T05:17:00Z",
+    "updated_at": "2025-06-19T13:17:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-06-19T05:17:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2025-06-19T13:17:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10004",
+    "user_id": "U-02",
+    "status": "CONFIRMED",
+    "lines": [
+      {
+        "sku_id": "SKU-102718",
+        "product_id": "P-1369",
+        "name": "Mirelle Ash Trail Low-Top Trainers",
+        "size": "10",
+        "color": "yellow",
+        "quantity": 1,
+        "unit_price_cents": 7899,
+        "line_total_cents": 7899
+      }
+    ],
+    "subtotal_cents": 7899,
+    "shipping_cents": 0,
+    "total_cents": 7899,
+    "created_at": "2025-06-26T04:13:00Z",
+    "updated_at": "2025-06-26T04:13:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-06-26T04:13:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10005",
+    "user_id": "U-03",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-101235",
+        "product_id": "P-1167",
+        "name": "Gallowmere Minimal Tapered Jeans",
+        "size": "34",
+        "color": "black",
+        "quantity": 1,
+        "unit_price_cents": 12199,
+        "line_total_cents": 12199
+      }
+    ],
+    "subtotal_cents": 12199,
+    "shipping_cents": 0,
+    "total_cents": 12199,
+    "created_at": "2025-07-15T12:39:00Z",
+    "updated_at": "2025-07-17T17:39:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-07-15T12:39:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2025-07-15T19:39:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2025-07-16T04:39:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2025-07-17T09:39:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2025-07-17T17:39:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10006",
+    "user_id": "U-05",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-100143",
+        "product_id": "P-1018",
+        "name": "Ivorside Minimal Relaxed Jeans",
+        "size": "36",
+        "color": "yellow",
+        "quantity": 2,
+        "unit_price_cents": 5899,
+        "line_total_cents": 11798
+      },
+      {
+        "sku_id": "SKU-101070",
+        "product_id": "P-1144",
+        "name": "Tessaly Alpine Selvedge Jeans",
+        "size": "36",
+        "color": "burgundy",
+        "quantity": 1,
+        "unit_price_cents": 6899,
+        "line_total_cents": 6899
+      }
+    ],
+    "subtotal_cents": 18697,
+    "shipping_cents": 0,
+    "total_cents": 18697,
+    "created_at": "2025-09-14T02:07:00Z",
+    "updated_at": "2025-09-17T13:07:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-09-14T02:07:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2025-09-14T16:07:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2025-09-15T15:07:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2025-09-16T09:07:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2025-09-17T13:07:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10007",
+    "user_id": "U-06",
+    "status": "SHIPPED",
+    "lines": [
+      {
+        "sku_id": "SKU-102917",
+        "product_id": "P-1393",
+        "name": "Corvane Plain Canvas Trainers",
+        "size": "9",
+        "color": "black",
+        "quantity": 1,
+        "unit_price_cents": 15400,
+        "line_total_cents": 15400
+      },
+      {
+        "sku_id": "SKU-101373",
+        "product_id": "P-1187",
+        "name": "Yarrowby Soft Puffer Jacket",
+        "size": "XS",
+        "color": "burgundy",
+        "quantity": 1,
+        "unit_price_cents": 21899,
+        "line_total_cents": 21899
+      }
+    ],
+    "subtotal_cents": 37299,
+    "shipping_cents": 0,
+    "total_cents": 37299,
+    "created_at": "2025-09-25T05:26:00Z",
+    "updated_at": "2025-09-26T15:26:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-09-25T05:26:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2025-09-25T20:26:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2025-09-26T15:26:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10008",
+    "user_id": "U-06",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-101886",
+        "product_id": "P-1249",
+        "name": "Umbrarin Vintage Clubmaster Sunglasses",
+        "size": "ONE",
+        "color": "orange",
+        "quantity": 1,
+        "unit_price_cents": 12299,
+        "line_total_cents": 12299
+      },
+      {
+        "sku_id": "SKU-101504",
+        "product_id": "P-1202",
+        "name": "Mirelle Ash Modern Bootcut Jeans",
+        "size": "32",
+        "color": "yellow",
+        "quantity": 1,
+        "unit_price_cents": 11100,
+        "line_total_cents": 11100
+      }
+    ],
+    "subtotal_cents": 23399,
+    "shipping_cents": 0,
+    "total_cents": 23399,
+    "created_at": "2025-11-17T17:43:00Z",
+    "updated_at": "2025-11-20T06:43:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-11-17T17:43:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2025-11-18T08:43:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2025-11-18T20:43:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2025-11-19T19:43:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2025-11-20T06:43:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10009",
+    "user_id": "U-04",
+    "status": "CONFIRMED",
+    "lines": [
+      {
+        "sku_id": "SKU-101638",
+        "product_id": "P-1219",
+        "name": "Wrenfield Quiet Graphic Tee",
+        "size": "XS",
+        "color": "white",
+        "quantity": 1,
+        "unit_price_cents": 3100,
+        "line_total_cents": 3100
+      }
+    ],
+    "subtotal_cents": 3100,
+    "shipping_cents": 499,
+    "total_cents": 3599,
+    "created_at": "2025-12-10T05:11:00Z",
+    "updated_at": "2025-12-10T05:11:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-12-10T05:11:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10010",
+    "user_id": "U-01",
+    "status": "PACKED",
+    "lines": [
+      {
+        "sku_id": "SKU-100767",
+        "product_id": "P-1107",
+        "name": "Gallowmere Airy Selvedge Jeans",
+        "size": "34",
+        "color": "burgundy",
+        "quantity": 1,
+        "unit_price_cents": 6600,
+        "line_total_cents": 6600
+      }
+    ],
+    "subtotal_cents": 6600,
+    "shipping_cents": 0,
+    "total_cents": 6600,
+    "created_at": "2025-12-27T00:33:00Z",
+    "updated_at": "2025-12-27T07:33:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2025-12-27T00:33:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2025-12-27T07:33:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10011",
+    "user_id": "U-04",
+    "status": "CONFIRMED",
+    "lines": [
+      {
+        "sku_id": "SKU-101588",
+        "product_id": "P-1213",
+        "name": "Tessaly Airy Zip Hoodie",
+        "size": "M",
+        "color": "burgundy",
+        "quantity": 1,
+        "unit_price_cents": 6800,
+        "line_total_cents": 6800
+      }
+    ],
+    "subtotal_cents": 6800,
+    "shipping_cents": 0,
+    "total_cents": 6800,
+    "created_at": "2026-01-04T19:41:00Z",
+    "updated_at": "2026-01-04T19:41:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-01-04T19:41:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10012",
+    "user_id": "U-06",
+    "status": "CONFIRMED",
+    "lines": [
+      {
+        "sku_id": "SKU-100616",
+        "product_id": "P-1088",
+        "name": "Mirelle Ash Sharp Trucker Jacket",
+        "size": "M",
+        "color": "burgundy",
+        "quantity": 1,
+        "unit_price_cents": 8299,
+        "line_total_cents": 8299
+      }
+    ],
+    "subtotal_cents": 8299,
+    "shipping_cents": 0,
+    "total_cents": 8299,
+    "created_at": "2026-01-18T11:31:00Z",
+    "updated_at": "2026-01-18T11:31:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-01-18T11:31:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10013",
+    "user_id": "U-01",
+    "status": "PACKED",
+    "lines": [
+      {
+        "sku_id": "SKU-101421",
+        "product_id": "P-1190",
+        "name": "Brevlan Quiet Hiking Boots",
+        "size": "10",
+        "color": "red",
+        "quantity": 1,
+        "unit_price_cents": 14799,
+        "line_total_cents": 14799
+      },
+      {
+        "sku_id": "SKU-102647",
+        "product_id": "P-1357",
+        "name": "Ivorside Signature Hiking Boots",
+        "size": "8",
+        "color": "olive",
+        "quantity": 1,
+        "unit_price_cents": 8099,
+        "line_total_cents": 8099
+      }
+    ],
+    "subtotal_cents": 22898,
+    "shipping_cents": 0,
+    "total_cents": 22898,
+    "created_at": "2026-01-22T04:02:00Z",
+    "updated_at": "2026-01-23T04:02:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-01-22T04:02:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-01-23T04:02:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10014",
+    "user_id": "U-03",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-101418",
+        "product_id": "P-1190",
+        "name": "Brevlan Quiet Hiking Boots",
+        "size": "9",
+        "color": "burgundy",
+        "quantity": 2,
+        "unit_price_cents": 14799,
+        "line_total_cents": 29598
+      }
+    ],
+    "subtotal_cents": 29598,
+    "shipping_cents": 0,
+    "total_cents": 29598,
+    "created_at": "2026-03-02T08:29:00Z",
+    "updated_at": "2026-03-04T08:29:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-03-02T08:29:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-03-02T15:29:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-03-03T07:29:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2026-03-03T09:29:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2026-03-04T08:29:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10015",
+    "user_id": "U-02",
+    "status": "PACKED",
+    "lines": [
+      {
+        "sku_id": "SKU-100165",
+        "product_id": "P-1019",
+        "name": "Ivorside Modern Crew-Neck T-Shirt",
+        "size": "XXL",
+        "color": "beige",
+        "quantity": 1,
+        "unit_price_cents": 1700,
+        "line_total_cents": 1700
+      },
+      {
+        "sku_id": "SKU-100960",
+        "product_id": "P-1129",
+        "name": "Wrenfield Honest Daypack",
+        "size": "ONE",
+        "color": "pink",
+        "quantity": 2,
+        "unit_price_cents": 4799,
+        "line_total_cents": 9598
+      }
+    ],
+    "subtotal_cents": 11298,
+    "shipping_cents": 0,
+    "total_cents": 11298,
+    "created_at": "2026-03-24T03:02:00Z",
+    "updated_at": "2026-03-25T05:02:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-03-24T03:02:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-03-25T05:02:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10016",
+    "user_id": "U-04",
+    "status": "SHIPPED",
+    "lines": [
+      {
+        "sku_id": "SKU-102863",
+        "product_id": "P-1389",
+        "name": "Tessaly Sharp Bootcut Jeans",
+        "size": "32",
+        "color": "white",
+        "quantity": 2,
+        "unit_price_cents": 6599,
+        "line_total_cents": 13198
+      },
+      {
+        "sku_id": "SKU-100871",
+        "product_id": "P-1120",
+        "name": "Strathvale Clean Selvedge Jeans",
+        "size": "36",
+        "color": "olive",
+        "quantity": 2,
+        "unit_price_cents": 5999,
+        "line_total_cents": 11998
+      }
+    ],
+    "subtotal_cents": 25196,
+    "shipping_cents": 0,
+    "total_cents": 25196,
+    "created_at": "2026-04-20T11:58:00Z",
+    "updated_at": "2026-04-21T20:58:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-04-20T11:58:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-04-21T11:58:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-04-21T20:58:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10017",
+    "user_id": "U-06",
+    "status": "CANCELLED",
+    "lines": [
+      {
+        "sku_id": "SKU-101057",
+        "product_id": "P-1144",
+        "name": "Tessaly Alpine Selvedge Jeans",
+        "size": "30",
+        "color": "navy",
+        "quantity": 2,
+        "unit_price_cents": 6899,
+        "line_total_cents": 13798
+      },
+      {
+        "sku_id": "SKU-100810",
+        "product_id": "P-1112",
+        "name": "Fenrowe Vintage Wayfarer Sunglasses",
+        "size": "ONE",
+        "color": "burgundy",
+        "quantity": 2,
+        "unit_price_cents": 8100,
+        "line_total_cents": 16200
+      },
+      {
+        "sku_id": "SKU-102110",
+        "product_id": "P-1292",
+        "name": "Lorrimere Plain Hiking Boots",
+        "size": "8",
+        "color": "orange",
+        "quantity": 1,
+        "unit_price_cents": 9699,
+        "line_total_cents": 9699
+      }
+    ],
+    "subtotal_cents": 39697,
+    "shipping_cents": 0,
+    "total_cents": 39697,
+    "created_at": "2026-04-21T10:19:00Z",
+    "updated_at": "2026-04-21T21:19:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-04-21T10:19:00Z"
+      },
+      {
+        "status": "CANCELLED",
+        "message": "Order cancelled by the customer; payment refunded.",
+        "timestamp": "2026-04-21T21:19:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10018",
+    "user_id": "U-01",
+    "status": "CANCELLED",
+    "lines": [
+      {
+        "sku_id": "SKU-101102",
+        "product_id": "P-1148",
+        "name": "Wrenfield Easy Zip Hoodie",
+        "size": "XL",
+        "color": "olive",
+        "quantity": 1,
+        "unit_price_cents": 6899,
+        "line_total_cents": 6899
+      },
+      {
+        "sku_id": "SKU-100372",
+        "product_id": "P-1050",
+        "name": "Strathvale Lightweight Cropped Hoodie",
+        "size": "XXL",
+        "color": "grey",
+        "quantity": 1,
+        "unit_price_cents": 8099,
+        "line_total_cents": 8099
+      },
+      {
+        "sku_id": "SKU-102103",
+        "product_id": "P-1291",
+        "name": "Corvane Alpine Graphic Tee",
+        "size": "M",
+        "color": "grey",
+        "quantity": 1,
+        "unit_price_cents": 2899,
+        "line_total_cents": 2899
+      }
+    ],
+    "subtotal_cents": 17897,
+    "shipping_cents": 0,
+    "total_cents": 17897,
+    "created_at": "2026-04-23T13:26:00Z",
+    "updated_at": "2026-04-23T23:26:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-04-23T13:26:00Z"
+      },
+      {
+        "status": "CANCELLED",
+        "message": "Order cancelled by the customer; payment refunded.",
+        "timestamp": "2026-04-23T23:26:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10019",
+    "user_id": "U-01",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-102118",
+        "product_id": "P-1292",
+        "name": "Lorrimere Plain Hiking Boots",
+        "size": "11",
+        "color": "brown",
+        "quantity": 1,
+        "unit_price_cents": 9699,
+        "line_total_cents": 9699
+      }
+    ],
+    "subtotal_cents": 9699,
+    "shipping_cents": 0,
+    "total_cents": 9699,
+    "created_at": "2026-04-29T00:53:00Z",
+    "updated_at": "2026-05-01T06:53:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-04-29T00:53:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-04-29T06:53:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-04-29T22:53:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2026-04-30T18:53:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2026-05-01T06:53:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10020",
+    "user_id": "U-01",
+    "status": "SHIPPED",
+    "lines": [
+      {
+        "sku_id": "SKU-100651",
+        "product_id": "P-1093",
+        "name": "Strathvale Everyday Heavyweight Hoodie",
+        "size": "M",
+        "color": "brown",
+        "quantity": 2,
+        "unit_price_cents": 8300,
+        "line_total_cents": 16600
+      }
+    ],
+    "subtotal_cents": 16600,
+    "shipping_cents": 0,
+    "total_cents": 16600,
+    "created_at": "2026-04-29T05:53:00Z",
+    "updated_at": "2026-04-30T05:53:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-04-29T05:53:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-04-29T17:53:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-04-30T05:53:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10021",
+    "user_id": "U-04",
+    "status": "CONFIRMED",
+    "lines": [
+      {
+        "sku_id": "SKU-102446",
+        "product_id": "P-1336",
+        "name": "Fenrowe Lightweight Dive-Style Watch",
+        "size": "ONE",
+        "color": "green",
+        "quantity": 1,
+        "unit_price_cents": 7199,
+        "line_total_cents": 7199
+      },
+      {
+        "sku_id": "SKU-101614",
+        "product_id": "P-1216",
+        "name": "Ivorside Daily Heavyweight Hoodie",
+        "size": "S",
+        "color": "burgundy",
+        "quantity": 1,
+        "unit_price_cents": 4300,
+        "line_total_cents": 4300
+      }
+    ],
+    "subtotal_cents": 11499,
+    "shipping_cents": 0,
+    "total_cents": 11499,
+    "created_at": "2026-05-08T13:49:00Z",
+    "updated_at": "2026-05-08T13:49:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-05-08T13:49:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10022",
+    "user_id": "U-06",
+    "status": "CONFIRMED",
+    "lines": [
+      {
+        "sku_id": "SKU-101741",
+        "product_id": "P-1229",
+        "name": "Vantesk Vintage Derby Shoes",
+        "size": "11",
+        "color": "orange",
+        "quantity": 1,
+        "unit_price_cents": 11300,
+        "line_total_cents": 11300
+      },
+      {
+        "sku_id": "SKU-101060",
+        "product_id": "P-1144",
+        "name": "Tessaly Alpine Selvedge Jeans",
+        "size": "30",
+        "color": "orange",
+        "quantity": 2,
+        "unit_price_cents": 6899,
+        "line_total_cents": 13798
+      }
+    ],
+    "subtotal_cents": 25098,
+    "shipping_cents": 0,
+    "total_cents": 25098,
+    "created_at": "2026-05-18T14:09:00Z",
+    "updated_at": "2026-05-18T14:09:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-05-18T14:09:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10023",
+    "user_id": "U-02",
+    "status": "SHIPPED",
+    "lines": [
+      {
+        "sku_id": "SKU-101799",
+        "product_id": "P-1236",
+        "name": "Ivorside Nomad Relaxed Jeans",
+        "size": "32",
+        "color": "grey",
+        "quantity": 2,
+        "unit_price_cents": 7700,
+        "line_total_cents": 15400
+      }
+    ],
+    "subtotal_cents": 15400,
+    "shipping_cents": 0,
+    "total_cents": 15400,
+    "created_at": "2026-07-24T05:28:00Z",
+    "updated_at": "2026-07-26T01:28:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-07-24T05:28:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-07-25T01:28:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-07-26T01:28:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10024",
+    "user_id": "U-02",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-101642",
+        "product_id": "P-1219",
+        "name": "Wrenfield Quiet Graphic Tee",
+        "size": "S",
+        "color": "white",
+        "quantity": 1,
+        "unit_price_cents": 3100,
+        "line_total_cents": 3100
+      },
+      {
+        "sku_id": "SKU-102430",
+        "product_id": "P-1332",
+        "name": "Gallowmere Vintage Henley T-Shirt",
+        "size": "XL",
+        "color": "blue",
+        "quantity": 1,
+        "unit_price_cents": 3400,
+        "line_total_cents": 3400
+      },
+      {
+        "sku_id": "SKU-100117",
+        "product_id": "P-1016",
+        "name": "Mirelle Ash Vintage Longline T-Shirt",
+        "size": "XS",
+        "color": "brown",
+        "quantity": 1,
+        "unit_price_cents": 2500,
+        "line_total_cents": 2500
+      }
+    ],
+    "subtotal_cents": 9000,
+    "shipping_cents": 0,
+    "total_cents": 9000,
+    "created_at": "2026-07-26T14:43:00Z",
+    "updated_at": "2026-07-29T12:43:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-07-26T14:43:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-07-27T14:43:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-07-28T08:43:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2026-07-28T16:43:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2026-07-29T12:43:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10025",
+    "user_id": "U-02",
+    "status": "SHIPPED",
+    "lines": [
+      {
+        "sku_id": "SKU-101940",
+        "product_id": "P-1260",
+        "name": "Orlinde Quiet Wireless Earbuds",
+        "size": "ONE",
+        "color": "pink",
+        "quantity": 1,
+        "unit_price_cents": 6299,
+        "line_total_cents": 6299
+      },
+      {
+        "sku_id": "SKU-100998",
+        "product_id": "P-1135",
+        "name": "Nordhaven Sleek Softshell Jacket",
+        "size": "M",
+        "color": "grey",
+        "quantity": 1,
+        "unit_price_cents": 21499,
+        "line_total_cents": 21499
+      }
+    ],
+    "subtotal_cents": 27798,
+    "shipping_cents": 0,
+    "total_cents": 27798,
+    "created_at": "2026-07-29T14:13:00Z",
+    "updated_at": "2026-07-30T19:13:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-07-29T14:13:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-07-30T02:13:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-07-30T19:13:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10026",
+    "user_id": "U-05",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-100730",
+        "product_id": "P-1102",
+        "name": "Strathvale Signature Pullover Hoodie",
+        "size": "M",
+        "color": "red",
+        "quantity": 1,
+        "unit_price_cents": 8200,
+        "line_total_cents": 8200
+      },
+      {
+        "sku_id": "SKU-100964",
+        "product_id": "P-1130",
+        "name": "Quinnell Compact Pullover Hoodie",
+        "size": "S",
+        "color": "white",
+        "quantity": 1,
+        "unit_price_cents": 5599,
+        "line_total_cents": 5599
+      },
+      {
+        "sku_id": "SKU-101512",
+        "product_id": "P-1203",
+        "name": "Ivorside Easy Sport Sunglasses",
+        "size": "ONE",
+        "color": "navy",
+        "quantity": 1,
+        "unit_price_cents": 13000,
+        "line_total_cents": 13000
+      }
+    ],
+    "subtotal_cents": 26799,
+    "shipping_cents": 0,
+    "total_cents": 26799,
+    "created_at": "2026-08-05T14:25:00Z",
+    "updated_at": "2026-08-08T07:25:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-08-05T14:25:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-08-06T11:25:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-08-07T13:25:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2026-08-08T03:25:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2026-08-08T07:25:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10027",
+    "user_id": "U-05",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-101391",
+        "product_id": "P-1187",
+        "name": "Yarrowby Soft Puffer Jacket",
+        "size": "XL",
+        "color": "pink",
+        "quantity": 2,
+        "unit_price_cents": 21899,
+        "line_total_cents": 43798
+      }
+    ],
+    "subtotal_cents": 43798,
+    "shipping_cents": 0,
+    "total_cents": 43798,
+    "created_at": "2026-09-06T06:15:00Z",
+    "updated_at": "2026-09-07T21:15:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-09-06T06:15:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-09-06T13:15:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-09-07T04:15:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2026-09-07T10:15:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2026-09-07T21:15:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10028",
+    "user_id": "U-05",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "sku_id": "SKU-101419",
+        "product_id": "P-1190",
+        "name": "Brevlan Quiet Hiking Boots",
+        "size": "9",
+        "color": "beige",
+        "quantity": 1,
+        "unit_price_cents": 14799,
+        "line_total_cents": 14799
+      }
+    ],
+    "subtotal_cents": 14799,
+    "shipping_cents": 0,
+    "total_cents": 14799,
+    "created_at": "2026-09-07T14:08:00Z",
+    "updated_at": "2026-09-11T15:08:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-09-07T14:08:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-09-08T19:08:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-09-09T09:08:00Z"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "message": "Parcel is out for delivery.",
+        "timestamp": "2026-09-10T12:08:00Z"
+      },
+      {
+        "status": "DELIVERED",
+        "message": "Parcel delivered.",
+        "timestamp": "2026-09-11T15:08:00Z"
+      }
+    ]
+  },
+  {
+    "order_id": "O-10029",
+    "user_id": "U-01",
+    "status": "SHIPPED",
+    "lines": [
+      {
+        "sku_id": "SKU-102697",
+        "product_id": "P-1368",
+        "name": "Jastrel Essential Silk Scarf",
+        "size": "ONE",
+        "color": "pink",
+        "quantity": 1,
+        "unit_price_cents": 2499,
+        "line_total_cents": 2499
+      },
+      {
+        "sku_id": "SKU-102411",
+        "product_id": "P-1331",
+        "name": "Rhydwen Minimal Waxed Field Jacket",
+        "size": "XL",
+        "color": "pink",
+        "quantity": 1,
+        "unit_price_cents": 15599,
+        "line_total_cents": 15599
+      }
+    ],
+    "subtotal_cents": 18098,
+    "shipping_cents": 0,
+    "total_cents": 18098,
+    "created_at": "2026-10-10T15:54:00Z",
+    "updated_at": "2026-10-11T18:54:00Z",
+    "events": [
+      {
+        "status": "CONFIRMED",
+        "message": "Order confirmed and payment received.",
+        "timestamp": "2026-10-10T15:54:00Z"
+      },
+      {
+        "status": "PACKED",
+        "message": "Items packed at the warehouse.",
+        "timestamp": "2026-10-10T20:54:00Z"
+      },
+      {
+        "status": "SHIPPED",
+        "message": "Parcel handed to the carrier.",
+        "timestamp": "2026-10-11T18:54:00Z"
+      }
+    ]
+  }
+]

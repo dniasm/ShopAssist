@@ -1,105 +1,51 @@
-"""FastAPI app: REST in, WebSocket event stream out, gRPC to the services. No database access here."""
-import asyncio
+"""FastAPI gateway: REST under /api, gRPC to the services, the built web app at /. No database access here."""
+import logging
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, field_validator
 
-from orchestrator.dispatch import run_query
-from orchestrator.grpc_clients import Clients
+from orchestrator import errors, routes_auth, routes_health, routes_products
+from orchestrator.clients import Clients
 from orchestrator.llm import LLMClient
-from orchestrator.settings import Settings
-from orchestrator.store import QueryStore, make_event, now_iso
+from orchestrator.schemas import ErrorResponse
+from orchestrator.session import SessionTokens
+from orchestrator.settings import SECRET_WARNING, Settings
+from orchestrator.spa import install_spa
 
-FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
+log = logging.getLogger(__name__)
+WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
+DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]  # the Vite dev server
 
-
-class QueryIn(BaseModel):
-    text: str
-
-    @field_validator("text")
-    @classmethod
-    def not_blank(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("text must not be empty")
-        return v.strip()
+# Documented once so /openapi.json (and the generated TypeScript types) show the real error shape.
+ERROR_RESPONSES = {code: {"model": ErrorResponse, "description": "Error envelope"} for code in (401, 404, 422, 503)}
 
 
-def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, llm: LLMClient | None = None, web_dist: Path | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     if llm is None and settings.llm_api_keys:
         llm = LLMClient(settings)
-    store = QueryStore()
-    tasks: set[asyncio.Task] = set()  # strong refs so background queries are not garbage collected
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.clients = Clients(settings.product_addr, settings.inventory_addr, settings.order_addr)
+        app.state.clients = Clients(settings)
         yield
-        for t in list(tasks):
-            t.cancel()
         await app.state.clients.close()
 
-    app = FastAPI(title="ShopAssist orchestrator", lifespan=lifespan)
-    # client/index.html is opened from file:// (Origin: null), so allow any origin. No cookies/credentials are used.
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
-
-    @app.get("/health")
-    async def health():
-        return {"status": "ok"}
-
-    @app.get("/llm/status")
-    async def llm_status():
-        """Per-key pool state. Keys are shown only as key#N plus their last 4 characters."""
-        keys = await llm.pool.status() if llm is not None else []
-        limits = {"rpm": settings.llm_limit_rpm, "rpd": settings.llm_limit_rpd,
-                  "tpm": settings.llm_limit_tpm, "tpd": settings.llm_limit_tpd}  # the caps each key's "left" counts down from
-        return {"enabled": llm is not None and len(keys) > 0, "model": settings.llm_model, "limits": limits, "keys": keys}
-
-    @app.get("/services/health")
-    async def services_health():
-        """Is each gRPC service answering? One short-deadline gRPC call per service; always 200, the body says who is down."""
-        services = await app.state.clients.health()
-        return {"all_up": all(s["status"] == "up" for s in services), "checked_at": now_iso(), "services": services}
-
-    @app.post("/query", status_code=202)
-    async def post_query(body: QueryIn):
-        rec = store.create(body.text)
-        await rec.emit("accepted", {"text": rec.text})
-        task = asyncio.create_task(run_query(rec, app.state.clients, llm))
-        tasks.add(task)
-        task.add_done_callback(tasks.discard)
-        return {"query_id": rec.query_id, "ws_url": f"/ws/{rec.query_id}"}
-
-    @app.get("/query/{query_id}")
-    async def get_query(query_id: str):
-        rec = store.get(query_id)
-        if rec is None:
-            raise HTTPException(404, "unknown query id")
-        return {
-            "query_id": rec.query_id, "status": rec.status, "intent": rec.intent,
-            "entities": rec.entities, "answer": rec.answer, "data": rec.data,
-        }
-
-    @app.websocket("/ws/{query_id}")
-    async def ws_query(websocket: WebSocket, query_id: str):
-        await websocket.accept()
-        rec = store.get(query_id)
-        try:
-            if rec is None:
-                await websocket.send_json(make_event("error", query_id, {"message": "Unknown query id"}))
-            else:
-                async for event in rec.stream():
-                    await websocket.send_json(event)
-            await websocket.close()
-        except WebSocketDisconnect:
-            pass
-
-    # Mounted last so every API route above keeps priority; serves the single-page frontend at /.
-    if FRONTEND_DIR.is_dir():
-        app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
-
+    app = FastAPI(title="ShopAssist API", lifespan=lifespan)
+    app.state.settings = settings
+    app.state.llm = llm
+    if not settings.session_secret:
+        log.warning(SECRET_WARNING)
+    app.state.tokens = SessionTokens(settings.session_secret or secrets.token_urlsafe(32), settings.session_max_age_seconds)
+    app.add_middleware(
+        CORSMiddleware, allow_origins=DEV_ORIGINS, allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+    errors.install(app)
+    for router in (routes_health.router, routes_auth.router, routes_products.router):
+        app.include_router(router, prefix="/api", responses=ERROR_RESPONSES)
+    install_spa(app, web_dist if web_dist is not None else WEB_DIST)
     return app

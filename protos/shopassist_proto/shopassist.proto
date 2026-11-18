@@ -1,110 +1,335 @@
-// ShopAssist gRPC contracts. Owned by the planner (Opus). Do not change field
-// numbers or names without asking; both the orchestrator and services depend on them.
+// ShopAssist v2 gRPC contracts. Owned by the planner (Opus). Do not change field
+// numbers or names without asking; the orchestrator and every service depend on them.
+//
+// Conventions (see docs/PLAN.md "Phase 5"):
+// - Money is always integer cents (int64 *_cents). Never floats for money.
+// - Timestamps are ISO-8601 UTC strings.
+// - User-scoped RPCs read the caller from gRPC metadata "x-user-id" (set by the
+//   orchestrator after it verifies the session token). Missing -> UNAUTHENTICATED.
+//   Accessing another user's order -> NOT_FOUND (do not reveal it exists).
+// - Every write takes an idempotency key. Same key again -> same result, no second effect.
+// - Business outcomes (out of stock, card declined) are in the response body;
+//   gRPC error statuses are for bad input, missing things and outages.
+// - Every server also serves the standard grpc.health.v1 Health service.
 syntax = "proto3";
 
-package shopassist.v1;
+package shopassist.v2;
 
-// ---------- Product service (owns products.db) ----------
+// ======================= Catalog service (owns the "catalog" database) =======================
+
+message Sku {
+  string sku_id = 1;       // e.g. "SKU-100231"
+  string product_id = 2;
+  string size = 3;         // "XS".."XXL", "6".."12" for shoes, or "ONE"
+  string color = 4;        // lower-case colour name, e.g. "navy"
+}
 
 message Product {
   string product_id = 1;   // e.g. "P-1001"
   string name = 2;
-  string category = 3;     // e.g. "headphones", "hoodies"
-  string color = 4;
-  double price = 5;        // USD
-  string description = 6;
+  string category = 3;     // lower-case slug, e.g. "headphones"
+  string brand = 4;
+  string description = 5;
+  int64 price_cents = 6;
+  double rating = 7;       // 0..5, one decimal
+  int32 rating_count = 8;
+  repeated string colors = 9;
+  repeated string sizes = 10;   // in display order
+  repeated Sku skus = 11;
+  string created_at = 12;
 }
 
-message SearchProductsRequest {
-  string text = 1;         // free-text keywords; empty = no keyword filter
-  string category = 2;     // optional exact category; empty = any
-  double max_price = 3;    // 0 = no limit
-  int32 limit = 4;         // 0 = default (10)
+enum SortBy {
+  SORT_RELEVANCE = 0;      // falls back to rating when there is no query
+  SORT_PRICE_ASC = 1;
+  SORT_PRICE_DESC = 2;
+  SORT_RATING = 3;
+  SORT_NEWEST = 4;
 }
 
-message SearchProductsResponse {
+message ListProductsRequest {
+  string query = 1;                 // full-text; empty = no text filter
+  repeated string categories = 2;   // OR within a field, AND across fields
+  repeated string brands = 3;
+  repeated string colors = 4;
+  repeated string sizes = 5;
+  int64 min_price_cents = 6;        // 0 = no minimum
+  int64 max_price_cents = 7;        // 0 = no maximum
+  SortBy sort = 8;
+  int32 page_size = 9;              // 0 = 24, max 100
+  string page_token = 10;           // opaque; empty = first page
+}
+
+message FacetValue {
+  string value = 1;
+  int32 count = 2;         // products matching all OTHER active filters plus this value
+}
+
+message Facet {
+  string field = 1;        // "category" | "brand" | "color" | "size"
+  repeated FacetValue values = 2;
+}
+
+message ListProductsResponse {
   repeated Product products = 1;
+  int32 total = 2;
+  string next_page_token = 3;       // empty = last page
+  repeated Facet facets = 4;
+  int64 price_min_cents = 5;        // range of the filtered set, for the price slider
+  int64 price_max_cents = 6;
+  bool fuzzy = 7;                   // true = no full-text match, results come from the typo-tolerant fallback
 }
 
-message GetProductRequest {
-  string product_id = 1;
+message GetProductRequest { string product_id = 1; }
+message GetProductsRequest { repeated string product_ids = 1; }   // batch; unknown ids are skipped
+message GetProductsResponse { repeated Product products = 1; }
+message GetSkusRequest { repeated string sku_ids = 1; }           // batch; unknown ids are skipped
+message GetSkusResponse { repeated SkuWithProduct items = 1; }
+message SkuWithProduct {
+  Sku sku = 1;
+  string name = 2;
+  int64 price_cents = 3;
 }
 
-service ProductService {
-  rpc SearchProducts(SearchProductsRequest) returns (SearchProductsResponse);
-  // NOT_FOUND status if the product does not exist.
-  rpc GetProduct(GetProductRequest) returns (Product);
+service CatalogService {
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  rpc GetProduct(GetProductRequest) returns (Product);              // NOT_FOUND if unknown
+  rpc GetProducts(GetProductsRequest) returns (GetProductsResponse);
+  rpc GetSkus(GetSkusRequest) returns (GetSkusResponse);
 }
 
-// ---------- Inventory service (owns inventory.db) ----------
-
-message StockRequest {
-  string product_id = 1;
-  string size = 2;         // optional; empty = all sizes
-}
+// ======================= Inventory service (owns the "inventory" database) =======================
 
 message StockLevel {
-  string product_id = 1;
-  string size = 2;         // "S","M","L","XL" or "ONE" for unsized items
-  int32 quantity = 3;
+  string sku_id = 1;
+  string product_id = 2;
+  int32 on_hand = 3;
+  int32 reserved = 4;      // held by live reservations
+  int32 available = 5;     // on_hand - reserved, never negative
 }
 
-message StockResponse {
-  repeated StockLevel levels = 1;  // empty if product unknown to inventory
+message GetStockRequest {
+  repeated string sku_ids = 1;      // either or both; result is the union
+  repeated string product_ids = 2;
 }
+message GetStockResponse { repeated StockLevel levels = 1; }
+
+message StockLine {
+  string sku_id = 1;
+  int32 quantity = 2;      // > 0
+}
+
+message Shortage {
+  string sku_id = 1;
+  int32 requested = 2;
+  int32 available = 3;
+}
+
+message ReserveRequest {
+  string reservation_id = 1;        // idempotency key; the Order service uses the order_id
+  repeated StockLine lines = 2;
+  int32 ttl_seconds = 3;            // 0 = 600
+}
+message ReserveResponse {
+  bool ok = 1;                      // false = nothing was reserved (all-or-nothing)
+  repeated Shortage shortages = 2;  // set when ok = false
+  string expires_at = 3;
+}
+
+message CommitRequest { string reservation_id = 1; }   // HELD -> COMMITTED: stock leaves on_hand. Idempotent.
+message CommitResponse {}                              // FAILED_PRECONDITION if RELEASED or EXPIRED
+message ReleaseRequest { string reservation_id = 1; string reason = 2; }  // HELD -> RELEASED. Idempotent; no-op if already released/expired.
+message ReleaseResponse {}
+message RestockRequest { string idempotency_key = 1; repeated StockLine lines = 2; }  // returns stock after a cancellation
+message RestockResponse {}
 
 service InventoryService {
-  rpc GetStock(StockRequest) returns (StockResponse);
+  rpc GetStock(GetStockRequest) returns (GetStockResponse);
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+  rpc Commit(CommitRequest) returns (CommitResponse);
+  rpc Release(ReleaseRequest) returns (ReleaseResponse);
+  rpc Restock(RestockRequest) returns (RestockResponse);
 }
 
-// ---------- Order service (owns orders.db) ----------
+// ======================= Customer service (owns the "customer" database) =======================
+
+message User {
+  string user_id = 1;      // e.g. "U-01"
+  string name = 2;
+  string email = 3;
+  string city = 4;
+}
+
+message ListUsersRequest {}
+message ListUsersResponse { repeated User users = 1; }
+message GetUserRequest { string user_id = 1; }        // NOT_FOUND if unknown (used to sign in)
+
+message CartLine {
+  string sku_id = 1;
+  string product_id = 2;
+  int32 quantity = 3;
+  string added_at = 4;
+}
+
+message Cart {
+  string user_id = 1;
+  repeated CartLine lines = 2;
+  int64 version = 3;       // bumps on every change
+  string updated_at = 4;
+}
+
+message GetCartRequest {}                                  // user from metadata
+message SetCartLineRequest {                               // user from metadata
+  string sku_id = 1;
+  string product_id = 2;
+  int32 quantity = 3;      // 0 removes the line; max 10 per line
+}
+message ClearCartRequest { int64 if_version = 1; }         // 0 = unconditional; mismatch -> ABORTED
+
+service CustomerService {
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc GetUser(GetUserRequest) returns (User);
+  rpc GetCart(GetCartRequest) returns (Cart);
+  rpc SetCartLine(SetCartLineRequest) returns (Cart);
+  rpc ClearCart(ClearCartRequest) returns (Cart);
+}
+
+// ======================= Payment service (owns the "payment" database) =======================
+
+enum PaymentStatus {
+  PAYMENT_STATUS_UNSPECIFIED = 0;
+  PAYMENT_SUCCEEDED = 1;
+  PAYMENT_DECLINED = 2;
+  PAYMENT_REFUNDED = 3;
+}
+
+message ChargeRequest {
+  string idempotency_key = 1;       // the Order service uses "charge:<order_id>"
+  string order_id = 2;
+  int64 amount_cents = 3;
+  string payment_method = 4;        // "card_ok" | "card_declined" | "card_flaky" (fails ~50%)
+}
+message ChargeResponse {
+  string payment_id = 1;
+  PaymentStatus status = 2;
+  string decline_reason = 3;
+}
+
+message RefundRequest {
+  string idempotency_key = 1;       // "refund:<order_id>"
+  string payment_id = 2;
+  int64 amount_cents = 3;
+}
+message RefundResponse {
+  string refund_id = 1;
+  PaymentStatus status = 2;         // PAYMENT_REFUNDED
+}
+
+service PaymentService {
+  rpc Charge(ChargeRequest) returns (ChargeResponse);
+  rpc Refund(RefundRequest) returns (RefundResponse);  // FAILED_PRECONDITION if the payment did not succeed
+}
+
+// ======================= Order service (owns the "orders" database) =======================
+// Coordinates checkout as a saga: it calls Catalog (prices), Inventory and Payment over gRPC.
 
 enum OrderStatus {
   ORDER_STATUS_UNSPECIFIED = 0;
-  PLACED = 1;
-  PACKED = 2;
-  SHIPPED = 3;
-  OUT_FOR_DELIVERY = 4;
-  DELIVERED = 5;
-  CANCELLED = 6;
+  PENDING = 1;             // checkout saga running
+  CONFIRMED = 2;           // paid, stock committed
+  PACKED = 3;
+  SHIPPED = 4;
+  OUT_FOR_DELIVERY = 5;
+  DELIVERED = 6;
+  CANCELLED = 7;           // by the user after confirmation (refunded, restocked)
+  FAILED = 8;              // checkout did not complete (compensated)
 }
 
-message OrderItem {
-  string product_id = 1;
-  string size = 2;
-  int32 quantity = 3;
-  double unit_price = 4;
+message OrderLine {
+  string sku_id = 1;
+  string product_id = 2;
+  string name = 3;
+  string size = 4;
+  string color = 5;
+  int32 quantity = 6;
+  int64 unit_price_cents = 7;      // snapshot from Catalog at checkout time
+}
+
+message OrderEvent {
+  int64 event_id = 1;      // outbox sequence; strictly increasing across the service
+  string order_id = 2;
+  OrderStatus status = 3;
+  string message = 4;      // human-readable, e.g. "Left the warehouse in Dallas"
+  string timestamp = 5;
 }
 
 message Order {
-  string order_id = 1;     // e.g. "1042"
-  string customer_name = 2;
+  string order_id = 1;     // e.g. "O-20412"
+  string user_id = 2;
   OrderStatus status = 3;
-  repeated OrderItem items = 4;
-  double total = 5;
-  string updated_at = 6;   // ISO-8601 UTC
+  repeated OrderLine lines = 4;
+  int64 subtotal_cents = 5;
+  int64 shipping_cents = 6;        // 0 when subtotal >= 5000, else 499
+  int64 total_cents = 7;
+  string payment_id = 8;
+  string failure_reason = 9;       // set when FAILED
+  string created_at = 10;
+  string updated_at = 11;
+  repeated OrderEvent history = 12;
 }
 
-message GetOrderRequest {
-  string order_id = 1;
+enum CheckoutStep {
+  CHECKOUT_STEP_UNSPECIFIED = 0;
+  VALIDATING = 1;          // prices from Catalog, lines non-empty
+  RESERVING = 2;
+  CHARGING = 3;
+  CONFIRMING = 4;          // commit stock, mark CONFIRMED
+  COMPENSATING = 5;        // undoing earlier steps after a failure
+  FINISHED = 6;
 }
 
-message TrackOrderRequest {
-  string order_id = 1;
+enum StepState {
+  STEP_STATE_UNSPECIFIED = 0;
+  STEP_STARTED = 1;
+  STEP_SUCCEEDED = 2;
+  STEP_FAILED = 3;
 }
 
-message OrderStatusUpdate {
+message CheckoutLine {
+  string sku_id = 1;
+  int32 quantity = 2;
+}
+
+message CheckoutRequest {           // user from metadata
+  string idempotency_key = 1;       // from the client; same key -> same order
+  repeated CheckoutLine lines = 2;
+  string payment_method = 3;
+}
+
+message CheckoutEvent {
   string order_id = 1;
-  OrderStatus status = 2;
-  string message = 3;      // human-readable, e.g. "Left the warehouse in Dallas"
-  string timestamp = 4;    // ISO-8601 UTC
+  CheckoutStep step = 2;
+  StepState state = 3;
+  string message = 4;
+  repeated Shortage shortages = 5;  // on RESERVING FAILED
+  Order order = 6;                  // set on the last event (FINISHED)
+  string timestamp = 7;
+}
+
+message ListOrdersRequest { int32 page_size = 1; string page_token = 2; }   // user from metadata, newest first
+message ListOrdersResponse { repeated Order orders = 1; string next_page_token = 2; }
+message GetOrderRequest { string order_id = 1; }
+message CancelOrderRequest { string order_id = 1; string idempotency_key = 2; }  // CONFIRMED or PACKED only, else FAILED_PRECONDITION
+
+message WatchOrdersRequest {
+  string order_id = 1;              // empty = all of the caller's orders
+  int64 after_event_id = 2;         // replay events after this id, then stream live ones
 }
 
 service OrderService {
-  // NOT_FOUND status if the order does not exist.
+  rpc Checkout(CheckoutRequest) returns (stream CheckoutEvent);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
   rpc GetOrder(GetOrderRequest) returns (Order);
-  // Server-streaming. Sends the current status first, then each later change,
-  // and ends the stream once the order reaches DELIVERED or CANCELLED.
-  // NOT_FOUND status if the order does not exist.
-  rpc TrackOrder(TrackOrderRequest) returns (stream OrderStatusUpdate);
+  rpc CancelOrder(CancelOrderRequest) returns (Order);
+  rpc WatchOrders(WatchOrdersRequest) returns (stream OrderEvent);  // never ends on its own
 }

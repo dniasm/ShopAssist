@@ -1,6 +1,8 @@
 """Orchestrator configuration, read from environment variables."""
+import logging
 import os
 import re
+import secrets
 from dataclasses import dataclass, field
 
 
@@ -15,12 +17,20 @@ def parse_keys(*raw: str | None) -> tuple[str, ...]:
     return tuple(keys)
 
 
+log = logging.getLogger(__name__)
+SECRET_WARNING = "SESSION_SECRET is not set: using a random one, so session tokens will not survive a restart"
+
+
 @dataclass(frozen=True)
 class Settings:
-    product_addr: str = "localhost:50051"
+    catalog_addr: str = "localhost:50051"
     inventory_addr: str = "localhost:50052"
-    order_addr: str = "localhost:50053"
-    port: int = 8000
+    customer_addr: str = "localhost:50054"
+    port: int = 8011
+    session_secret: str = field(default="", repr=False)  # signs session tokens; secret, so out of repr/logs
+    session_max_age_seconds: int = 12 * 3600
+    unary_timeout: float = 2.0  # deadline for every unary gRPC call
+    health_timeout: float = 1.5  # a health probe must answer quickly or count as down
     llm_base_url: str = "https://api.groq.com/openai/v1"
     llm_api_keys: tuple[str, ...] = field(default=(), repr=False)  # secrets: keep out of repr/logs
     llm_model: str = "openai/gpt-oss-120b"
@@ -36,11 +46,14 @@ class Settings:
     def from_env(cls) -> "Settings":
         d = cls()
         env = os.environ.get
+        if not env("SESSION_SECRET"):
+            log.warning(SECRET_WARNING)
         return cls(
-            product_addr=env("PRODUCT_ADDR") or d.product_addr,
+            catalog_addr=env("CATALOG_ADDR") or d.catalog_addr,
             inventory_addr=env("INVENTORY_ADDR") or d.inventory_addr,
-            order_addr=env("ORDER_ADDR") or d.order_addr,
+            customer_addr=env("CUSTOMER_ADDR") or d.customer_addr,
             port=int(env("ORCHESTRATOR_PORT") or d.port),
+            session_secret=env("SESSION_SECRET") or secrets.token_urlsafe(32),  # random: tokens die with the process
             llm_base_url=env("LLM_BASE_URL") or d.llm_base_url,
             # LLM_API_KEYS is the list; the legacy single LLM_API_KEY is merged in.
             llm_api_keys=parse_keys(env("LLM_API_KEYS"), env("LLM_API_KEY")),
