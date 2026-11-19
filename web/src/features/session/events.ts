@@ -127,7 +127,7 @@ function parseChat(seq: number, ts: string, key: string, d: Rec): ChatWsMessage 
     case "chat/tool_result":
       if (typeof d.tool !== "string") return null;
       return { seq, ts, channel: "chat", type: "tool_result", data: { turn_id, tool: d.tool, summary: str(d.summary) } };
-    case "chat/message": return { seq, ts, channel: "chat", type: "message", data: { turn_id, text: str(d.text), cards: parseCards(d.cards) } };
+    case "chat/message": return { seq, ts, channel: "chat", type: "message", data: { turn_id, text: str(d.text), cards: parseCards(d.cards), closing: str(d.closing) } };
     case "chat/proposal":
       if (typeof d.proposal_id !== "string") return null;
       if (d.action !== "checkout" && d.action !== "cancel_order") return null;

@@ -348,4 +348,5 @@ def plan_add(text: str, words: list[str], product_id: str, history: list[dict], 
 
 def compose(results: list[dict]) -> str:
     """The answer, from what the tools said (their summaries are already written for people)."""
-    return " ".join(r["summary"] for r in results[-3:] if r.get("summary")) or "Done."
+    summaries = dict.fromkeys(r["summary"] for r in results[-3:] if r.get("summary"))  # a repeated call is said once
+    return " ".join(summaries) or "Done."

@@ -52,7 +52,9 @@ def test_one_turn_streams_in_order_and_ends_with_cards_and_a_source(make_shop):
     assert {m["data"]["turn_id"] for m in msgs} == {turn_id}
     assert msgs[1]["data"] == {"turn_id": turn_id, "tool": "search_products", "args": {"category": "hoodies"}}
     message = msgs[3]["data"]
-    assert message["cards"][0]["kind"] == "products" and message["cards"][0]["data"]["total"] == 12 and "(P-" in message["text"]
+    assert message["cards"][0]["kind"] == "products" and message["cards"][0]["data"]["total"] == 12
+    # the cards name and link the products, so the words only introduce them and ask a question after them
+    assert message["text"] == "I found 12 products for you:" and message["closing"] == "Do any of them pique your interest?"
     assert msgs[4]["data"]["source"] == "rules"
     assert [m["seq"] for m in msgs] == sorted(m["seq"] for m in msgs)
 
@@ -218,18 +220,47 @@ def test_with_a_model_a_tool_runs_then_the_model_writes_the_answer(make_shop):
     msgs = turn(ws)
     assert types(msgs) == ["turn_started", "tool_call", "tool_result", "message", "turn_done"]
     assert msgs[1]["data"]["args"] == {"category": "jeans", "max_price_cents": 10000}
-    assert next(m for m in msgs if m["type"] == "message")["data"]["text"] == "Here are some jeans under $100 (P-1017)."
+    assert next(m for m in msgs if m["type"] == "message")["data"]["text"] == "Here are some jeans under $100 (P-1017)."  # no matches: the model's words stay
     assert msgs[-1]["data"]["source"] == "llm" and len(llm.calls) == 2
     assert "Tool results so far this turn" in llm.calls[1]["user"]  # the second call saw the first tool's result
 
 
 def test_a_turn_never_runs_more_than_four_steps(make_shop):
+    categories = ["hoodies", "jeans", "shoes", "watches", "jackets", "backpacks"]
+    shop, llm = scripted_shop(make_shop, *[model_says("search_products", category=c) for c in categories])
+    headers, ws = open_chat(shop)
+    say(shop, headers, "show me everything")
+    msgs = turn(ws)
+    assert types(msgs).count("tool_call") == 4 and len(llm.calls) == 4
+    assert types(msgs)[-2:] == ["message", "turn_done"]  # still answered, from what the tools said
+
+
+def test_a_repeated_call_is_not_run_again_and_its_answer_is_said_once(make_shop):
     shop, llm = scripted_shop(make_shop, *[model_says("get_cart")] * 6)
     headers, ws = open_chat(shop)
     say(shop, headers, "what is in my cart")
     msgs = turn(ws)
-    assert types(msgs).count("tool_call") == 4 and len(llm.calls) == 4
-    assert types(msgs)[-2:] == ["message", "turn_done"]  # still answered, from what the tools said
+    assert types(msgs).count("tool_call") == 1 and len(llm.calls) == 2  # the second plan repeated the call: answer instead
+    summary = next(m for m in msgs if m["type"] == "tool_result")["data"]["summary"]
+    assert next(m for m in msgs if m["type"] == "message")["data"]["text"] == summary
+
+
+def test_on_a_product_page_a_search_is_shown_as_similar_products_without_the_product_itself(make_shop):
+    product = next(p for p in PRODUCTS if p["category"] == "hoodies")
+    shop, llm = scripted_shop(make_shop, model_says("search_products", category="hoodies"),
+                              model_says("reply", "1. Something (P-1086) $28.99; 2. Something else (P-1169) $47.99."),
+                              model_says("search_products", category="shoes"), model_says("reply", "Some shoes."))
+    headers, ws = open_chat(shop)
+    say(shop, headers, "anything similar?", {"path": f"/p/{product['product_id']}", "product_id": product["product_id"]})
+    message = next(m for m in turn(ws) if m["type"] == "message")["data"]
+    card = message["cards"][-1]["data"]
+    assert product["product_id"] not in [p["product_id"] for p in card["products"]]
+    assert message["text"] == f"There are {card['total']} similar products to {product['name']}:"
+    assert message["closing"] == "Do any of them pique your interest?"
+
+    say(shop, headers, "show me shoes", {"path": f"/p/{product['product_id']}", "product_id": product["product_id"]})
+    message = next(m for m in turn(ws) if m["type"] == "message")["data"]
+    assert message["text"].startswith("I found ")  # another category: not "similar to" the hoodie on the page
 
 
 def test_a_model_failure_mid_turn_falls_back_to_the_rules_and_says_so(make_shop):

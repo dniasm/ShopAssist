@@ -1,7 +1,7 @@
 """One chat turn: plan -> run a tool -> plan again with its result ... at most 4 steps, then the answer.
 
 Events go to the person's session WebSocket on channel `chat`, in this order:
-turn_started, (tool_call, tool_result, [proposal])*, message, turn_done. A failure sends `error` and still ends with `turn_done`.
+turn_started, (tool_call, tool_result, [proposal])*, message, turn_done. The web shop shows only the message and proposals. A failure sends `error` and still ends with `turn_done`.
 The model never executes money or irreversible actions: propose_* only store a proposal that the person confirms (routes_chat).
 """
 import asyncio
@@ -57,6 +57,8 @@ class AgentLoop:
             if action["tool"] == "reply":
                 text, reply_args = action["reply"], action["args"]
                 break
+            if any(r["tool"] == action["tool"] and r["args"] == action["args"] for r in results):
+                break  # the planner asked for a call it already made: it learns nothing new, so answer now
             self.emit(owner, "tool_call", {"turn_id": turn_id, "tool": action["tool"], "args": action["args"]})
             outcome = await self.tools.run(action["tool"], action["args"], user_id, turn_id)
             results.append(outcome)
@@ -67,7 +69,10 @@ class AgentLoop:
         if not text:  # the step cap was reached without a reply: say what the tools found
             text = rules.compose(results)
         cards = self.cards(results, reply_args)
-        self.emit(owner, "message", {"turn_id": turn_id, "text": text, "cards": cards})
+        closing = ""
+        if cards and cards[-1]["kind"] == "products" and cards[-1]["data"]["products"]:
+            text, closing, cards[-1] = self.product_list(cards[-1], context.get("product"))
+        self.emit(owner, "message", {"turn_id": turn_id, "text": text, "cards": cards, "closing": closing})
         self.memory.add(memory_key, message, self.remembered(text, results), self.entities(results))
         return "llm" if "llm" in sources else "rules"
 
@@ -104,6 +109,22 @@ class AgentLoop:
         if reply_args.get("needs_sign_in") and "signin" not in latest:
             latest["signin"] = {"kind": "signin", "data": {"message": rules.SIGN_IN}}
         return list(latest.values())[-MAX_CARDS:]
+
+    @staticmethod
+    def product_list(card: dict, viewing: dict | None) -> tuple[str, str, dict]:
+        """A product list is answered by its cards (each one links to its page), not by repeating names and prices in words.
+        On a product page, a list of that product's category is "similar to" it, and the product itself is left out of it."""
+        products, total = card["data"]["products"], card["data"]["total"]
+        if viewing and any(p.get("category") != viewing.get("category") for p in products):
+            viewing = None  # e.g. "show me hoodies" while looking at a watch: not similar, just a search
+        if viewing and any(p["product_id"] == viewing["product_id"] for p in products):
+            products = [p for p in products if p["product_id"] != viewing["product_id"]]
+            total -= 1
+        if viewing:
+            intro = f"There are {total} similar products to {viewing['name']}:"
+        else:
+            intro = f"I found {total} product{'' if total == 1 else 's'} for you:"
+        return intro, "Do any of them pique your interest?", {**card, "data": {**card["data"], "products": products, "total": total}}
 
     @staticmethod
     def entities(results: list[dict]) -> dict:

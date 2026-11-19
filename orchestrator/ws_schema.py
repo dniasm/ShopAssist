@@ -138,6 +138,7 @@ class ChatToolResultData(ChatTurnData):
 class ChatMessageData(ChatTurnData):
     text: str
     cards: list[ChatCard]
+    closing: str = Field("", description="Shown after the cards, e.g. a follow-up question under a product list.")
 
 
 class ChatProposalData(ChatTurnData):

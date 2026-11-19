@@ -2,13 +2,12 @@ import { ChatCardView } from "./ChatCards";
 import { parseCards } from "./cards";
 import { useChat } from "./ChatContext";
 import { ProposalCard } from "./ProposalCard";
-import { ToolTrace } from "./ToolTrace";
 import { isWorking, type ChatSource, type ChatTurn } from "./transcript";
 import styles from "./TurnView.module.css";
 
 const SOURCE_WORDS: Record<ChatSource, string> = { llm: "AI", rules: "Rules" };
 
-/** One exchange: the shopper's words, then the assistant's route (tools), its message with cards, anything it proposes, and how it ended. */
+/** One exchange: the shopper's words, then its message with cards, anything it proposes, and how it ended. */
 export function TurnView({ turn }: { turn: ChatTurn }) {
   const { retry } = useChat();
   const working = isWorking(turn);
@@ -19,12 +18,11 @@ export function TurnView({ turn }: { turn: ChatTurn }) {
       {turn.request && <p className={styles.user}>{turn.request.text}</p>}
 
       <div className={styles.assistant}>
-        <ToolTrace tools={turn.tools} working={working && !answered} />
-
         {turn.messages.map((m, i) => (
           <div key={i} className={styles.message}>
             {m.text && <p className={styles.text}>{m.text}</p>}
             {parseCards(m.cards).map((c, j) => <ChatCardView key={j} card={c} />)}
+            {m.closing && <p className={styles.text}>{m.closing}</p>}
           </div>
         ))}
 

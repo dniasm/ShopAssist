@@ -47,6 +47,8 @@ export interface ChatProposal {
 export interface ChatMessage {
   text: string;
   cards: ChatCard[];
+  /** Said after the cards (a follow-up question under a product list); empty when there is none. */
+  closing: string;
 }
 
 export interface ChatTurn {
@@ -170,7 +172,7 @@ function applyChat(state: ChatState, m: ChatWsMessage): ChatState {
       });
     }
     case "message":
-      return updateTurn(s0, index, (t) => ({ ...t, messages: [...t.messages, { text: m.data.text, cards: m.data.cards }] }));
+      return updateTurn(s0, index, (t) => ({ ...t, messages: [...t.messages, { text: m.data.text, cards: m.data.cards, closing: m.data.closing }] }));
     case "proposal": {
       const { proposal_id: id, action, args, summary } = m.data;
       if (s0.turns.some((t) => t.proposals.some((p) => p.id === id))) return s0;

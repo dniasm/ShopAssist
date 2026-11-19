@@ -489,6 +489,12 @@ export interface components {
             text: string;
             /** Cards */
             cards: components["schemas"]["ChatCard"][];
+            /**
+             * Closing
+             * @description Shown after the cards, e.g. a follow-up question under a product list.
+             * @default
+             */
+            closing: string;
         };
         /**
          * ChatProposal

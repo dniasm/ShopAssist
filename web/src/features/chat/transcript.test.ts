@@ -7,7 +7,7 @@ const TS = "2026-01-01T00:00:00Z";
 const started = (seq: number, turn: string): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "turn_started", data: { turn_id: turn } });
 const call = (seq: number, turn: string, tool: string, args: Record<string, unknown> = {}): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "tool_call", data: { turn_id: turn, tool, args } });
 const result = (seq: number, turn: string, tool: string, summary = "ok"): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "tool_result", data: { turn_id: turn, tool, summary } });
-const say = (seq: number, turn: string, text: string, cards: ChatCard[] = []): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "message", data: { turn_id: turn, text, cards } });
+const say = (seq: number, turn: string, text: string, cards: ChatCard[] = []): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "message", data: { turn_id: turn, text, cards, closing: "" } });
 const propose = (seq: number, turn: string, id: string, action: "checkout" | "cancel_order", args: Record<string, unknown> = {}): ChatWsMessage =>
   ({ seq, ts: TS, channel: "chat", type: "proposal", data: { turn_id: turn, proposal_id: id, action, args, summary: `Do ${action}` } });
 const done = (seq: number, turn: string, source: "llm" | "rules" = "llm"): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "turn_done", data: { turn_id: turn, source } });
@@ -31,7 +31,7 @@ describe("one turn", () => {
     const s = run([chat(started(1, "T1")), chat(call(2, "T1", "search_products", { query: "hoodie" })), chat(result(3, "T1", "search_products", "6 products")), chat(say(4, "T1", "Here you go", cards)), chat(done(5, "T1", "rules"))]);
     const t = turn(s, "T1");
     expect(t?.tools).toEqual([{ tool: "search_products", args: { query: "hoodie" }, summary: "6 products", state: "done" }]);
-    expect(t?.messages).toEqual([{ text: "Here you go", cards }]);
+    expect(t?.messages).toEqual([{ text: "Here you go", cards, closing: "" }]);
     expect(t).toMatchObject({ done: true, source: "rules", error: null });
     expect(t && isWorking(t)).toBe(false);
   });
@@ -204,7 +204,7 @@ describe("conversations", () => {
     const old = [chat(started(1, "OLD")), chat(say(2, "OLD", "an old answer")), chat(done(3, "OLD"))];
     const s = run([...old, { type: "user_sent", localId: "L1", text: "new question", context: { path: "/" } }, { type: "accepted", localId: "L1", turnId: "NEW" }, chat(started(4, "NEW")), chat(say(5, "NEW", "new answer")), chat(done(6, "NEW"))], fresh());
     expect(s.turns.map((t) => t.turnId)).toEqual(["NEW"]);
-    expect(s.turns[0]?.messages).toEqual([{ text: "new answer", cards: [] }]);
+    expect(s.turns[0]?.messages).toEqual([{ text: "new answer", cards: [], closing: "" }]);
   });
   it("events that beat the POST response wait, then join the turn once it is accepted", () => {
     let s = run([{ type: "user_sent", localId: "L1", text: "q", context: { path: "/" } }, chat(started(1, "T9")), chat(say(2, "T9", "early")), chat(done(3, "T9"))], fresh());
