@@ -28,3 +28,20 @@ export function formProblem(mode: Mode, form: CredentialsForm, needsInvite: bool
   if (mode === "signup" && needsInvite && !form.invite.trim()) return "Enter the invite code.";
   return null;
 }
+
+/** The seeded demo customers (data/seed/v2/customers.json), in id order. They share DEMO_PASSWORD (README, "Sign-in"). */
+export const DEMO_PASSWORD = "shopassist-demo";
+export const DEMO_ACCOUNTS = [
+  { name: "Priya Raman", email: "priya.raman@example.com" },
+  { name: "Tomas Lindqvist", email: "tomas.lindqvist@example.com" },
+  { name: "Hana Mori", email: "hana.mori@example.com" },
+  { name: "Daniel Osei", email: "daniel.osei@example.com" },
+  { name: "Lucia Ferrand", email: "lucia.ferrand@example.com" },
+  { name: "Samuel Adeyemi", email: "samuel.adeyemi@example.com" },
+] as const;
+
+/** Which demo account the next "Use the demo account" click fills in: the first click Priya, the second Tomas, and so
+ *  on, back to Priya after the last. `current` is the index shown now, or null before the first click. */
+export function nextDemoIndex(current: number | null): number {
+  return current === null ? 0 : (current + 1) % DEMO_ACCOUNTS.length;
+}

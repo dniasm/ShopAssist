@@ -3,11 +3,8 @@ import { getSignups } from "../../api/endpoints";
 import { describeError } from "../../api/errors";
 import type { SignUpInput, Signups } from "../../api/types";
 import { Icon, Mark } from "../../components/Icon";
-import { EMPTY_FORM, MIN_PASSWORD, formProblem, type CredentialsForm, type Mode } from "./credentials";
+import { DEMO_ACCOUNTS, DEMO_PASSWORD, EMPTY_FORM, MIN_PASSWORD, formProblem, nextDemoIndex, type CredentialsForm, type Mode } from "./credentials";
 import styles from "./SignInDialog.module.css";
-
-// The seeded demo account offered on the side panel; every seeded user shares DEMO_PASSWORD (README, "Sign-in").
-const DEMO = { email: "priya.raman@example.com", password: "shopassist-demo" };
 
 interface Props {
   open: boolean;
@@ -47,6 +44,7 @@ function AuthForm({ onClose, onSignIn, onSignUp }: Omit<Props, "open">) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [signups, setSignups] = useState<Signups>("open");
+  const [demo, setDemo] = useState<number | null>(null);  // the demo account last filled in, if any
   const registering = mode === "signup";
   const needsInvite = signups === "invite";
 
@@ -74,6 +72,13 @@ function AuthForm({ onClose, onSignIn, onSignUp }: Omit<Props, "open">) {
       setError(describeError(err));
       setBusy(false);
     }
+  }
+
+  function fillNextDemo() {
+    const index = nextDemoIndex(demo);
+    setDemo(index);
+    setForm({ ...EMPTY_FORM, email: DEMO_ACCOUNTS[index].email, password: DEMO_PASSWORD });
+    setError(null);
   }
 
   function switchMode() {
@@ -146,9 +151,15 @@ function AuthForm({ onClose, onSignIn, onSignUp }: Omit<Props, "open">) {
         {!registering && (
           <div className={styles.demo}>
             <p className="small"><strong>Trying it out?</strong></p>
-            <p className="muted small">Demo account {DEMO.email}, password {DEMO.password}.</p>
-            <button type="button" className="btn" onClick={() => { setForm({ ...EMPTY_FORM, ...DEMO }); setError(null); }}>
-              Use the demo account
+            {demo === null ? (
+              <p className="muted small">{DEMO_ACCOUNTS.length} demo accounts share the password {DEMO_PASSWORD}.</p>
+            ) : (
+              <p className="muted small" aria-live="polite">
+                Demo account {demo + 1} of {DEMO_ACCOUNTS.length}: {DEMO_ACCOUNTS[demo].name}, {DEMO_ACCOUNTS[demo].email}.
+              </p>
+            )}
+            <button type="button" className="btn" onClick={fillNextDemo}>
+              {demo === null ? "Use the demo account" : "Next demo account"}
             </button>
           </div>
         )}

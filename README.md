@@ -37,7 +37,8 @@ orders live. Each service owns its own Postgres database. Everything runs locall
 Accounts sign in with email and password (**Sign in** at the top right, or **Create an account** there).
 
 - **Demo accounts.** The six seeded customers share the password `DEMO_PASSWORD` (default `shopassist-demo`), for
-  example `priya.raman@example.com`. The sign-in dialog has a "Use the demo account" button. Set `DEMO_PASSWORD=` (empty)
+  example `priya.raman@example.com`. In the sign-in dialog, "Use the demo account" fills them in one per click (Priya,
+  then Tomas, then Hana, ... back to Priya). Set `DEMO_PASSWORD=` (empty)
   to turn demo logins off; accounts that already have a password keep it.
 - **New accounts** are open by default. Set `SIGNUP_CODE` to require an invite code.
 - **How it is stored.** The Customer service keeps salted PBKDF2-SHA256 hashes (600,000 rounds), never passwords. The
