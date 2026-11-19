@@ -1,4 +1,6 @@
-"""LLM intent path (Groq gpt-oss-120b, multi-key) with the HTTP layer mocked by httpx.MockTransport. No network, no keys."""
+"""LLM client (Groq gpt-oss-120b, multi-key rotation) with the HTTP layer mocked by httpx.MockTransport. No network, no keys.
+
+The tests drive `LLMClient.complete_json` with a small intent-shaped schema; the agent uses the same call."""
 import asyncio
 import json
 import logging
@@ -9,8 +11,7 @@ import pytest
 from tests.conftest import AppClient
 
 from orchestrator.app import create_app
-from orchestrator.intent import INTENTS, detect_intent
-from orchestrator.llm import RESPONSE_SCHEMA, LLMClient, LLMError, validate
+from orchestrator.llm import LLMClient, LLMError
 from orchestrator.settings import Settings, parse_keys
 
 K1, K2 = "gsk_FAKEKEY_one_1234567890abcd", "gsk_FAKEKEY_two_1234567890wxyz"
@@ -69,8 +70,40 @@ class Upstream:
         return LLMClient(s or settings(), transport=httpx.MockTransport(self), now=clock or Clock())
 
 
+INTENTS = ("order_status", "product_search", "stock_check", "unknown")
+SIZES = {"XS", "S", "M", "L", "XL", "XXL"}
+RESPONSE_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["intent", "entities"],
+    "properties": {
+        "intent": {"type": "string", "enum": list(INTENTS)},
+        "entities": {"type": "object", "additionalProperties": False, "required": ENTITY_KEYS,
+                     "properties": {k: {"type": ["string", "null"]} for k in ENTITY_KEYS}},
+    },
+}
+
+
+def validate(payload):
+    """Test-local parser: the same job the agent's parse() does (reject unusable output with LLMError, treat null as absent)."""
+    if not isinstance(payload, dict) or payload.get("intent") not in INTENTS:
+        raise LLMError("unusable response")
+    entities = {k: v for k, v in (payload.get("entities") or {}).items() if v not in (None, "")}
+    if payload["intent"] == "order_status" and "order_id" not in entities:
+        raise LLMError("order intent without order_id")
+    if "size" in entities and entities["size"] not in SIZES:
+        raise LLMError("bad size")
+    return payload["intent"], entities
+
+
+def ask(client, text="Where is my order 1042?"):
+    return asyncio.run(client.complete_json("Classify the message.", text, "intent_result", RESPONSE_SCHEMA, validate))
+
+
 def detect(client, text="Where is my order 1042?"):
-    return asyncio.run(detect_intent(text, client))
+    """(intent, entities, "llm") on success, (None, {}, "failed") when the client raised LLMError."""
+    try:
+        return (*ask(client, text), "llm")
+    except LLMError:
+        return None, {}, "failed"
 
 
 # ---------------- request shape ----------------
@@ -91,27 +124,6 @@ def test_request_body_and_headers():
     assert fmt["json_schema"]["schema"] == RESPONSE_SCHEMA
 
 
-def _objects(schema):
-    if isinstance(schema, dict):
-        if schema.get("type") == "object":
-            yield schema
-        for v in schema.values():
-            yield from _objects(v)
-
-
-def test_schema_is_strict_compliant():
-    objs = list(_objects(RESPONSE_SCHEMA))
-    assert len(objs) == 2  # top level + entities
-    for o in objs:
-        assert o["additionalProperties"] is False
-        assert sorted(o["required"]) == sorted(o["properties"])  # every property is required
-    props = RESPONSE_SCHEMA["properties"]
-    assert props["intent"]["enum"] == list(INTENTS)
-    ents = props["entities"]["properties"]
-    assert ents["category"]["enum"] == ["accessories", "backpacks", "headphones", "hoodies", "shoes", None]
-    assert all("null" in p["type"] for p in ents.values())  # optional entities are nullable unions
-
-
 def test_default_url_and_first_key_used():
     up = Upstream({K1: [ok()], K2: [ok()]})
     seen = {}
@@ -120,7 +132,7 @@ def test_default_url_and_first_key_used():
         seen["url"] = str(request.url)
         return await up(request)
 
-    asyncio.run(detect_intent("order 1042", LLMClient(settings(), transport=httpx.MockTransport(handler), now=Clock())))
+    ask(LLMClient(settings(), transport=httpx.MockTransport(handler), now=Clock()))
     assert seen["url"] == "http://llm.invalid/v1/chat/completions" and up.calls == [K1]
     assert Settings().llm_base_url == "https://api.groq.com/openai/v1" and Settings().llm_model == "openai/gpt-oss-120b"
 
@@ -137,10 +149,8 @@ def test_code_fences_are_stripped():
 def test_validate_treats_null_entities_as_absent():
     intent, ent = validate({"intent": "product_search", "entities": dict.fromkeys(ENTITY_KEYS)})
     assert (intent, ent) == ("product_search", {})
-    intent, ent = validate({"intent": "stock_check", "entities": {
-        **dict.fromkeys(ENTITY_KEYS), "product_id": "p-1004", "size": "m", "max_price": "50",
-        "category": " Hoodies ", "keywords": ["Soft", ""]}})
-    assert ent == {"product_id": "P-1004", "size": "M", "max_price": 50.0, "category": "hoodies", "keywords": ["soft"]}
+    intent, ent = validate({"intent": "stock_check", "entities": {**dict.fromkeys(ENTITY_KEYS), "product_id": "P-1004", "size": "M"}})
+    assert ent == {"product_id": "P-1004", "size": "M"}
     with pytest.raises(LLMError):
         validate({"intent": "order_status", "entities": dict.fromkeys(ENTITY_KEYS)})  # required id is null
     with pytest.raises(LLMError):
@@ -166,7 +176,7 @@ def test_single_key_without_token_headroom_is_not_called():
     up = Upstream({K1: [ok(headers=low)]})
     client = up.client(settings(keys=(K1,)))
     assert detect(client)[2] == "llm"
-    assert detect(client)[2] == "rules" and len(up.calls) == 1   # 100 tokens left < the request's estimate
+    assert detect(client)[2] == "failed" and len(up.calls) == 1   # 100 tokens left < the request's estimate
 
 
 def test_local_rpm_limit_skips_key_until_clock_advances():
@@ -174,7 +184,7 @@ def test_local_rpm_limit_skips_key_until_clock_advances():
     up = Upstream({K1: [ok()]})
     client = up.client(settings(keys=(K1,), llm_limit_rpm=2), clock)
     assert [detect(client)[2] for _ in range(2)] == ["llm", "llm"]
-    assert detect(client)[2] == "rules" and len(up.calls) == 2   # no headroom: not even attempted
+    assert detect(client)[2] == "failed" and len(up.calls) == 2   # no headroom: not even attempted
     clock.advance(61)
     assert detect(client)[2] == "llm" and len(up.calls) == 3
 
@@ -186,7 +196,7 @@ def test_tpd_counter_fed_by_usage_total_tokens():
     assert asyncio.run(client.pool.status())[0]["tpd_left"] == 2500
     # est ~ (prompt/4 + 1024) is ~1.3k, so a 2nd call fits (2500 left) but a 3rd would not (1000 left)
     assert detect(client)[2] == "llm"
-    assert detect(client)[2] == "rules" and len(up.calls) == 2
+    assert detect(client)[2] == "failed" and len(up.calls) == 2
 
 
 def test_429_cools_key1_and_same_request_succeeds_on_key2():
@@ -212,19 +222,19 @@ def test_401_disables_key_permanently():
     assert asyncio.run(client.pool.status())[0]["state"] == "disabled"
 
 
-def test_all_keys_rate_limited_falls_back_to_rules():
+def test_all_keys_rate_limited_is_reported_as_an_error():
     up = Upstream({K1: [rate_limited()], K2: [rate_limited()]})
     intent, entities, source = detect(up.client())
-    assert (intent, entities, source) == ("order_status", {"order_id": "1042"}, "rules")
-    assert up.calls == [K1, K2]  # each key tried once, then rules
+    assert (intent, entities, source) == (None, {}, "failed")
+    assert up.calls == [K1, K2]  # each key tried once, then LLMError
 
 
-def test_all_keys_disabled_or_cooling_falls_back_to_rules_without_http():
+def test_all_keys_disabled_or_cooling_is_reported_as_an_error_without_http():
     up = Upstream({K1: [httpx.Response(403)], K2: [rate_limited("60")]})
     client = up.client()
-    assert detect(client)[2] == "rules"
+    assert detect(client)[2] == "failed"
     calls_after_first = len(up.calls)
-    assert detect(client)[2] == "rules" and len(up.calls) == calls_after_first
+    assert detect(client)[2] == "failed" and len(up.calls) == calls_after_first
 
 
 def test_soft_failure_retries_once_on_another_key_without_blaming_the_key():
@@ -242,15 +252,15 @@ def test_soft_failure_retries_once_on_another_key_without_blaming_the_key():
 ], ids=["5xx", "badjson", "envelope", "network"])
 def test_soft_failures_get_exactly_one_retry(first):
     up = Upstream({K1: [first], K2: [first]})
-    assert detect(up.client())[2] == "rules"
-    assert len(up.calls) == 2  # original + one retry, then rules
+    assert detect(up.client())[2] == "failed"
+    assert len(up.calls) == 2  # original + one retry, then LLMError
     up = Upstream({K1: [first], K2: [ok()]})
     assert detect(up.client())[2] == "llm"
 
 
 def test_other_4xx_is_not_retried():
     up = Upstream({K1: [httpx.Response(400, json={"error": "bad request"})], K2: [ok()]})
-    assert detect(up.client())[2] == "rules" and up.calls == [K1]
+    assert detect(up.client())[2] == "failed" and up.calls == [K1]
 
 
 @pytest.mark.parametrize("reply", [
@@ -258,13 +268,12 @@ def test_other_4xx_is_not_retried():
     ok(intent="order_status", entities={}),
     ok(intent="stock_check", entities={"size": "Q"}),
 ], ids=["badintent", "noorderid", "badsize"])
-def test_invalid_model_output_falls_back_to_rules_without_retry(reply):
+def test_invalid_model_output_is_reported_as_an_error_without_retry(reply):
     up = Upstream({K1: [reply], K2: [reply]})
-    assert detect(up.client())[2] == "rules" and len(up.calls) == 1
+    assert detect(up.client())[2] == "failed" and len(up.calls) == 1
 
 
-def test_no_keys_means_rules_and_no_client():
-    assert asyncio.run(detect_intent("Track order 1043 live", None))[2] == "rules"
+def test_no_keys_means_empty_pool():
     assert asyncio.run(LLMClient(settings(keys=())).pool.status()) == []
 
 
@@ -284,10 +293,10 @@ def test_timeout_is_a_total_budget_across_attempts():
     t0 = time.perf_counter()
     result = detect(client)
     elapsed = time.perf_counter() - t0
-    assert result[2] == "rules" and up.calls == [K1, K2]
+    assert result[2] == "failed" and up.calls == [K1, K2]
     assert elapsed < 1.5, f"budget is 0.6s total but the query waited {elapsed:.2f}s"  # not 0.3 + 0.6, not 30
     with pytest.raises(LLMError, match="budget"):
-        asyncio.run(client.detect("anything"))
+        ask(client, "anything")
 
 
 # ---------------- settings: key merging ----------------
@@ -326,7 +335,7 @@ def test_status_and_logs_never_contain_a_full_key(caplog):
     up = Upstream({K1: [rate_limited("30")], K2: [ok(intent="unknown", entities={})]})
     s = settings()
     client = up.client(s)
-    intent, _entities = asyncio.run(client.detect("What's the weather?"))  # K1 is rate limited, so K2 answers
+    intent, _entities = ask(client, "What's the weather?")  # K1 is rate limited, so K2 answers
     assert intent == "unknown" and up.calls == [K1, K2]
     with AppClient(create_app(s, llm=client)) as c:
         status = c.get("/api/llm/status")
@@ -341,5 +350,5 @@ def test_status_and_logs_never_contain_a_full_key(caplog):
     # error messages raised on failure carry no key either
     failing = Upstream({K1: [httpx.Response(401)], K2: [httpx.Response(401)]}).client(s)
     with pytest.raises(LLMError) as err:
-        asyncio.run(failing.detect("x"))
+        ask(failing, "x")
     assert K1 not in str(err.value) and K2 not in str(err.value)

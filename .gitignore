@@ -8,3 +8,4 @@ data/*.db
 web/node_modules/
 web/dist/
 *.log
+loadtest/out/

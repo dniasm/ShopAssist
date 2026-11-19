@@ -365,7 +365,7 @@ Next steps:
    eval 117/124 (LLM mode, 50/124 answered by the model, the rest rate-limited to rules), 121/124 rules (rules were
    written after seeing the set, so that number is optimistic). Next: pace the LLM eval, more keys, move chat memory
    and the WS event log out of process.
-2. 5.5: Locust load test with recorded numbers; delete `frontend/`, the v1 API leftovers, `client/` and v1 seed files.
+2. 5.5 DONE (2026-11-19): Locust load test (`loadtest/`, numbers in `loadtest/RESULTS.md`); `frontend/`, `client/`, the v1 seed files, `orchestrator/intent.py` and `tests/test_intent.py` removed (git history keeps them); v1 README sections replaced.
 3. Known gaps: no real auth (demo "sign in as"); the per-user WebSocket event log is in memory, so the
    orchestrator is still a single process; the test suite takes 2–8 minutes depending on machine load.
 
