@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WsMessage } from "../../api/types";
+import type { SocketMessage } from "../../api/types";
 import {
   BACKOFF_MAX_MS, CLOSE_UNAUTHENTICATED, backoffDelay, initialMachineState, reduceMachine,
   type MachineEffect, type MachineEvent, type MachineState,
@@ -8,7 +8,7 @@ import {
 const TS = "2026-01-01T00:00:00Z";
 const USER = { user_id: "U-03", name: "Priya Raman", email: "p@example.com", city: "Seattle" };
 /** A valid message of the given channel. System messages carry seq 0 in the real contract, whatever seq is passed for them. */
-function env(seq: number, channel: WsMessage["channel"] = "checkout", type = "step"): WsMessage {
+function env(seq: number, channel: SocketMessage["channel"] = "checkout", type = "step"): SocketMessage {
   if (channel === "system") {
     return type === "hello"
       ? { seq, ts: TS, channel, type: "hello", data: { user: USER, seq: 12 } }

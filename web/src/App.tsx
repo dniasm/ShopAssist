@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { AuthProvider } from "./features/auth/AuthContext";
 import { CartProvider } from "./features/cart/CartContext";
+import { ChatProvider } from "./features/chat/ChatContext";
 import { DrawerProvider } from "./features/drawer/DrawerContext";
 import { SessionSocketProvider } from "./features/session/SessionSocket";
 import { CheckoutPage } from "./pages/CheckoutPage";
@@ -21,19 +22,21 @@ export function App() {
         <DrawerProvider>
           <SessionSocketProvider>
             <CartProvider>
-              <Routes>
-                <Route element={<AppShell />}>
-                  <Route index element={<HomePage />} />
-                  <Route path="shop" element={<ShopPage />} />
-                  <Route path="p/:productId" element={<ProductPage />} />
-                  <Route path="checkout" element={<CheckoutPage />} />
-                  <Route path="checkout/:orderId" element={<OrderProgressPage />} />
-                  <Route path="orders" element={<OrdersPage />} />
-                  <Route path="orders/:orderId" element={<OrderDetailPage />} />
-                  <Route path="system" element={<SystemPage />} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Route>
-              </Routes>
+              <ChatProvider>
+                <Routes>
+                  <Route element={<AppShell />}>
+                    <Route index element={<HomePage />} />
+                    <Route path="shop" element={<ShopPage />} />
+                    <Route path="p/:productId" element={<ProductPage />} />
+                    <Route path="checkout" element={<CheckoutPage />} />
+                    <Route path="checkout/:orderId" element={<OrderProgressPage />} />
+                    <Route path="orders" element={<OrdersPage />} />
+                    <Route path="orders/:orderId" element={<OrderDetailPage />} />
+                    <Route path="system" element={<SystemPage />} />
+                    <Route path="*" element={<NotFoundPage />} />
+                  </Route>
+                </Routes>
+              </ChatProvider>
             </CartProvider>
           </SessionSocketProvider>
         </DrawerProvider>

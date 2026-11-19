@@ -361,8 +361,28 @@ WatchOrders with overlap resume, cancel, orders pages), the System page, and the
 validated, not yet scored). The project was stopped here by the user's decision; nothing below is started.
 
 Next steps:
-1. 5.4 agent: tool loop over the gRPC clients, per-user memory, proposals for checkout/cancel, chat drawer on every
-   page, and a scorer for `tests/eval/queries.jsonl` (LLM vs rules). The 5.4 contract above is already written.
+1. 5.4 DONE (2026-11-19, MVP): agent with 10 tools, per-conversation memory, page context, proposals, chat drawer;
+   eval 117/124 (LLM mode, 50/124 answered by the model, the rest rate-limited to rules), 121/124 rules (rules were
+   written after seeing the set, so that number is optimistic). Next: pace the LLM eval, more keys, move chat memory
+   and the WS event log out of process.
 2. 5.5: Locust load test with recorded numbers; delete `frontend/`, the v1 API leftovers, `client/` and v1 seed files.
 3. Known gaps: no real auth (demo "sign in as"); the per-user WebSocket event log is in memory, so the
    orchestrator is still a single process; the test suite takes 2–8 minutes depending on machine load.
+
+## 5.4 resumed (2026-11-19) — scorer interface
+
+The agent module exposes one pure-ish entry point used by both the chat loop and the eval scorer:
+
+```python
+# orchestrator/agent/planner.py
+async def plan_next_action(query: str, history: list[dict], context: dict, *, llm=None, tool_results: list[dict] = ()) -> Action
+# Action = {"tool": str, "args": dict, "reply": str | None, "source": "llm" | "rules"}
+# llm=None -> rules parser. No gRPC calls inside: context may carry a `product` summary
+# {product_id, name, category, price_cents, colors, sizes} and a `cart` summary, filled by the caller.
+```
+
+Scorer `scripts/eval_agent.py --mode rules|llm [--limit N]`: for each line of `tests/eval/queries.jsonl` calls
+`plan_next_action` with no tool results and compares the FIRST action: tool must match exactly; `expect.args` must be a
+subset of the actual args — strings case-insensitive, `query` by token containment (expected tokens ⊆ actual tokens,
+lower-cased, simple plural strip), integers exact. Prints overall accuracy, accuracy per tag and per tool, and the
+failures; writes `tests/eval/results/<mode>-<date>.json`.

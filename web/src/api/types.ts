@@ -46,9 +46,21 @@ export type Shortage = Schemas["Shortage"];
 export type WsMessage = NonNullable<
   operations["ws_schema_api_ws_schema_get"]["responses"][200]["content"]
 >["application/json"];
-export type SocketChannel = WsMessage["channel"];
+// SocketMessage is every message the socket can carry (the chat channel included).
+export type SocketMessage = WsMessage;
+export type ChatWsMessage = Extract<WsMessage, { channel: "chat" }>;
+export type SocketChannel = SocketMessage["channel"];
 export type CheckoutStepData = Schemas["CheckoutStepData"];
 export type CheckoutDoneData = Schemas["CheckoutDoneData"];
 export type CheckoutFailedData = Schemas["CheckoutFailedData"];
 export type CheckoutInterruptedData = Schemas["CheckoutInterruptedData"];
 export type OrderStatusData = Schemas["OrderStatusData"];
+
+// Chat (POST /api/chat, the proposal endpoints and the `chat` socket channel).
+export type ChatCard = Schemas["ChatCard"];
+export type ChatCardKind = ChatCard["kind"];
+export type ChatContext = Schemas["ChatContextIn"];
+export type ChatRequest = Schemas["ChatIn"];
+export type ChatAccepted = Schemas["TurnOut"];
+export type ProposalAck = Schemas["OkOut"];
+export type ProposalAction = Extract<ChatWsMessage, { type: "proposal" }>["data"]["action"];

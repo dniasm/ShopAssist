@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { SocketChannel, WsMessage } from "../../api/types";
+import type { SocketChannel, SocketMessage } from "../../api/types";
 import { useAuth } from "../auth/AuthContext";
+import { useDrawer } from "../drawer/DrawerContext";
 import { appendEvent, eventsOn } from "./eventLog";
-import { parseWsMessage } from "./events";
+import { parseSocketMessage } from "./events";
+import { guestIdForBrowser } from "./ids";
 import { initialMachineState, reduceMachine, type MachineEffect, type MachineEvent, type MachineState, type MachineStatus } from "./socketMachine";
 
-export type SocketHandler = (envelope: WsMessage) => void;
+export type SocketHandler = (envelope: SocketMessage) => void;
 
 interface SocketApi {
   status: MachineStatus;
@@ -31,24 +33,34 @@ export function useSocketChannel(channel: SocketChannel, handler: SocketHandler,
   useEffect(() => subscribe(channel, (env) => latest.current(env), { replay }), [subscribe, channel, replay]);
 }
 
-function socketUrl(token: string, after: number): string {
+/** A signed-in tab connects with its token; a signed-out visitor with a guest id of their own (chat events only). */
+function socketUrl(who: { token: string } | { guest: string }, after: number): string {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${scheme}://${window.location.host}/api/ws?token=${encodeURIComponent(token)}&after=${after}`;
+  const identity = "token" in who ? `token=${encodeURIComponent(who.token)}` : `guest=${encodeURIComponent(who.guest)}`;
+  return `${scheme}://${window.location.host}/api/ws?${identity}&after=${after}`;
 }
 
 /** One WebSocket per signed-in tab. All the connection rules live in socketMachine.ts; this component only performs the
  *  effects it asks for (open a socket, wait, deliver an event, close, sign out) and feeds it what happens. */
 export function SessionSocketProvider({ children }: { children: ReactNode }) {
   const { token, signOut } = useAuth();
+  const { open: drawer } = useDrawer();
   const [status, setStatus] = useState<MachineStatus>("idle");
+
+  // A signed-out visitor only gets a socket once they open the assistant (and keeps it for the rest of the visit).
+  const [guestWanted, setGuestWanted] = useState(false);
+  useEffect(() => { if (drawer === "chat") setGuestWanted(true); }, [drawer]);
+  const guest = !token && guestWanted ? guestIdForBrowser() : null;
 
   const machine = useRef<MachineState>(initialMachineState());
   const socket = useRef<WebSocket | null>(null);
   const timer = useRef<number | undefined>(undefined);
-  const log = useRef<WsMessage[]>([]);
+  const log = useRef<SocketMessage[]>([]);
   const subscribers = useRef(new Map<SocketChannel, Set<SocketHandler>>());
   const tokenRef = useRef(token);
   tokenRef.current = token;
+  const guestRef = useRef(guest);
+  guestRef.current = guest;
   const signOutRef = useRef(signOut);
   signOutRef.current = signOut;
 
@@ -62,14 +74,16 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
       switch (effect.type) {
         case "open": {
           const currentToken = tokenRef.current;
-          if (!currentToken) return;
-          const ws = new WebSocket(socketUrl(currentToken, effect.after));
+          const currentGuest = guestRef.current;
+          const who = currentToken ? { token: currentToken } : currentGuest ? { guest: currentGuest } : null;
+          if (!who) return;
+          const ws = new WebSocket(socketUrl(who, effect.after));
           socket.current = ws;
           // Events from a socket that is no longer the current one (closed on purpose, replaced) are ignored.
           ws.onopen = () => { if (socket.current === ws) dispatch({ type: "opened" }); };
           ws.onmessage = (e: MessageEvent<unknown>) => {
             if (socket.current !== ws || typeof e.data !== "string") return;
-            const envelope = parseWsMessage(e.data);
+            const envelope = parseSocketMessage(e.data);
             if (envelope) dispatch({ type: "message", envelope });
           };
           ws.onclose = (e: CloseEvent) => { if (socket.current === ws) { socket.current = null; dispatch({ type: "closed", code: e.code }); } };
@@ -94,20 +108,21 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
           return;
         }
         case "sign_out":
-          signOutRef.current();
+          if (tokenRef.current) signOutRef.current();      // a guest has no session to end
           return;
       }
     }
   }, []);
 
-  // A new token (sign-in, switch user) is a new session: new seq space, new buffer, new socket.
+  // A new identity (sign-in, switch user, guest) is a new session: new seq space, new buffer, new socket.
+  const identity = token ?? guest;
   useEffect(() => {
-    if (!token) return;
+    if (!identity) return;
     machine.current = initialMachineState();
     log.current = [];
     dispatch({ type: "start" });
     return () => dispatch({ type: "stop" });
-  }, [token, dispatch]);
+  }, [identity, dispatch]);
 
   const subscribe = useCallback<SocketApi["subscribe"]>((channel, handler, options) => {
     if (options?.replay) {

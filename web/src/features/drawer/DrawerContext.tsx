@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-/** The right-hand drawer is one slot. The cart is its only occupant today. */
-export type DrawerKind = "cart";
+/** The right-hand drawer is one slot: the cart (modal) or the chat (docked beside the page). */
+export type DrawerKind = "cart" | "chat";
 
 interface DrawerValue {
   open: DrawerKind | null;

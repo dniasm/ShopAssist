@@ -23,13 +23,18 @@ router = APIRouter()
 async def checkout(
     body: CheckoutIn, request: Request, user_id: str = Depends(current_user_id), clients: Clients = Depends(get_clients)
 ):
-    state = request.app.state
+    return {"order_id": await start_checkout(request.app.state, clients, user_id, body.idempotency_key, body.payment_method)}
+
+
+async def start_checkout(state, clients: Clients, user_id: str, idempotency_key: str, payment_method: str) -> str:
+    """Start the saga for the user's cart and return the order id. The one code path behind POST /api/checkout AND the
+    assistant's confirmed proposals, so a confirmed checkout behaves exactly like a click on the checkout page."""
     cart = await clients.call("customer", clients.customer.GetCart, pb.GetCartRequest(), user_id=user_id)
     # An empty cart is still sent: if this key already made an order (the cart was cleared by it), the Order
     # service replays that order; if the key is new it answers INVALID_ARGUMENT, which becomes "cart is empty".
     call = clients.order.Checkout(
         pb.CheckoutRequest(
-            idempotency_key=body.idempotency_key, payment_method=body.payment_method,
+            idempotency_key=idempotency_key, payment_method=payment_method,
             lines=[pb.CheckoutLine(sku_id=l.sku_id, quantity=l.quantity) for l in cart.lines],
         ),
         metadata=((USER_HEADER, user_id),),
@@ -46,4 +51,4 @@ async def checkout(
     if first is grpc.aio.EOF:
         raise ApiError("internal", "The order service ended the checkout without an order.")
     checkout_flow.spawn(state, user_id, call, first, cart.version)
-    return {"order_id": first.order_id}
+    return first.order_id

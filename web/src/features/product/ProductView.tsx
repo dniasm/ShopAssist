@@ -7,7 +7,9 @@ import { Rating } from "../catalog/ProductCard";
 import { shopHref } from "../catalog/query";
 import { ProductTile } from "../tile/ProductTile";
 import { getProduct } from "../../api/endpoints";
+import { Icon } from "../../components/Icon";
 import { useCart } from "../cart/CartContext";
+import { useChat, useRegisterPageProduct } from "../chat/ChatContext";
 import { AddToCart } from "./AddToCart";
 import { QuantityStepper } from "./QuantityStepper";
 import { ColorPicker, SizePicker } from "./VariantPickers";
@@ -21,6 +23,8 @@ import styles from "./ProductView.module.css";
 export function ProductView({ detail }: { detail: ProductDetail }) {
   const { product } = detail;
   const { cart } = useCart();
+  const { openChat } = useChat();
+  useRegisterPageProduct({ id: product.product_id, name: product.name });
   // Stock can change while the page is open; after the cart refuses an add we re-read it without leaving the page.
   const [stock, setStock] = useState(detail.stock);
   const refreshStock = useCallback(() => {
@@ -107,6 +111,9 @@ export function ProductView({ detail }: { detail: ProductDetail }) {
               />
             </div>
             <AddToCart skuId={resolved?.skuId ?? null} quantity={quantity} blockedReason={blockedReason} onStockChanged={refreshStock} />
+            <button type="button" className="btn large" onClick={openChat} aria-keyshortcuts="/">
+              <Icon name="chat" size={16} /> Ask about this
+            </button>
           </div>
 
           {resolved && (

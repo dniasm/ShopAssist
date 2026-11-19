@@ -24,7 +24,7 @@ class _Envelope(BaseModel):
 
 # ---- system ----
 class HelloData(BaseModel):
-    user: User
+    user: User | None = Field(description="null for a signed-out visitor connected with ?guest=")
     seq: int = Field(description="The user's latest event number; reconnect with ?after=<last seq you saw>.")
 
 
@@ -112,7 +112,92 @@ class OrderStatus(_Envelope):
     data: OrderStatusData
 
 
+# ---- chat (the assistant) ----
+class ChatCard(BaseModel):
+    """What the UI shows under a message. kind: products | product | stock | cart | order | orders | signin; `data` is that
+    kind's payload (the same shapes as the REST responses: ProductListResponse items, ProductDetailResponse, CartOut, Order...)."""
+
+    kind: Literal["products", "product", "stock", "cart", "order", "orders", "signin"]
+    data: dict
+
+
+class ChatTurnData(BaseModel):
+    turn_id: str
+
+
+class ChatToolCallData(ChatTurnData):
+    tool: str
+    args: dict
+
+
+class ChatToolResultData(ChatTurnData):
+    tool: str
+    summary: str
+
+
+class ChatMessageData(ChatTurnData):
+    text: str
+    cards: list[ChatCard]
+
+
+class ChatProposalData(ChatTurnData):
+    proposal_id: str
+    action: Literal["checkout", "cancel_order"]
+    args: dict
+    summary: str
+
+
+class ChatTurnDoneData(ChatTurnData):
+    source: Literal["llm", "rules"]
+
+
+class ChatErrorData(ChatTurnData):
+    message: str
+
+
+class _Chat(_Envelope):
+    channel: Literal["chat"]
+
+
+class ChatTurnStarted(_Chat):
+    type: Literal["turn_started"]
+    data: ChatTurnData
+
+
+class ChatToolCall(_Chat):
+    type: Literal["tool_call"]
+    data: ChatToolCallData
+
+
+class ChatToolResult(_Chat):
+    type: Literal["tool_result"]
+    data: ChatToolResultData
+
+
+class ChatMessage(_Chat):
+    type: Literal["message"]
+    data: ChatMessageData
+
+
+class ChatProposal(_Chat):
+    """Something the person must confirm: POST /api/chat/proposals/{proposal_id}/confirm (or /dismiss)."""
+
+    type: Literal["proposal"]
+    data: ChatProposalData
+
+
+class ChatTurnDone(_Chat):
+    type: Literal["turn_done"]
+    data: ChatTurnDoneData
+
+
+class ChatError(_Chat):
+    type: Literal["error"]
+    data: ChatErrorData
+
+
 WsMessage = Annotated[
-    Union[SystemHello, SystemResync, CheckoutStep, CheckoutDone, CheckoutFailed, CheckoutInterrupted, OrderStatus],
+    Union[SystemHello, SystemResync, CheckoutStep, CheckoutDone, CheckoutFailed, CheckoutInterrupted, OrderStatus,
+          ChatTurnStarted, ChatToolCall, ChatToolResult, ChatMessage, ChatProposal, ChatTurnDone, ChatError],
     Field(discriminator="type"),
 ]

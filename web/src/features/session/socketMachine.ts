@@ -9,7 +9,7 @@
  *    always delivered, and never move lastSeq, so a seq of 0 is neither a "duplicate" nor a reset of the resume point
  *    (after a resync the server replays from its buffer, and those events carry seqs above lastSeq) */
 
-import type { WsMessage } from "../../api/types";
+import type { SocketMessage } from "../../api/types";
 
 export const BACKOFF_FIRST_MS = 1000;
 export const BACKOFF_MAX_MS = 15000;
@@ -31,14 +31,14 @@ export type MachineEvent =
   | { type: "start" }
   | { type: "stop" }
   | { type: "opened" }
-  | { type: "message"; envelope: WsMessage }
+  | { type: "message"; envelope: SocketMessage }
   | { type: "closed"; code: number }
   | { type: "timer" };
 
 export type MachineEffect =
   | { type: "open"; after: number }
   | { type: "schedule"; delayMs: number }
-  | { type: "deliver"; envelope: WsMessage }
+  | { type: "deliver"; envelope: SocketMessage }
   | { type: "close" }
   | { type: "sign_out" };
 

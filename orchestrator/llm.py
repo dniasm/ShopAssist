@@ -111,6 +111,16 @@ def validate(payload: object) -> tuple[str, dict]:
     return intent, entities
 
 
+def _failed_generation(resp: httpx.Response) -> dict | None:
+    """The model's own JSON from a 400 `json_validate_failed` error body, or None."""
+    try:
+        text = resp.json()["error"]["failed_generation"]
+        data = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
+        return data if isinstance(data, dict) else None
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
 class LLMClient:
     def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None,
                  now: Callable[[], float] = time.monotonic):
@@ -124,7 +134,7 @@ class LLMClient:
             now=now,
         )
 
-    def _body(self, text: str) -> dict:
+    def _body(self, text: str, system: str = SYSTEM_PROMPT, schema_name: str = "intent_result", schema: dict | None = None) -> dict:
         s = self._settings
         return {
             "model": s.llm_model,
@@ -132,12 +142,28 @@ class LLMClient:
             "max_completion_tokens": s.llm_max_tokens,
             "reasoning_effort": s.llm_reasoning_effort,
             "include_reasoning": False,
-            "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": text}],
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}],
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {"name": "intent_result", "strict": True, "schema": RESPONSE_SCHEMA},
+                "json_schema": {"name": schema_name, "strict": True, "schema": schema or RESPONSE_SCHEMA},
             },
         }
+
+    async def complete_json(self, system: str, user: str, schema_name: str, schema: dict, parse: Callable[[dict], object],
+                            max_tokens: int | None = None):
+        """One strict-JSON completion through the key pool; `parse` validates the decoded object (raise LLMError to reject).
+
+        The agent planner uses this; `detect` below is the older intent call and shares the same rotation and budget.
+        """
+        body = self._body(user, system, schema_name, schema)
+        if max_tokens:  # a short answer: ask for (and budget for) less, so the key pool can serve more calls per minute
+            body["max_completion_tokens"] = max_tokens
+        est_tokens = sum(len(m["content"]) for m in body["messages"]) // 4 + (max_tokens or self._settings.llm_max_tokens)
+        try:
+            async with asyncio.timeout(self._timeout):
+                return await self._rotate(body, est_tokens, parse)
+        except TimeoutError:
+            raise LLMError(f"LLM budget of {self._timeout:g}s exhausted") from None
 
     async def detect(self, text: str) -> tuple[str, dict]:
         body = self._body(text)
@@ -150,7 +176,7 @@ class LLMClient:
         except TimeoutError:
             raise LLMError(f"LLM budget of {self._timeout:g}s exhausted") from None
 
-    async def _rotate(self, body: dict, est_tokens: int) -> tuple[str, dict]:
+    async def _rotate(self, body: dict, est_tokens: int, parse: Callable[[dict], object] = validate):
         tried: set[int] = set()   # keys that failed softly for this request
         soft_retry_left = True    # timeout / 5xx / bad JSON: at most one retry, on another key
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as http:
@@ -171,6 +197,12 @@ class LLMClient:
                     await self.pool.record(lease.index, status, headers)
                     continue
 
+                if status == 400 and (salvaged := _failed_generation(payload)) is not None:
+                    # Groq's strict mode rejects a reply that merely omits a nullable key (HTTP 400 json_validate_failed) but
+                    # returns what the model wrote; our own parse() checks it properly, so use it rather than lose the answer.
+                    await self.pool.record(lease.index, status, headers)
+                    return parse(salvaged)
+
                 content = None
                 if status == 200:
                     try:
@@ -179,7 +211,7 @@ class LLMClient:
                         await self.pool.record(lease.index, status, headers, tokens)
                         content = data["choices"][0]["message"]["content"]
                         content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
-                        return validate(json.loads(content))
+                        return parse(json.loads(content))
                     except LLMError:
                         raise
                     except (ValueError, KeyError, IndexError, TypeError, AttributeError):

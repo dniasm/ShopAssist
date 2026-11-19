@@ -1,0 +1,150 @@
+{
+  "mode": "llm",
+  "generated_at": "2026-11-19T12:33:32",
+  "tags": null,
+  "limit": 5,
+  "lines_selected": 5,
+  "lines_scored": 5,
+  "stopped_early": null,
+  "summary": {
+    "overall": {
+      "passed": 5,
+      "total": 5,
+      "accuracy": 1.0
+    },
+    "per_tag": {
+      "basic": {
+        "passed": 5,
+        "total": 5,
+        "accuracy": 1.0
+      }
+    },
+    "per_tool": {
+      "search_products": {
+        "passed": 5,
+        "total": 5,
+        "accuracy": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "basic-01",
+      "query": "headphones under 100",
+      "tags": [
+        "basic"
+      ],
+      "expected": {
+        "tool": "search_products",
+        "args": {
+          "category": "headphones",
+          "max_price_cents": 10000
+        }
+      },
+      "actual": {
+        "tool": "search_products",
+        "args": {
+          "category": "headphones",
+          "max_price_cents": 10000
+        },
+        "source": "rules"
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "id": "basic-02",
+      "query": "show me hoodies",
+      "tags": [
+        "basic"
+      ],
+      "expected": {
+        "tool": "search_products",
+        "args": {
+          "category": "hoodies"
+        }
+      },
+      "actual": {
+        "tool": "search_products",
+        "args": {
+          "category": "hoodies"
+        },
+        "source": "rules"
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "id": "basic-03",
+      "query": "waterproof backpacks",
+      "tags": [
+        "basic"
+      ],
+      "expected": {
+        "tool": "search_products",
+        "args": {
+          "category": "backpacks",
+          "query": "waterproof"
+        }
+      },
+      "actual": {
+        "tool": "search_products",
+        "args": {
+          "category": "backpacks",
+          "query": "waterproof backpacks"
+        },
+        "source": "rules"
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "id": "basic-04",
+      "query": "cheapest watch you've got",
+      "tags": [
+        "basic"
+      ],
+      "expected": {
+        "tool": "search_products",
+        "args": {
+          "category": "watches",
+          "sort": "price_asc"
+        }
+      },
+      "actual": {
+        "tool": "search_products",
+        "args": {
+          "category": "watches",
+          "sort": "price_asc"
+        },
+        "source": "rules"
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "id": "basic-05",
+      "query": "best rated sunglasses",
+      "tags": [
+        "basic"
+      ],
+      "expected": {
+        "tool": "search_products",
+        "args": {
+          "category": "sunglasses",
+          "sort": "rating"
+        }
+      },
+      "actual": {
+        "tool": "search_products",
+        "args": {
+          "category": "sunglasses",
+          "sort": "rating"
+        },
+        "source": "rules"
+      },
+      "passed": true,
+      "reasons": []
+    }
+  ]
+}
