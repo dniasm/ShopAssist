@@ -1,0 +1,5 @@
+.panel { display: grid; gap: 14px; padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.failure { border-color: var(--negative); }
+.id { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.details { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }

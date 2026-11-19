@@ -1,0 +1,43 @@
+.panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 20px 16px; display: grid; align-content: start; gap: 12px; }
+.message { padding: 24px 20px; display: grid; justify-items: start; gap: 8px; }
+.messageTitle { font-size: var(--fs-section); line-height: 24px; font-weight: 600; }
+.message :global(.btn) { margin-top: 8px; }
+
+.alert { padding: 10px 12px; border-radius: var(--radius-control); background: var(--pill-negative-bg); color: var(--pill-negative-ink); }
+.alert :global(.btn) { height: auto; color: inherit; padding: 0 2px; }
+
+.lines { list-style: none; margin: 0; padding: 0; display: grid; }
+.line { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.line:last-child { border-bottom: 0; }
+.tile { display: block; width: 64px; }
+.info { display: grid; gap: 2px; min-width: 0; align-content: start; }
+.name { font-weight: 500; text-decoration: none; overflow-wrap: anywhere; }
+.name:hover { text-decoration: underline; text-underline-offset: 3px; }
+.controls { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.controls :global(.btn.text) { height: 32px; }
+.lineTotal { font-weight: 600; white-space: nowrap; }
+.line[aria-busy="true"] { opacity: 0.6; }
+
+/* a line that cannot be bought as it stands: the warning is status colour, the rest of the line stays plain */
+.issue {
+  margin-top: 8px; padding: 8px 10px; border-radius: var(--radius-control);
+  background: var(--pill-warning-bg); color: var(--pill-warning-ink); border: 1px solid var(--notice-border);
+  font-size: var(--fs-small); line-height: 16px;
+}
+.line[data-issue="sold_out"] .name { color: var(--muted); }
+
+.foot { flex: none; padding: 16px 20px 20px; border-top: 1px solid var(--border); background: var(--surface); display: grid; gap: 10px; }
+.foot :global(.btn) { width: 100%; }
+.sums { margin: 0; display: grid; gap: 4px; }
+.sums > div { display: flex; justify-content: space-between; gap: 12px; }
+.sums dt { color: var(--muted); }
+.sums dd { margin: 0; }
+.sums .total { padding-top: 6px; margin-top: 2px; border-top: 1px solid var(--rule); font-size: var(--fs-section); font-weight: 600; }
+.sums .total dt { color: var(--text); }
+.hint { font-size: var(--fs-small); line-height: 16px; }
+.blocked { color: var(--pill-warning-ink); font-size: var(--fs-small); line-height: 16px; }
+
+.skelLine { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 14px 0; }
+.skelTile { aspect-ratio: 1 / 1; background: var(--raised); border-radius: var(--radius-control); }
+.skelText { display: grid; gap: 8px; align-content: start; }

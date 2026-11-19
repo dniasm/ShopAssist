@@ -90,7 +90,7 @@ class CatalogServicer(pb_grpc.CatalogServiceServicer):
         return pb.GetSkusResponse(items=[
             pb.SkuWithProduct(
                 sku=pb.Sku(sku_id=r["sku_id"], product_id=r["product_id"], size=r["size"], color=r["color"]),
-                name=r["name"], price_cents=r["price_cents"],
+                name=r["name"], price_cents=r["price_cents"], category=r["category"],
             ) for r in rows
         ])
 

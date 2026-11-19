@@ -1,17 +1,11 @@
-"""Shared fixtures: throwaway Postgres databases and real grpc.aio services running on a background loop.
+"""Shared fixtures. The machinery behind them (the one shared event loop, throwaway/recycled databases, starting and
+stopping services, the app client) is in tests/harness.py; this file only turns it into pytest fixtures.
 
-Why a background loop thread: grpc.aio servers and psycopg pools must live on one (selector) event loop,
-while tests are plain sync functions that call them over real sockets. Concurrency tests open their own
-grpc.aio channels inside `asyncio.run`. No pytest-asyncio is needed.
-
-Database tests skip with a clear message when Postgres is unreachable. Throwaway databases are named
-test_<hex>_<svc> and dropped at teardown even when a test fails.
+No pytest-asyncio: tests are plain functions that call real services over real sockets.
 """
-import asyncio
 import os
-import secrets
 import sys
-import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,61 +20,28 @@ load_dotenv(REPO_ROOT / ".env")
 
 import grpc  # noqa: E402
 import psycopg  # noqa: E402
-from psycopg.conninfo import conninfo_to_dict, make_conninfo  # noqa: E402
 
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc  # noqa: E402
+from tests import harness  # noqa: E402
 from tests.fixtures import write_seed_dir  # noqa: E402
+# re-exported: many tests import these from tests.conftest
+from tests.harness import (AppClient, LoopThread, Running, TempDatabases, _template_for, get_loop_thread, run,  # noqa: E402,F401
+                           start, stop)
 
 
-def run(coro):
-    """Run a coroutine to completion on a selector loop (psycopg async needs one on Windows)."""
-    return asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
+def pytest_sessionfinish(session, exitstatus):
+    harness.release_databases()
 
 
-class LoopThread:
-    """An event loop in a daemon thread; `call` runs a coroutine on it and returns the result."""
-
-    def __init__(self):
-        self.loop = asyncio.SelectorEventLoop()
-        self._thread = threading.Thread(target=self._run, daemon=True, name="test-services-loop")
-        self._thread.start()
-
-    def _run(self):
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()
-
-    def call(self, coro, timeout: float = 60):
-        return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
-
-    def close(self):
-        self.loop.call_soon_threadsafe(self.loop.stop)
-        self._thread.join(timeout=5)
-
-
-class TempDatabases:
-    """Creates and drops throwaway databases through the admin URL."""
-
-    def __init__(self, admin_url: str):
-        self.admin_url = admin_url
-        self._names: list[str] = []
-
-    def create(self, service: str) -> str:
-        name = f"test_{secrets.token_hex(4)}_{service}"
-        with psycopg.connect(self.admin_url, autocommit=True) as conn:
-            conn.execute(f'CREATE DATABASE "{name}"')
-        self._names.append(name)
-        return make_conninfo(self.admin_url, dbname=name)
-
-    def drop(self, name_or_url: str) -> None:
-        name = conninfo_to_dict(name_or_url)["dbname"] if "=" in name_or_url or "://" in name_or_url else name_or_url
-        with psycopg.connect(self.admin_url, autocommit=True) as conn:
-            conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
-        if name in self._names:
-            self._names.remove(name)
-
-    def drop_all(self) -> None:
-        for name in list(self._names):
-            self.drop(name)
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Print a failure the moment it happens when TEST_LIVE_FAILURES is set (pytest's own report comes only at the
+    end, and a hung teardown can stop it from ever coming): this is how the intermittent suite hang was traced."""
+    outcome = yield
+    report = outcome.get_result()
+    if report.failed and os.environ.get("TEST_LIVE_FAILURES"):
+        sys.__stderr__.write(f"\n===== LIVE FAILURE {report.nodeid} ({report.when}) =====\n{report.longreprtext}\n")
+        sys.__stderr__.flush()
 
 
 @pytest.fixture(scope="session")
@@ -108,39 +69,17 @@ def temp_dbs(admin_url):
     yield dbs
     dbs.drop_all()
 
-
 @pytest.fixture(scope="session")
 def loop_thread():
-    lt = LoopThread()
+    lt = get_loop_thread()
     yield lt
     lt.close()
+    harness._LOOP_THREAD.clear()
 
 
 @pytest.fixture(scope="session")
 def seed_dir(tmp_path_factory):
     return write_seed_dir(tmp_path_factory.mktemp("seed"))
-
-
-@dataclass
-class Running:
-    """A started service: `addr` for clients, `url` for direct DB inspection by tests, `service` to stop it."""
-
-    service: object
-    addr: str
-    url: str
-
-
-def start(loop_thread: LoopThread, dbs: TempDatabases, name: str, create, **opts) -> Running:
-    url = dbs.create(name)
-    service = loop_thread.call(create(url, **opts))
-    loop_thread.call(service.start())
-    return Running(service, f"127.0.0.1:{service.port}", url)
-
-
-def stop(loop_thread: LoopThread, dbs: TempDatabases, running: Running) -> None:
-    loop_thread.call(running.service.stop(0.2))
-    dbs.drop(running.url)
-
 
 @pytest.fixture(scope="session")
 def catalog_running(loop_thread, session_dbs, seed_dir):
@@ -192,3 +131,107 @@ def inventory(inventory_running):
 def customer(customer_running):
     with grpc.insecure_channel(customer_running.addr) as ch:
         yield pb_grpc.CustomerServiceStub(ch)
+
+
+@pytest.fixture
+def payment_running(loop_thread, temp_dbs, seed_dir):
+    """A fresh payment service per test, with no artificial latency."""
+    from services.payment.server import create_service
+    r = start(loop_thread, temp_dbs, "payment", create_service, seed_dir=seed_dir, latency_ms=0)
+    yield r
+    stop(loop_thread, temp_dbs, r)
+
+
+@pytest.fixture
+def payment(payment_running):
+    with grpc.insecure_channel(payment_running.addr) as ch:
+        yield pb_grpc.PaymentServiceStub(ch)
+
+
+@dataclass
+class Stack:
+    """Inventory + payment + order services wired together (the catalog is shared), each on its own database."""
+
+    inventory: Running
+    payment: Running
+    order: Running
+    loop_thread: LoopThread
+    dbs: TempDatabases
+    create_order: object
+    order_opts: dict
+
+    def restart_order(self, **overrides) -> Running:
+        """Stop the order service (as a crash would, in-flight sagas die with it) and start a new one on the same database."""
+        self.loop_thread.call(self.order.service.stop(0.1))
+        opts = {**self.order_opts, **overrides}
+        service = self.loop_thread.call(self.create_order(self.order.url, **opts))
+        self.loop_thread.call(service.start())
+        self.order = Running(service, f"127.0.0.1:{service.port}", self.order.url)
+        return self.order
+
+
+@pytest.fixture
+def make_stack(loop_thread, temp_dbs, seed_dir, catalog_running):
+    from services.inventory.server import create_service as create_inventory
+    from services.order.server import create_service as create_order
+    from services.payment.server import create_service as create_payment
+
+    stacks: list[Stack] = []
+
+    def make(*, payment_latency_ms=0, fault=None, reservation_ttl_seconds=0, recovery_min_age_seconds=60, **order_extra) -> Stack:
+        inv_opts = dict(seed_dir=seed_dir, sweep_seconds=3600)
+        pay_opts = dict(seed_dir=seed_dir, latency_ms=payment_latency_ms)
+        # the three databases are cloned side by side (each clone is mostly waiting on the disk)
+        templates = {n: _template_for(loop_thread, temp_dbs, n, c, o) for n, c, o in (
+            ("inventory", create_inventory, inv_opts), ("payment", create_payment, pay_opts),
+            ("orders", create_order, dict(seed_dir=seed_dir, catalog_addr=catalog_running.addr, inventory_addr="x", payment_addr="y", **order_extra)))}
+        with ThreadPoolExecutor(3) as pool:
+            urls = dict(zip(templates, pool.map(lambda n: temp_dbs.create(n, template=templates[n]), templates)))
+        inventory = start(loop_thread, temp_dbs, "inventory", create_inventory, url=urls["inventory"], **inv_opts)
+        payment = start(loop_thread, temp_dbs, "payment", create_payment, url=urls["payment"], **pay_opts)
+        opts = dict(
+            seed_dir=seed_dir, catalog_addr=catalog_running.addr, inventory_addr=inventory.addr, payment_addr=payment.addr,
+            fault=fault, reservation_ttl_seconds=reservation_ttl_seconds, recovery_min_age_seconds=recovery_min_age_seconds,
+            fulfilment=False,  # tests advance orders explicitly (fulfilment.advance_due) unless they opt in
+        )
+        opts.update(order_extra)
+        order = start(loop_thread, temp_dbs, "orders", create_order, url=urls["orders"], **opts)
+        stack = Stack(inventory, payment, order, loop_thread, temp_dbs, create_order, opts)
+        stacks.append(stack)
+        return stack
+
+    yield make
+    for s in stacks:
+        for running in (s.order, s.payment, s.inventory):
+            stop(loop_thread, temp_dbs, running)
+
+
+@pytest.fixture(scope="session")
+def payment_ro_running(loop_thread, session_dbs, seed_dir):
+    """Session-wide payment + order services for read-only API tests (health, wiring); mutation tests use `make_stack`."""
+    from services.payment.server import create_service
+    r = start(loop_thread, session_dbs, "payment", create_service, seed_dir=seed_dir, latency_ms=0)
+    yield r
+    stop(loop_thread, session_dbs, r)
+
+
+@pytest.fixture(scope="session")
+def order_ro_running(loop_thread, session_dbs, seed_dir, catalog_running, inventory_ro_running, payment_ro_running):
+    from services.order.server import create_service
+    r = start(
+        loop_thread, session_dbs, "orders", create_service, seed_dir=seed_dir, catalog_addr=catalog_running.addr,
+        inventory_addr=inventory_ro_running.addr, payment_addr=payment_ro_running.addr,
+    )
+    yield r
+    stop(loop_thread, session_dbs, r)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Print a failure the moment it happens when TEST_LIVE_FAILURES is set (pytest's own report comes only at the
+    end, and a hung teardown can stop it from ever coming): this is how the intermittent suite hang was traced."""
+    outcome = yield
+    report = outcome.get_result()
+    if report.failed and os.environ.get("TEST_LIVE_FAILURES"):
+        sys.__stderr__.write(f"\n===== LIVE FAILURE {report.nodeid} ({report.when}) =====\n{report.longreprtext}\n")
+        sys.__stderr__.flush()

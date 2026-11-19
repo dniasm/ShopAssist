@@ -1,0 +1,7 @@
+.blocks { display: grid; gap: var(--gap); }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 20px; min-width: 0; }
+.head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 16px; }
+.actions { display: flex; align-items: center; gap: 12px; flex: none; }
+.stamp { color: var(--faint); font-size: var(--fs-small); }
+p.finding[data-tone="bad"] { color: var(--negative); font-weight: 500; }
+@media (max-width: 640px) { .panel { padding: 16px; } }

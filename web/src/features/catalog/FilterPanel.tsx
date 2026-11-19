@@ -29,7 +29,7 @@ export function FilterPanel({ query, facets, priceMinCents, priceMaxCents, onCha
       <Group title="Colour" count={query.color.length}>
         <CheckList options={facetOptions(facets, "color", query.color)} onToggle={toggle("color")} name="color" swatches limit={8} />
       </Group>
-      <Group title="Size" count={query.size.length}>
+      <Group title="Sizes offered" count={query.size.length}>
         <SizeChips options={facetOptions(facets, "size", query.size)} onToggle={toggle("size")} />
       </Group>
       <Group title="Price" count={query.minPriceCents !== null || query.maxPriceCents !== null ? 1 : 0}>

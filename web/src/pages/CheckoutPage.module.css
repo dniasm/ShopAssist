@@ -1,0 +1,18 @@
+/* Grid at 1440: canvas 1200 = form 720 + gap 48 + summary 432 (the summary keeps a readable measure). */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 432px); gap: 48px; align-items: start; }
+.main { display: grid; gap: 28px; min-width: 0; max-width: 720px; }
+.side { display: grid; gap: 14px; padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); min-width: 0; }
+.place { display: grid; gap: 10px; justify-items: start; }
+.error { padding: 8px 10px; border-radius: var(--radius-control); background: var(--pill-negative-bg); color: var(--pill-negative-ink); max-width: 60ch; }
+.blocked { display: grid; gap: 8px; justify-items: start; padding: 12px 14px; border-radius: var(--radius-control); background: var(--pill-warning-bg); color: var(--pill-warning-ink); border: 1px solid var(--notice-border); }
+.blocked ul { margin: 0; padding-left: 18px; }
+.blocked :global(.btn) { background: var(--surface); color: var(--text); }
+.skel { display: grid; gap: 12px; align-content: start; }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .side { order: -1; }
+}
+@media (max-width: 640px) {
+  .place :global(.btn) { width: 100%; }
+}

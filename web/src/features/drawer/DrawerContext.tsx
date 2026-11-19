@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-/** The right-hand drawer is one slot with several occupants. 5.2 puts the cart in it, 5.4 the chat. */
-export type DrawerKind = "cart" | "chat";
+/** The right-hand drawer is one slot. The cart is its only occupant today. */
+export type DrawerKind = "cart";
 
 interface DrawerValue {
   open: DrawerKind | null;

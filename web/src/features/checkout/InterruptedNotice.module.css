@@ -1,0 +1,7 @@
+.notice {
+  display: grid; gap: 12px; padding: 20px; border-radius: var(--radius-card);
+  background: var(--pill-warning-bg); color: var(--pill-warning-ink); border: 1px solid var(--notice-border);
+}
+.notice :global(.muted) { color: inherit; opacity: 0.85; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.actions :global(.btn) { background: var(--surface); color: var(--text); }

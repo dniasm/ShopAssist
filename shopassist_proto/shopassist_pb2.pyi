@@ -209,14 +209,16 @@ class GetSkusResponse(_message.Message):
     def __init__(self, items: _Optional[_Iterable[_Union[SkuWithProduct, _Mapping]]] = ...) -> None: ...
 
 class SkuWithProduct(_message.Message):
-    __slots__ = ("sku", "name", "price_cents")
+    __slots__ = ("sku", "name", "price_cents", "category")
     SKU_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    CATEGORY_FIELD_NUMBER: _ClassVar[int]
     sku: Sku
     name: str
     price_cents: int
-    def __init__(self, sku: _Optional[_Union[Sku, _Mapping]] = ..., name: _Optional[str] = ..., price_cents: _Optional[int] = ...) -> None: ...
+    category: str
+    def __init__(self, sku: _Optional[_Union[Sku, _Mapping]] = ..., name: _Optional[str] = ..., price_cents: _Optional[int] = ..., category: _Optional[str] = ...) -> None: ...
 
 class StockLevel(_message.Message):
     __slots__ = ("sku_id", "product_id", "on_hand", "reserved", "available")
@@ -430,8 +432,14 @@ class RefundResponse(_message.Message):
     status: PaymentStatus
     def __init__(self, refund_id: _Optional[str] = ..., status: _Optional[_Union[PaymentStatus, str]] = ...) -> None: ...
 
+class LookupChargeRequest(_message.Message):
+    __slots__ = ("idempotency_key",)
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    idempotency_key: str
+    def __init__(self, idempotency_key: _Optional[str] = ...) -> None: ...
+
 class OrderLine(_message.Message):
-    __slots__ = ("sku_id", "product_id", "name", "size", "color", "quantity", "unit_price_cents")
+    __slots__ = ("sku_id", "product_id", "name", "size", "color", "quantity", "unit_price_cents", "category")
     SKU_ID_FIELD_NUMBER: _ClassVar[int]
     PRODUCT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
@@ -439,6 +447,7 @@ class OrderLine(_message.Message):
     COLOR_FIELD_NUMBER: _ClassVar[int]
     QUANTITY_FIELD_NUMBER: _ClassVar[int]
     UNIT_PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    CATEGORY_FIELD_NUMBER: _ClassVar[int]
     sku_id: str
     product_id: str
     name: str
@@ -446,7 +455,8 @@ class OrderLine(_message.Message):
     color: str
     quantity: int
     unit_price_cents: int
-    def __init__(self, sku_id: _Optional[str] = ..., product_id: _Optional[str] = ..., name: _Optional[str] = ..., size: _Optional[str] = ..., color: _Optional[str] = ..., quantity: _Optional[int] = ..., unit_price_cents: _Optional[int] = ...) -> None: ...
+    category: str
+    def __init__(self, sku_id: _Optional[str] = ..., product_id: _Optional[str] = ..., name: _Optional[str] = ..., size: _Optional[str] = ..., color: _Optional[str] = ..., quantity: _Optional[int] = ..., unit_price_cents: _Optional[int] = ..., category: _Optional[str] = ...) -> None: ...
 
 class OrderEvent(_message.Message):
     __slots__ = ("event_id", "order_id", "status", "message", "timestamp")

@@ -5,5 +5,8 @@
 .input { width: 44px; border: 0; background: transparent; text-align: center; font-weight: 500; appearance: textfield; -moz-appearance: textfield; }
 .input::-webkit-outer-spin-button, .input::-webkit-inner-spin-button { appearance: none; margin: 0; }
 .input:disabled { color: var(--faint); }
+.group[data-compact="true"] { height: 32px; }
+.group[data-compact="true"] .button { width: 32px; }
+.group[data-compact="true"] .input { width: 36px; }
 .group:focus-within { outline: 2px solid var(--data); outline-offset: 2px; }
 .group :focus-visible { outline: none; }

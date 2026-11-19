@@ -146,10 +146,337 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Cart */
+        get: operations["get_cart_api_cart_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cart/lines/{sku_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Line
+         * @description Set a line's quantity (0 removes it). Adding checks the SKU exists, so the cart never holds made-up items.
+         */
+        put: operations["put_line_api_cart_lines__sku_id__put"];
+        post?: never;
+        /**
+         * Delete Line
+         * @description Removing never needs the SKU to still exist in the catalog, so stale lines can always be cleared.
+         */
+        delete: operations["delete_line_api_cart_lines__sku_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Orders */
+        get: operations["list_orders_api_orders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Order */
+        get: operations["get_order_api_orders__order_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Order
+         * @description Cancel a CONFIRMED or PACKED order (stock back, card refunded). Anything else is 409 `conflict`; a retry with the same key is safe.
+         */
+        post: operations["cancel_order_api_orders__order_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Checkout */
+        post: operations["checkout_api_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ws/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * WebSocket message types (schema only)
+         * @description Exists only so `/openapi.json` carries the WebSocket message types for the generated frontend types.
+         */
+        get: operations["ws_schema_api_ws_schema_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CancelIn */
+        CancelIn: {
+            /** Idempotency Key */
+            idempotency_key: string;
+        };
+        /** CartLine */
+        CartLine: {
+            /** Sku Id */
+            sku_id: string;
+            /** Product Id */
+            product_id: string;
+            /** Name */
+            name: string;
+            /** Category */
+            category: string;
+            /** Size */
+            size: string;
+            /** Color */
+            color: string;
+            /** Quantity */
+            quantity: number;
+            /** Unit Price Cents */
+            unit_price_cents: number;
+            /** Line Total Cents */
+            line_total_cents: number;
+            /** Available */
+            available: number;
+        };
+        /** CartLineIn */
+        CartLineIn: {
+            /**
+             * Quantity
+             * @description 0 removes the line
+             */
+            quantity: number;
+        };
+        /** CartOut */
+        CartOut: {
+            /** Lines */
+            lines: components["schemas"]["CartLine"][];
+            /** Subtotal Cents */
+            subtotal_cents: number;
+            /** Shipping Cents */
+            shipping_cents: number;
+            /** Total Cents */
+            total_cents: number;
+            /** Version */
+            version: number;
+        };
+        /** CheckoutDone */
+        CheckoutDone: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "checkout";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "done";
+            data: components["schemas"]["CheckoutDoneData"];
+        };
+        /** CheckoutDoneData */
+        CheckoutDoneData: {
+            order: components["schemas"]["Order"];
+        };
+        /**
+         * CheckoutFailed
+         * @description The checkout definitely did not happen: nothing is charged, nothing is held.
+         */
+        CheckoutFailed: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "checkout";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "failed";
+            data: components["schemas"]["CheckoutFailedData"];
+        };
+        /** CheckoutFailedData */
+        CheckoutFailedData: {
+            /** Order Id */
+            order_id: string;
+            /** Reason */
+            reason: string;
+            /** Shortages */
+            shortages?: components["schemas"]["Shortage"][] | null;
+        };
+        /** CheckoutIn */
+        CheckoutIn: {
+            /** Idempotency Key */
+            idempotency_key: string;
+            /**
+             * Payment Method
+             * @enum {string}
+             */
+            payment_method: "card_ok" | "card_declined" | "card_flaky";
+        };
+        /**
+         * CheckoutInterrupted
+         * @description We lost contact mid-checkout. The outcome is UNKNOWN and recovery will settle it; never show success or failure.
+         */
+        CheckoutInterrupted: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "checkout";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "interrupted";
+            data: components["schemas"]["CheckoutInterruptedData"];
+        };
+        /** CheckoutInterruptedData */
+        CheckoutInterruptedData: {
+            /** Order Id */
+            order_id: string;
+            /** Message */
+            message: string;
+        };
+        /** CheckoutOut */
+        CheckoutOut: {
+            /** Order Id */
+            order_id: string;
+        };
+        /** CheckoutStep */
+        CheckoutStep: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "checkout";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "step";
+            data: components["schemas"]["CheckoutStepData"];
+        };
+        /** CheckoutStepData */
+        CheckoutStepData: {
+            /** Order Id */
+            order_id: string;
+            /**
+             * Step
+             * @enum {string}
+             */
+            step: "VALIDATING" | "RESERVING" | "CHARGING" | "CONFIRMING" | "COMPENSATING";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "STARTED" | "SUCCEEDED" | "FAILED";
+            /** Message */
+            message: string;
+            /** Shortages */
+            shortages?: components["schemas"]["Shortage"][] | null;
+        };
+        /** EmptyData */
+        EmptyData: Record<string, never>;
         /** ErrorBody */
         ErrorBody: {
             /**
@@ -193,6 +520,15 @@ export interface components {
              */
             status: "ok";
         };
+        /** HelloData */
+        HelloData: {
+            user: components["schemas"]["User"];
+            /**
+             * Seq
+             * @description The user's latest event number; reconnect with ?after=<last seq you saw>.
+             */
+            seq: number;
+        };
         /** LlmKeyStatus */
         LlmKeyStatus: {
             /** Key */
@@ -234,6 +570,141 @@ export interface components {
         /** MeOut */
         MeOut: {
             user: components["schemas"]["User"];
+        };
+        /** Order */
+        Order: {
+            /** Order Id */
+            order_id: string;
+            /** User Id */
+            user_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "PENDING" | "CONFIRMED" | "PACKED" | "SHIPPED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED" | "FAILED";
+            /** Lines */
+            lines: components["schemas"]["OrderLine"][];
+            /** Subtotal Cents */
+            subtotal_cents: number;
+            /** Shipping Cents */
+            shipping_cents: number;
+            /** Total Cents */
+            total_cents: number;
+            /** Payment Id */
+            payment_id: string;
+            /** Failure Reason */
+            failure_reason: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** History */
+            history: components["schemas"]["OrderEvent"][];
+        };
+        /** OrderEvent */
+        OrderEvent: {
+            /** Event Id */
+            event_id: number;
+            /** Order Id */
+            order_id: string;
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+            /** Timestamp */
+            timestamp: string;
+        };
+        /** OrderLine */
+        OrderLine: {
+            /** Sku Id */
+            sku_id: string;
+            /** Product Id */
+            product_id: string;
+            /** Name */
+            name: string;
+            /** Category */
+            category: string;
+            /** Size */
+            size: string;
+            /** Color */
+            color: string;
+            /** Quantity */
+            quantity: number;
+            /** Unit Price Cents */
+            unit_price_cents: number;
+            /** Line Total Cents */
+            line_total_cents: number;
+        };
+        /** OrderOut */
+        OrderOut: {
+            order: components["schemas"]["Order"];
+        };
+        /** OrderStatus */
+        OrderStatus: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "order";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "status";
+            data: components["schemas"]["OrderStatusData"];
+        };
+        /** OrderStatusData */
+        OrderStatusData: {
+            /** Order Id */
+            order_id: string;
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+            /** Event Id */
+            event_id: number;
+        };
+        /** OrderSummary */
+        OrderSummary: {
+            /** Order Id */
+            order_id: string;
+            /** User Id */
+            user_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "PENDING" | "CONFIRMED" | "PACKED" | "SHIPPED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED" | "FAILED";
+            /** Lines */
+            lines: components["schemas"]["OrderLine"][];
+            /** Subtotal Cents */
+            subtotal_cents: number;
+            /** Shipping Cents */
+            shipping_cents: number;
+            /** Total Cents */
+            total_cents: number;
+            /** Payment Id */
+            payment_id: string;
+            /** Failure Reason */
+            failure_reason: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** OrdersOut */
+        OrdersOut: {
+            /** Orders */
+            orders: components["schemas"]["OrderSummary"][];
+            /** Next Page Token */
+            next_page_token: string;
         };
         /** Product */
         Product: {
@@ -353,6 +824,15 @@ export interface components {
             token: string;
             user: components["schemas"]["User"];
         };
+        /** Shortage */
+        Shortage: {
+            /** Sku Id */
+            sku_id: string;
+            /** Requested */
+            requested: number;
+            /** Available */
+            available: number;
+        };
         /** Sku */
         Sku: {
             /** Sku Id */
@@ -374,6 +854,51 @@ export interface components {
             color: string;
             /** Available */
             available: number;
+        };
+        /** SystemHello */
+        SystemHello: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "system";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "hello";
+            data: components["schemas"]["HelloData"];
+        };
+        /**
+         * SystemResync
+         * @description Your cursor is older than the log (or newer than the server): refetch state instead of trusting the stream.
+         */
+        SystemResync: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "system";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "resync";
+            data: components["schemas"]["EmptyData"];
         };
         /** User */
         User: {
@@ -826,6 +1351,484 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProductDetailResponse"];
                 };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_cart_api_cart_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    put_line_api_cart_lines__sku_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sku_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CartLineIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_line_api_cart_lines__sku_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sku_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_orders_api_orders_get: {
+        parameters: {
+            query?: {
+                page_size?: number;
+                page_token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrdersOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_order_api_orders__order_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_order_api_orders__order_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    checkout_api_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ws_schema_api_ws_schema_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Never returned. Documents every message `/api/ws` can send. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemHello"] | components["schemas"]["SystemResync"] | components["schemas"]["CheckoutStep"] | components["schemas"]["CheckoutDone"] | components["schemas"]["CheckoutFailed"] | components["schemas"]["CheckoutInterrupted"] | components["schemas"]["OrderStatus"];
+                };
+            };
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error envelope */
             401: {

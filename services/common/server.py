@@ -16,6 +16,7 @@ from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from psycopg_pool import AsyncConnectionPool
 
 log = logging.getLogger(__name__)
+STOP_PATIENCE_SECONDS = 5.0  # how long past the grace period we wait for gRPC to finish stopping
 
 
 def listen_address(env_var: str, default: str) -> str:
@@ -33,6 +34,8 @@ class Service:
         self._grpc_names: list[str] = [""]  # "" is the whole-server health entry
         self._background: list[Callable[[], Coroutine[Any, Any, None]]] = []
         self._tasks: list[asyncio.Task] = []
+        self._closers: list[Callable[[], Any]] = []
+        self._pre_stops: list[Callable[[], Any]] = []
         self.port = 0
 
     def register(self, add_to_server: Callable, servicer: Any, grpc_name: str) -> None:
@@ -43,6 +46,15 @@ class Service:
     def run_in_background(self, coro_fn: Callable[[], Coroutine[Any, Any, None]]) -> None:
         """A loop (sweeper, worker) started with the server and cancelled before it stops."""
         self._background.append(coro_fn)
+
+    def add_pre_stop(self, hook: Callable[[], Any]) -> None:
+        """Awaitable run at the start of stop(), BEFORE the gRPC server stops: end long-lived streams here, so shutdown
+        does not depend on gRPC cancelling them."""
+        self._pre_stops.append(hook)
+
+    def add_closer(self, closer: Callable[[], Any]) -> None:
+        """Awaitable cleanup run during stop(), after background tasks are cancelled and before the pool closes."""
+        self._closers.append(closer)
 
     def bind(self, address: str) -> int:
         self.port = self.server.add_insecure_port(address)
@@ -63,7 +75,15 @@ class Service:
         for t in self._tasks:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
-        await self.server.stop(grace)
+        for hook in self._pre_stops:
+            await hook()
+        try:
+            # grpc.aio's Server.stop() can wait forever on an open streaming call; a stuck shutdown must not wedge the process.
+            await asyncio.wait_for(self.server.stop(grace), timeout=grace + STOP_PATIENCE_SECONDS)
+        except asyncio.TimeoutError:
+            log.warning("%s: the gRPC server did not stop within %.1fs; continuing the shutdown", self.name, grace + STOP_PATIENCE_SECONDS)
+        for closer in self._closers:
+            await closer()
         await self.pool.close()
         log.info("%s stopped", self.name)
 

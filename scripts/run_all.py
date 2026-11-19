@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import errno
-import importlib.util
 import os
 import shutil
 import signal
@@ -129,10 +128,13 @@ def build_plan(env: Mapping[str, str], module_exists: Callable[[str], bool],
 
 
 def module_exists(module: str) -> bool:
-    try:
-        return importlib.util.find_spec(module) is not None
-    except (ImportError, ValueError):  # a missing parent package raises ModuleNotFoundError (an ImportError)
-        return False
+    """Whether `python -m <module>` would find it from the repo root (the children's cwd).
+
+    Checked on disk, not with find_spec: this script runs as scripts/run_all.py, so the repo root is not on
+    sys.path here and find_spec would miss modules that the children can import fine.
+    """
+    base = REPO_ROOT.joinpath(*module.split("."))
+    return base.with_suffix(".py").is_file() or (base / "__main__.py").is_file()
 
 
 def port_in_use(port: int, host_candidates: tuple[str, ...] = ("127.0.0.1", "::1")) -> bool:

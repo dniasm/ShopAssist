@@ -2,7 +2,8 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 // The API (FastAPI orchestrator) listens on 8011. Never point this at 8000: that is another app.
-const API_TARGET = "http://localhost:8011";
+// API_TARGET lets a second dev server point at something else (a throwaway mock, a staging API); the default is the real stack.
+const API_TARGET = process.env.API_TARGET ?? "http://localhost:8011";
 
 export default defineConfig({
   plugins: [react()],

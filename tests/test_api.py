@@ -5,7 +5,7 @@ import socket
 import time
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.conftest import AppClient
 
 from orchestrator.app import create_app
 from orchestrator.settings import Settings
@@ -13,17 +13,17 @@ from tests.fixtures import INVENTORY, PRODUCTS, SKUS, USERS
 
 
 @pytest.fixture(scope="module")
-def settings(catalog_running, inventory_ro_running, customer_running):
+def settings(catalog_running, inventory_ro_running, customer_running, order_ro_running, payment_ro_running):
     return Settings(
-        catalog_addr=catalog_running.addr, inventory_addr=inventory_ro_running.addr,
-        customer_addr=customer_running.addr, session_secret="test-secret", llm_api_keys=(),
+        catalog_addr=catalog_running.addr, inventory_addr=inventory_ro_running.addr, customer_addr=customer_running.addr,
+        order_addr=order_ro_running.addr, payment_addr=payment_ro_running.addr, session_secret="test-secret", llm_api_keys=(),
     )
 
 
 @pytest.fixture(scope="module")
 def client(settings, tmp_path_factory):
     dist = tmp_path_factory.mktemp("dist")
-    with TestClient(create_app(settings, web_dist=dist / "missing")) as c:
+    with AppClient(create_app(settings, web_dist=dist / "missing")) as c:
         yield c
 
 
@@ -55,7 +55,7 @@ def test_health(client):
 def test_services_health_uses_grpc_health_for_each_service(client, settings):
     body = client.get("/api/health/services").json()
     assert body["all_up"] is True and body["checked_at"]
-    assert [s["name"] for s in body["services"]] == ["catalog", "inventory", "customer"]
+    assert [s["name"] for s in body["services"]] == ["catalog", "inventory", "order", "customer", "payment"]
     for s in body["services"]:
         assert s["status"] == "up" and s["error"] is None and s["latency_ms"] >= 0
         assert s["service"].startswith("shopassist.v2.") and ":" in s["address"]
@@ -63,12 +63,13 @@ def test_services_health_uses_grpc_health_for_each_service(client, settings):
 
 def test_services_health_reports_a_dead_service_without_failing(settings):
     dead = Settings(**{**settings.__dict__, "inventory_addr": f"127.0.0.1:{free_port()}"})
-    with TestClient(create_app(dead)) as c:
+    with AppClient(create_app(dead)) as c:
         r = c.get("/api/health/services")
     assert r.status_code == 200
     body = r.json()
     assert body["all_up"] is False
-    assert {s["name"]: s["status"] for s in body["services"]} == {"catalog": "up", "inventory": "down", "customer": "up"}
+    assert {s["name"]: s["status"] for s in body["services"]} == {
+        "catalog": "up", "inventory": "down", "order": "up", "customer": "up", "payment": "up"}
     assert next(s for s in body["services"] if s["name"] == "inventory")["error"]
 
 
@@ -83,7 +84,7 @@ def test_llm_status_without_keys(client):
 
 def test_users_lists_demo_users(client):
     users = client.get("/api/users").json()["users"]
-    assert users == sorted(USERS, key=lambda u: u["user_id"])
+    assert users == sorted(USERS, key=lambda u: u["user_id"]) and len(users) == 12
 
 
 def test_session_returns_token_and_user_and_me_accepts_it(client):
@@ -111,13 +112,13 @@ def test_me_requires_a_valid_token(client, settings):
     good = sign_in(client)["Authorization"]
     error(client.get("/api/me", headers={"Authorization": good[:-3] + "xyz"}), 401, "unauthenticated")  # tampered
     other = Settings(**{**settings.__dict__, "session_secret": "another-secret"})
-    with TestClient(create_app(other)) as c2:
+    with AppClient(create_app(other)) as c2:
         error(c2.get("/api/me", headers={"Authorization": good}), 401, "unauthenticated")  # signed with a different key
 
 
 def test_expired_token_is_rejected(settings):
     short = Settings(**{**settings.__dict__, "session_max_age_seconds": -1})
-    with TestClient(create_app(short)) as c:
+    with AppClient(create_app(short)) as c:
         headers = sign_in(c)
         error(c.get("/api/me", headers=headers), 401, "unauthenticated")
 
@@ -153,7 +154,7 @@ def test_in_stock_matches_inventory_for_every_product(client):
 
 
 def test_a_products_page_costs_exactly_one_batched_get_stock(settings):
-    with TestClient(create_app(settings)) as c:
+    with AppClient(create_app(settings)) as c:
         stub = c.app.state.clients.inventory
         calls = []
         original = stub.GetStock
@@ -207,7 +208,7 @@ def test_unknown_api_path_is_a_json_not_found(client):
 
 def test_unavailable_service_gives_503_naming_the_service(settings):
     dead = Settings(**{**settings.__dict__, "catalog_addr": f"127.0.0.1:{free_port()}"})
-    with TestClient(create_app(dead)) as c:
+    with AppClient(create_app(dead)) as c:
         started = time.monotonic()
         err = error(c.get("/api/products"), 503, "unavailable")
     assert err["details"]["service"] == "catalog"
@@ -235,7 +236,7 @@ def test_spa_fallback_serves_index_for_client_side_routes_but_not_for_api(settin
     (tmp_path / "assets").mkdir()
     (tmp_path / "index.html").write_text("<html>app</html>")
     (tmp_path / "assets" / "app.js").write_text("console.log(1)")
-    with TestClient(create_app(settings, web_dist=tmp_path)) as c:
+    with AppClient(create_app(settings, web_dist=tmp_path)) as c:
         assert c.get("/").text == "<html>app</html>"
         assert c.get("/products/P-1001?size=M").text == "<html>app</html>"
         assert c.get("/assets/app.js").text == "console.log(1)"

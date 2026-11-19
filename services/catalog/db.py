@@ -208,7 +208,7 @@ async def get_skus(pool: AsyncConnectionPool, sku_ids: list[str]) -> list[dict]:
     """SKUs with their product's name and price (unknown ids are skipped)."""
     async with pool.connection() as conn:
         cur = await conn.execute(
-            "SELECT s.sku_id, s.product_id, s.size, s.color, p.name, p.price_cents"
+            "SELECT s.sku_id, s.product_id, s.size, s.color, p.name, p.price_cents, p.category"
             " FROM skus s JOIN products p USING (product_id) WHERE s.sku_id = ANY(%s) ORDER BY s.sku_id",
             (sku_ids,),
         )

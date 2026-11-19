@@ -23,6 +23,7 @@
   display: block; width: 100%; padding: 0 10px; height: 34px; text-align: left; border: 0; border-radius: var(--radius-control);
   background: transparent;
 }
+.item { display: flex; align-items: center; text-decoration: none; }
 .item:hover { background: var(--raised); }
 
 @media (max-width: 720px) {

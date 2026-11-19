@@ -23,10 +23,16 @@ def migration_files(directory: Path) -> list[Path]:
     return sorted(p for p in directory.glob("*.sql") if p.name[:3].isdigit() and p.name[3:4] == "_")
 
 
-async def apply_migrations(pool: AsyncConnectionPool, directory: Path) -> list[str]:
-    """Run every migration not yet recorded; returns the names applied by this call (empty on a rerun)."""
+async def apply_migrations(pool: AsyncConnectionPool, directory: Path, max_version: int | None = None) -> list[str]:
+    """Run every migration not yet recorded; returns the names applied by this call (empty on a rerun).
+
+    `max_version` stops after migration NNN: tests build a database as it was before a migration, put data in it,
+    then apply the migration to see what it does to rows that already exist.
+    """
     applied_now: list[str] = []
     for path in migration_files(directory):
+        if max_version is not None and int(path.name[:3]) > max_version:
+            break
         async with pool.connection() as conn:
             await conn.execute("SELECT pg_advisory_xact_lock(%s)", (_LOCK_KEY,))
             await conn.execute(_CREATE_TABLE)

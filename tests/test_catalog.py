@@ -221,3 +221,9 @@ def test_fuzzy_is_false_for_normal_empty_and_hopeless_queries(catalog):
 def test_filters_that_empty_a_real_match_do_not_trigger_fuzzy(catalog):
     r = catalog.ListProducts(pb.ListProductsRequest(query="hoodie", categories=["shoes"]))
     assert r.total == 0 and not r.fuzzy
+
+
+def test_get_skus_includes_the_products_category(catalog):
+    sku = SKUS[0]
+    item = catalog.GetSkus(pb.GetSkusRequest(sku_ids=[sku["sku_id"]])).items[0]
+    assert item.category == next(p["category"] for p in PRODUCTS if p["product_id"] == sku["product_id"])

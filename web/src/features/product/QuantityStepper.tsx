@@ -2,12 +2,12 @@ import { Icon } from "../../components/Icon";
 import { clampQuantity } from "./variants";
 import styles from "./QuantityStepper.module.css";
 
-interface Props { value: number; max: number; disabled?: boolean; onChange: (quantity: number) => void }
+interface Props { value: number; max: number; disabled?: boolean; compact?: boolean; onChange: (quantity: number) => void }
 
-export function QuantityStepper({ value, max, disabled = false, onChange }: Props) {
+export function QuantityStepper({ value, max, disabled = false, compact = false, onChange }: Props) {
   const set = (n: number) => onChange(clampQuantity(n, max));
   return (
-    <div className={styles.group} role="group" aria-label="Quantity">
+    <div className={styles.group} data-compact={compact} role="group" aria-label="Quantity">
       <button type="button" className={styles.button} onClick={() => set(value - 1)} disabled={disabled || value <= 1} aria-label="Decrease quantity">
         <Icon name="minus" />
       </button>

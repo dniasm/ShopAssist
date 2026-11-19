@@ -13,7 +13,7 @@ interface Props {
 }
 
 /** A deterministic drawn picture of a product: its category's glyph in its colour. There are no photographs, so this is
- *  the product image everywhere (cards, the product page, later the cart and chat). Same inputs, same drawing. */
+ *  the product image everywhere (cards, the product page, the cart, orders). Same inputs, same drawing. */
 export function ProductTile({ productId, category, color = "grey", label }: Props) {
   const clipId = useId();
   const hex = colorHex(color);

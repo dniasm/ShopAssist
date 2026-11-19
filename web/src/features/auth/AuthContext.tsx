@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { setAuthToken, setUnauthenticatedHandler } from "../../api/client";
 import { createSession, getMe } from "../../api/endpoints";
 import type { User } from "../../api/types";
@@ -11,8 +11,8 @@ interface AuthValue {
   /** Signs in as an existing demo user. Rejects with an ApiError the dialog shows. */
   signIn: (userId: string) => Promise<void>;
   signOut: () => void;
-  /** Opens the "Sign in as" picker from anywhere (e.g. Add to cart when signed out). */
-  openSignIn: () => void;
+  /** Opens the "Sign in as" picker from anywhere. `then` runs once, after a successful sign-in (e.g. finish an Add to cart). */
+  openSignIn: (then?: () => void) => void;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -30,6 +30,7 @@ setAuthToken(initial?.token ?? null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState(initial);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const afterSignIn = useRef<(() => void) | null>(null);
 
   const apply = useCallback((next: typeof initial) => {
     setAuthToken(next?.token ?? null);
@@ -42,7 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (userId: string) => {
     apply(await createSession(userId));
     setPickerOpen(false);
+    const then = afterSignIn.current;
+    afterSignIn.current = null;
+    // Let React commit the new user first, so whatever continues runs as the signed-in shopper.
+    if (then) window.setTimeout(then, 0);
   }, [apply]);
+
+  const closePicker = useCallback(() => { afterSignIn.current = null; setPickerOpen(false); }, []);
 
   // A 401 on any authenticated call means the token expired or was revoked: drop the session.
   useEffect(() => {
@@ -64,13 +71,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     token: session?.token ?? null,
     signIn,
     signOut,
-    openSignIn: () => setPickerOpen(true),
+    openSignIn: (then) => { afterSignIn.current = then ?? null; setPickerOpen(true); },
   }), [session, signIn, signOut]);
 
   return (
     <AuthContext.Provider value={value}>
       {children}
-      <SignInDialog open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={signIn} />
+      <SignInDialog open={pickerOpen} onClose={closePicker} onPick={signIn} />
     </AuthContext.Provider>
   );
 }

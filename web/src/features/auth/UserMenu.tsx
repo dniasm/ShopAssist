@@ -1,4 +1,5 @@
 import { useCallback, useId, useRef, useState } from "react";
+import { Link } from "react-router";
 import { Icon } from "../../components/Icon";
 import { useDismiss } from "../../hooks/useDismiss";
 import { Avatar } from "./Avatar";
@@ -16,7 +17,7 @@ export function UserMenu() {
 
   if (!user) {
     return (
-      <button type="button" className={styles.signIn} onClick={openSignIn} aria-label="Sign in">
+      <button type="button" className={styles.signIn} onClick={() => openSignIn()} aria-label="Sign in">
         <span className={styles.signInText}>Sign in</span>
         <span className={styles.signInIcon}><Icon name="user" size={18} /></span>
       </button>
@@ -44,6 +45,7 @@ export function UserMenu() {
             <span className="muted small">{user.email}</span>
             <span className="muted small">{user.city}</span>
           </div>
+          <Link to="/orders" className={styles.item} onClick={close}>My orders</Link>
           <button type="button" className={styles.item} onClick={() => { close(); openSignIn(); }}>Switch user</button>
           <button type="button" className={styles.item} onClick={() => { close(); signOut(); }}>Sign out</button>
         </div>

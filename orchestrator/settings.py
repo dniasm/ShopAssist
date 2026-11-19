@@ -25,12 +25,19 @@ SECRET_WARNING = "SESSION_SECRET is not set: using a random one, so session toke
 class Settings:
     catalog_addr: str = "localhost:50051"
     inventory_addr: str = "localhost:50052"
+    order_addr: str = "localhost:50053"
     customer_addr: str = "localhost:50054"
+    payment_addr: str = "localhost:50055"  # only health-checked from here: the Order service is the one that charges
     port: int = 8011
     session_secret: str = field(default="", repr=False)  # signs session tokens; secret, so out of repr/logs
     session_max_age_seconds: int = 12 * 3600
     unary_timeout: float = 2.0  # deadline for every unary gRPC call
     health_timeout: float = 1.5  # a health probe must answer quickly or count as down
+    checkout_first_event_timeout: float = 5.0  # POST /checkout waits this long for the order id
+    ws_buffer_size: int = 500  # events kept per user for WebSocket replay
+    ws_keep_seconds: float = 3600  # how long a user's log outlives their last socket
+    order_watch_stop_seconds: float = 30  # a user's order stream stops this long after their last socket closes
+    order_watch_retry_seconds: float = 1.0  # first wait before resuming a dropped order stream (doubles up to 5 s)
     llm_base_url: str = "https://api.groq.com/openai/v1"
     llm_api_keys: tuple[str, ...] = field(default=(), repr=False)  # secrets: keep out of repr/logs
     llm_model: str = "openai/gpt-oss-120b"
@@ -51,7 +58,9 @@ class Settings:
         return cls(
             catalog_addr=env("CATALOG_ADDR") or d.catalog_addr,
             inventory_addr=env("INVENTORY_ADDR") or d.inventory_addr,
+            order_addr=env("ORDER_ADDR") or d.order_addr,
             customer_addr=env("CUSTOMER_ADDR") or d.customer_addr,
+            payment_addr=env("PAYMENT_ADDR") or d.payment_addr,
             port=int(env("ORCHESTRATOR_PORT") or d.port),
             session_secret=env("SESSION_SECRET") or secrets.token_urlsafe(32),  # random: tokens die with the process
             llm_base_url=env("LLM_BASE_URL") or d.llm_base_url,

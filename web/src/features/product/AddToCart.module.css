@@ -1,3 +1,4 @@
+.root { display: grid; gap: 8px; justify-items: start; }
 .wrap { position: relative; display: inline-block; }
 /* a tooltip floats, so it may carry a shadow */
 .tip {
@@ -8,3 +9,4 @@
   pointer-events: none;
 }
 .wrap:hover .tip, .wrap:focus-within .tip { opacity: 1; visibility: visible; transform: none; }
+.problem { max-width: 46ch; padding: 8px 10px; border-radius: var(--radius-control); background: var(--pill-negative-bg); color: var(--pill-negative-ink); }

@@ -1,0 +1,12 @@
+/* A dialog floats, so it may carry the one shadow. The destructive action is outlined in the negative colour, never filled. */
+.dialog {
+  width: min(440px, calc(100vw - 32px)); padding: 0; margin: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--surface); color: var(--text); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.dialog::backdrop { background: var(--scrim); }
+.body { display: grid; gap: 12px; padding: 20px; }
+.actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.danger { color: var(--negative); border-color: var(--negative); }
+.danger:hover { background: var(--pill-negative-bg); }
+.problem { color: var(--negative); }

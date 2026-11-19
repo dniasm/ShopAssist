@@ -186,3 +186,37 @@ def test_check_replay_accepts_same_and_missing_fingerprints_and_rejects_differen
     check_replay("k", None, f)  # rows written before fingerprints existed cannot be compared
     with pytest.raises(KeyReused, match="idempotency key reused with a different request"):
         check_replay("k", f, fingerprint({"x": 2}))
+
+
+# ---------------- a stuck gRPC shutdown must not wedge the process ----------------
+
+def test_stop_gives_up_on_a_gRPC_server_that_will_not_stop_and_still_closes_everything(monkeypatch):
+    """Found by the suite hang: `grpc.aio.Server.stop()` can wait forever on an open streaming call. Stop is bounded."""
+    import asyncio
+    from services.common import server as server_module
+
+    class StuckServer:
+        async def stop(self, grace):
+            await asyncio.Event().wait()  # never returns
+
+    class FakePool:
+        closed = False
+
+        async def close(self):
+            self.closed = True
+
+    async def scenario():
+        service = server_module.Service("stuck", FakePool())
+        service.server = StuckServer()
+        order = []
+        service.add_pre_stop(lambda: _record(order, "pre"))
+        service.add_closer(lambda: _record(order, "closer"))
+        await asyncio.wait_for(service.stop(grace=0.1), timeout=5)  # the test itself must not hang if the fix is missing
+        return order, service.pool.closed
+
+    async def _record(order, name):
+        order.append(name)
+
+    monkeypatch.setattr(server_module, "STOP_PATIENCE_SECONDS", 0.3)
+    order, closed = run(scenario())
+    assert order == ["pre", "closer"] and closed  # pre-stop hooks first, then (after giving up waiting) closers and the pool

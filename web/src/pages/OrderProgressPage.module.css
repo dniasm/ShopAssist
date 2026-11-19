@@ -1,0 +1,10 @@
+/* Grid at 1440: canvas 1200 = progress 360 + gap 48 + result 792 (the result panel never gets wider than its measure). */
+.layout { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 48px; align-items: start; }
+.progress { display: grid; gap: 16px; padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); min-width: 0; }
+.result { min-width: 0; max-width: 720px; }
+.waiting { min-height: 20px; }
+.id { font: 400 13px/20px var(--mono); }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+}

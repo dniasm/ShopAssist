@@ -1,0 +1,13 @@
+.summary { display: grid; gap: 12px; }
+.lines { list-style: none; margin: 0; padding: 0; display: grid; }
+.line { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.line:last-child { border-bottom: 0; }
+.what { display: grid; gap: 2px; min-width: 0; }
+.name { font-weight: 500; overflow-wrap: anywhere; }
+.amount { white-space: nowrap; }
+.sums { margin: 0; display: grid; gap: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
+.sums > div { display: flex; justify-content: space-between; gap: 12px; }
+.sums dt { color: var(--muted); }
+.sums dd { margin: 0; }
+.sums .total { padding-top: 8px; margin-top: 4px; border-top: 1px solid var(--rule); font-size: var(--fs-section); font-weight: 600; }
+.sums .total dt { color: var(--text); }

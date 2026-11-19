@@ -25,3 +25,33 @@ def product(p: pb.Product) -> dict:
 
 def facet(f: pb.Facet) -> dict:
     return {"field": f.field, "values": [{"value": v.value, "count": v.count} for v in f.values]}
+
+
+def order_line(l: pb.OrderLine) -> dict:
+    return {
+        "sku_id": l.sku_id, "product_id": l.product_id, "name": l.name, "category": l.category, "size": l.size,
+        "color": l.color, "quantity": l.quantity, "unit_price_cents": l.unit_price_cents, "line_total_cents": l.quantity * l.unit_price_cents,
+    }
+
+
+def order_event(e: pb.OrderEvent) -> dict:
+    return {"event_id": e.event_id, "order_id": e.order_id, "status": pb.OrderStatus.Name(e.status),
+            "message": e.message, "timestamp": e.timestamp}
+
+
+def order_summary(o: pb.Order) -> dict:
+    """An order without its history (what lists return)."""
+    return {
+        "order_id": o.order_id, "user_id": o.user_id, "status": pb.OrderStatus.Name(o.status),
+        "lines": [order_line(l) for l in o.lines], "subtotal_cents": o.subtotal_cents, "shipping_cents": o.shipping_cents,
+        "total_cents": o.total_cents, "payment_id": o.payment_id, "failure_reason": o.failure_reason,
+        "created_at": o.created_at, "updated_at": o.updated_at,
+    }
+
+
+def order(o: pb.Order) -> dict:
+    return {**order_summary(o), "history": [order_event(e) for e in o.history]}
+
+
+def shortage(s: pb.Shortage) -> dict:
+    return {"sku_id": s.sku_id, "requested": s.requested, "available": s.available}

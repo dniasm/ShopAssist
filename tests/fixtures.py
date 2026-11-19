@@ -74,6 +74,26 @@ def build_inventory(skus: list[dict]) -> list[dict]:
 USERS = [
     {"user_id": "U-01", "name": "Ada Lovelace", "email": "ada@example.test", "city": "London"},
     {"user_id": "U-02", "name": "Grace Hopper", "email": "grace@example.test", "city": "New York"},
+    # spare users, so tests that mutate carts or orders can each use their own
+    *({"user_id": f"U-{n:02d}", "name": f"Test User {n}", "email": f"u{n}@example.test", "city": "Testville"} for n in range(3, 13)),
+]
+
+# Two historic orders (one delivered, one cancelled and refunded), with the payments behind them.
+_LINE = {"sku_id": "SKU-100001", "product_id": "P-1001", "name": "Seed Item", "size": "ONE", "color": "black",
+         "quantity": 1, "unit_price_cents": 6000, "line_total_cents": 6000}
+SEED_ORDERS = [
+    {"order_id": "O-10001", "user_id": "U-01", "status": "DELIVERED", "lines": [_LINE], "subtotal_cents": 6000,
+     "shipping_cents": 0, "total_cents": 6000, "created_at": "2026-01-02T10:00:00Z", "updated_at": "2026-01-04T10:00:00Z",
+     "events": [{"status": "CONFIRMED", "message": "Order confirmed.", "timestamp": "2026-01-02T10:00:00Z"},
+                {"status": "DELIVERED", "message": "Delivered.", "timestamp": "2026-01-04T10:00:00Z"}]},
+    {"order_id": "O-10002", "user_id": "U-02", "status": "CANCELLED", "lines": [_LINE], "subtotal_cents": 6000,
+     "shipping_cents": 0, "total_cents": 6000, "created_at": "2026-01-03T10:00:00Z", "updated_at": "2026-01-03T12:00:00Z",
+     "events": [{"status": "CONFIRMED", "message": "Order confirmed.", "timestamp": "2026-01-03T10:00:00Z"},
+                {"status": "CANCELLED", "message": "Cancelled; refunded.", "timestamp": "2026-01-03T12:00:00Z"}]},
+]
+SEED_PAYMENTS = [
+    {"payment_id": "PAY-10001", "order_id": "O-10001", "amount_cents": 6000, "status": "PAYMENT_SUCCEEDED"},
+    {"payment_id": "PAY-10002", "order_id": "O-10002", "amount_cents": 6000, "status": "PAYMENT_REFUNDED"},
 ]
 
 PRODUCTS = build_products()
@@ -87,4 +107,6 @@ def write_seed_dir(directory: Path) -> Path:
     (directory / "catalog.json").write_text(json.dumps({"products": PRODUCTS, "skus": SKUS}), encoding="utf-8")
     (directory / "inventory.json").write_text(json.dumps(INVENTORY), encoding="utf-8")
     (directory / "customers.json").write_text(json.dumps({"users": USERS}), encoding="utf-8")
+    (directory / "orders.json").write_text(json.dumps(SEED_ORDERS), encoding="utf-8")
+    (directory / "payments.json").write_text(json.dumps(SEED_PAYMENTS), encoding="utf-8")
     return directory

@@ -1,5 +1,67 @@
 # ShopAssist
 
+ShopAssist is a small online shop: browse and search a catalog, keep a cart, check out, and follow your
+orders live. Each service owns its own Postgres database. Everything runs locally on Windows.
+
+## ShopAssist v2 (current)
+
+### Architecture
+
+- The browser app (`web/`, React + TypeScript) calls REST under `/api` and holds one WebSocket per signed-in tab (`/api/ws`).
+- The orchestrator (FastAPI, port 8011) is the gateway (the AI agent is planned, not built yet). It has no database driver; it only calls gRPC.
+- Five gRPC services, each with its own Postgres database and login role: catalog (50051), inventory (50052), order (50053), customer (50054), payment (50055).
+- Checkout is a saga: reserve stock, charge, confirm. A failure compensates the steps already done, and a recovery task finishes or compensates orders left pending.
+- Order status changes go to an outbox table in the same transaction as the change, then `NOTIFY` announces them. `WatchOrders` replays missed events and then listens.
+- Postgres 17 runs from native binaries (no Docker): one server, five databases.
+
+### Prerequisites
+
+- **Python 3.14** virtual environment in `.venv`, then `.venv\Scripts\python.exe -m pip install -r requirements.txt`.
+- **Node 22** (`node --version` shows v22.x) for `web/`.
+- **PostgreSQL 17 binaries.** Copy `.env.example` to `.env` and set `PG_BIN` (the folder with `pg_ctl.exe`), `PG_DATA` (the cluster folder) and `PG_ADMIN_URL` (a superuser URL). Never commit `.env`.
+
+### Run it
+
+```powershell
+.venv\Scripts\python.exe scripts/pg.py start          # starts Postgres on localhost:5432
+.venv\Scripts\python.exe scripts/db_setup.py          # first time only: creates the 5 databases and roles, writes the URLs to .env
+.venv\Scripts\python.exe scripts/run_all.py           # starts the services and the orchestrator; Ctrl+C stops them all
+```
+
+- `run_all.py --reset` drops the five databases first, so the services re-seed on start.
+- `run_all.py --web` also starts the Vite dev server on port 5173.
+- `run_all.py` refuses to start if a port it needs is busy. It never kills other processes.
+
+Web app:
+
+```powershell
+cd web
+npm install
+npm run dev            # dev server at http://localhost:5173
+npm run build          # writes web\dist; the orchestrator serves it at http://127.0.0.1:8011 while run_all.py runs
+```
+
+Data (the seed in `data/seed/v2/` is already in the repo):
+
+```powershell
+.venv\Scripts\python.exe scripts/gen_data.py          # regenerates the seed; byte-identical on every run
+.venv\Scripts\python.exe scripts/validate_data.py     # checks the seed and prints a summary
+```
+
+Tests (needs Postgres running; the tests create and drop their own throwaway databases):
+
+```powershell
+.venv\Scripts\python.exe -m pytest
+```
+
+The agent eval set `tests/eval/queries.jsonl` is kept for a later phase; check it with `scripts/validate_eval.py`.
+
+---
+
+> **v1 (superseded).** The sections below describe the first version: SQLite files, `POST /query`, the
+> orchestrator on port 8000, and the `frontend/` folder. v2 replaces all of this. They are kept for reference only.
+
+
 ShopAssist is a small store-assistant demo. You type a question such as
 "Where is my order 1042?" and the system answers it by calling three
 microservices over gRPC, then streams the progress back to you.
@@ -12,7 +74,7 @@ It is built as an onboarding project to show, in one flow:
 - **Microservices with their own database**: each service owns one SQLite file.
   The orchestrator never touches a database; it only talks gRPC.
 
-## Architecture
+## Architecture (v1, superseded)
 
 ```
 Client --REST POST /query--> Orchestrator (FastAPI :8000) --gRPC--> ProductService   :50051 -> data/products.db
@@ -23,7 +85,7 @@ Client --REST POST /query--> Orchestrator (FastAPI :8000) --gRPC--> ProductServi
 Event flow for one query: `accepted` → `intent_detected` → `service_call` (one or more)
 → optional `partial_result` / `order_update` → `final_answer` or `error`.
 
-## Setup
+## Setup (v1, superseded)
 
 Requires Python 3.14 (the project uses a virtual environment in `.venv`).
 
@@ -39,7 +101,7 @@ Run it once after install, and again whenever a `.proto` file changes.
 
 Optional: copy `.env.example` to `.env` and change what you need. The defaults work as they are.
 
-## Run
+## Run (v1, superseded)
 
 ```powershell
 python scripts/run_all.py
@@ -139,7 +201,7 @@ show the steps again. `--reset` only touches the database files. The seed JSON f
 The reset uses the same database settings as the services (`PRODUCT_DB`, `INVENTORY_DB`,
 `ORDER_DB`, read from `.env` if present). Relative paths are resolved against the repo root.
 
-## Ask a question
+## Ask a question (v1, superseded)
 
 From the command line (in a second terminal, while `run_all.py` is running):
 
@@ -156,7 +218,7 @@ so you can see exactly what the orchestrator sends. Open it straight from disk (
 question and press Send. Its **Orchestrator URL** box defaults to `http://localhost:8000`, and you
 can change it to another base URL. `client/cli.py` remains the terminal client.
 
-## How a query flows
+## How a query flows (v1, superseded)
 
 Take `Track order 1043 live` as an example. The client makes two requests, and the server
 pushes events over the WebSocket as the work proceeds.
@@ -184,7 +246,7 @@ pushes events over the WebSocket as the work proceeds.
 The server then closes the socket. Each query has exactly one terminal event, either
 `final_answer` or `error`, and it is always the last event.
 
-## Example queries
+## Example queries (v1, superseded)
 
 | Example query | Intent | Services used |
 |---|---|---|
@@ -198,7 +260,7 @@ The server then closes the socket. Each query has exactly one terminal event, ei
 Sample data is in `data/seed/`: 15 products, their stock by size, and orders 1040 to 1049.
 Order 1042 is shipped, 1043 is placed, 1044 is delivered and 1045 is cancelled.
 
-## How questions are understood
+## How questions are understood (v1, superseded)
 
 The orchestrator first asks the Groq LLM (`openai/gpt-oss-120b`) to detect the intent and
 entities. If no key can serve the request, or the call fails or times out, it uses a
@@ -207,7 +269,7 @@ answered: `llm` or `rules`.
 
 The rule-based path needs no key and no network, so the whole demo works offline.
 
-## LLM configuration (optional)
+## LLM configuration (optional) (v1, superseded)
 
 The LLM is Groq's `openai/gpt-oss-120b`, called through Groq's OpenAI-compatible API. It is
 optional. With no keys, the app uses the rule-based parser and works fully.
@@ -282,7 +344,7 @@ Never commit a real key. Put keys only in `.env`, which is listed in `.gitignore
 in `.env.example`, because git tracks that file. Before you commit, run `git status` and check
 that `.env` is not listed.
 
-## Other settings
+## Other settings (v1, superseded)
 
 All settings are environment variables; see `.env.example` for the full list with comments. The
 main ones are the service addresses (`PRODUCT_ADDR`, `INVENTORY_ADDR`, `ORDER_ADDR`), the
@@ -292,7 +354,7 @@ its statuses.
 
 Databases are created on first start from `data/seed/` if they are missing or empty.
 
-## Troubleshooting
+## Troubleshooting (v1, superseded)
 
 **Port 8000 is already in use.** If another program holds port 8000, the orchestrator fails to
 start with an error such as `[Errno 10048] ... address ... already in use`. `run_all.py` then
@@ -311,7 +373,7 @@ PID in Task Manager.
 If `http://localhost:8000/` shows a different app, another server owns that port. Set
 `ORCHESTRATOR_PORT=8011` in `.env`, restart `run_all.py`, and open `http://localhost:8011/`.
 
-## Tests
+## Tests (v1, superseded)
 
 ```powershell
 pytest

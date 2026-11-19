@@ -144,3 +144,88 @@ class StockOption(BaseModel):
 class ProductDetailResponse(BaseModel):
     product: Product
     stock: list[StockOption]
+
+
+class CartLine(BaseModel):
+    sku_id: str
+    product_id: str
+    name: str
+    category: str
+    size: str
+    color: str
+    quantity: int
+    unit_price_cents: int
+    line_total_cents: int
+    available: int  # units in stock right now; may be less than `quantity`
+
+
+class CartOut(BaseModel):
+    lines: list[CartLine]
+    subtotal_cents: int
+    shipping_cents: int
+    total_cents: int
+    version: int
+
+
+class CartLineIn(BaseModel):
+    quantity: int = Field(ge=0, le=10, description="0 removes the line")
+
+
+class CheckoutIn(BaseModel):
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    payment_method: Literal["card_ok", "card_declined", "card_flaky"]
+
+
+class CheckoutOut(BaseModel):
+    order_id: str
+
+
+class OrderLine(BaseModel):
+    sku_id: str
+    product_id: str
+    name: str
+    category: str
+    size: str
+    color: str
+    quantity: int
+    unit_price_cents: int
+    line_total_cents: int
+
+
+class OrderEvent(BaseModel):
+    event_id: int
+    order_id: str
+    status: str
+    message: str
+    timestamp: str
+
+
+class OrderSummary(BaseModel):
+    order_id: str
+    user_id: str
+    status: Literal["PENDING", "CONFIRMED", "PACKED", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED", "FAILED"]
+    lines: list[OrderLine]
+    subtotal_cents: int
+    shipping_cents: int
+    total_cents: int
+    payment_id: str
+    failure_reason: str
+    created_at: str
+    updated_at: str
+
+
+class Order(OrderSummary):
+    history: list[OrderEvent]
+
+
+class CancelIn(BaseModel):
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class OrderOut(BaseModel):
+    order: Order
+
+
+class OrdersOut(BaseModel):
+    orders: list[OrderSummary]
+    next_page_token: str

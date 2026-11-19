@@ -89,6 +89,7 @@ message SkuWithProduct {
   Sku sku = 1;
   string name = 2;
   int64 price_cents = 3;
+  string category = 4;     // so carts and orders can show the product's category without another lookup
 }
 
 service CatalogService {
@@ -228,7 +229,12 @@ message RefundResponse {
 service PaymentService {
   rpc Charge(ChargeRequest) returns (ChargeResponse);
   rpc Refund(RefundRequest) returns (RefundResponse);  // FAILED_PRECONDITION if the payment did not succeed
+  // Read-only: what happened to the charge with this idempotency key? NOT_FOUND if it never reached Payment.
+  // Recovery uses this so it can learn an outcome without ever starting a new charge.
+  rpc LookupCharge(LookupChargeRequest) returns (ChargeResponse);
 }
+
+message LookupChargeRequest { string idempotency_key = 1; }
 
 // ======================= Order service (owns the "orders" database) =======================
 // Coordinates checkout as a saga: it calls Catalog (prices), Inventory and Payment over gRPC.
@@ -253,6 +259,7 @@ message OrderLine {
   string color = 5;
   int32 quantity = 6;
   int64 unit_price_cents = 7;      // snapshot from Catalog at checkout time
+  string category = 8;             // snapshot from Catalog at checkout time
 }
 
 message OrderEvent {
@@ -324,6 +331,10 @@ message CancelOrderRequest { string order_id = 1; string idempotency_key = 2; } 
 message WatchOrdersRequest {
   string order_id = 1;              // empty = all of the caller's orders
   int64 after_event_id = 2;         // replay events after this id, then stream live ones
+  // after_event_id = -1: no replay; the stream first sends a cursor message
+  // OrderEvent{order_id: "", status: ORDER_STATUS_UNSPECIFIED, event_id: <latest id>} once it is registered,
+  // so the caller knows from which id "live" starts. Callers must dedupe by event_id (commit order can differ
+  // from id order, so resumes overlap a little).
 }
 
 service OrderService {

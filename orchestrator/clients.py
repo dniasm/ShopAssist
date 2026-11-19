@@ -18,7 +18,9 @@ USER_HEADER = "x-user-id"
 SERVICES = {
     "catalog": ("shopassist.v2.CatalogService", pb_grpc.CatalogServiceStub, "catalog_addr"),
     "inventory": ("shopassist.v2.InventoryService", pb_grpc.InventoryServiceStub, "inventory_addr"),
+    "order": ("shopassist.v2.OrderService", pb_grpc.OrderServiceStub, "order_addr"),
     "customer": ("shopassist.v2.CustomerService", pb_grpc.CustomerServiceStub, "customer_addr"),
+    "payment": ("shopassist.v2.PaymentService", pb_grpc.PaymentServiceStub, "payment_addr"),
 }
 
 
@@ -30,6 +32,7 @@ class Clients:
         self._channels = {name: grpc.aio.insecure_channel(addr) for name, addr in self.addresses.items()}
         self.catalog = SERVICES["catalog"][1](self._channels["catalog"])
         self.inventory = SERVICES["inventory"][1](self._channels["inventory"])
+        self.order = SERVICES["order"][1](self._channels["order"])
         self.customer = SERVICES["customer"][1](self._channels["customer"])
 
     async def call(self, service: str, rpc, request, user_id: str | None = None):

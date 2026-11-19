@@ -12,6 +12,10 @@ describe("facetOptions", () => {
   it("passes the API's counts through and labels the values", () => {
     expect(facetOptions(facets, "category", []).map((o) => [o.label, o.count])).toEqual([["Jackets", 9], ["T-shirts", 5]]);
   });
+  it("orders every group by count (then name), the same rule for brands, colours and categories", () => {
+    const brands: Facet[] = [{ field: "brand", values: [{ value: "Zed", count: 3 }, { value: "Alpha", count: 3 }, { value: "Mid", count: 9 }, { value: "Low", count: 1 }] }];
+    expect(facetOptions(brands, "brand", []).map((o) => o.value)).toEqual(["Mid", "Alpha", "Zed", "Low"]);
+  });
   it("orders colours by count, then name; sizes in shopper order", () => {
     expect(facetOptions(facets, "color", []).map((o) => o.value)).toEqual(["red", "navy", "olive"]);
     expect(facetOptions(facets, "size", []).map((o) => o.value)).toEqual(["S", "M", "XL"]);

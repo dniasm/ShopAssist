@@ -1,0 +1,19 @@
+.set { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px; }
+.legend { padding: 0; font-size: var(--fs-section); line-height: 24px; font-weight: 600; }
+.lead { margin-bottom: 4px; }
+.options { display: grid; gap: 8px; }
+.option { position: relative; display: block; cursor: pointer; }
+.input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.face {
+  display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--control); border-radius: var(--radius-card);
+  transition: border-color 150ms ease;
+}
+.option:hover .face { border-color: var(--faint); }
+.radio { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1.5px solid var(--control); border-radius: 50%; background: var(--surface); }
+.input:checked + .face { border-color: var(--text); outline: 1px solid var(--text); }
+.input:checked + .face .radio { border: 5px solid var(--text); }   /* a ring that fills in: no gradient needed */
+.input:focus-visible + .face { outline: 2px solid var(--data); outline-offset: 2px; }
+.input:disabled + .face { opacity: 0.6; cursor: not-allowed; }
+.text { display: grid; gap: 2px; }
+.label { font-weight: 500; }

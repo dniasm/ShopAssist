@@ -20,6 +20,11 @@
   border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); font-weight: 500;
 }
 .cart:hover, .cart[aria-expanded="true"] { background: var(--raised); }
+.cart { position: relative; }
+.count {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+  background: var(--primary); color: var(--primary-ink); font-size: 12px; font-weight: 600; line-height: 1;
+}
 
 @media (max-width: 720px) {
   .header { position: static; }
@@ -30,6 +35,8 @@
   .actions { order: 3; margin-left: 0; gap: 4px; }
   .search { order: 4; flex-basis: 100%; }
   .search > * { max-width: none; }
+  .ordersLink { display: none; }   /* on a phone "My orders" lives in the account menu */
   .cartText { display: none; }
+  .count { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; font-size: 11px; }
   .cart { width: 40px; padding: 0; justify-content: center; border-color: transparent; background: transparent; height: 40px; }
 }

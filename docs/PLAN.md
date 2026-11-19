@@ -293,7 +293,7 @@ orchestrator holds one `OrderService.WatchOrders` stream for them.
 
 | channel | types → data |
 |---|---|
-| `checkout` | `step {order_id, step, state, message, shortages?}` · `done {order}` · `failed {order_id, reason, shortages?}` |
+| `checkout` | `step {order_id, step, state, message, shortages?}` · `done {order}` · `failed {order_id, reason, shortages?}` · `interrupted {order_id, message}` (the stream broke; the outcome is unknown and will be settled by recovery — the order's final status arrives later on channel `order`; never claim success or failure on `interrupted`) |
 | `order` | `status {order_id, status, message, event_id}` |
 | `chat` | `turn_started {turn_id}` · `tool_call {turn_id, tool, args}` · `tool_result {turn_id, tool, summary}` · `message {turn_id, text, cards:[{kind, data}]}` (kind: products, product, stock, cart, order, orders) · `proposal {turn_id, proposal_id, action, args, summary}` · `turn_done {turn_id, source:"llm"/"rules"}` · `error {turn_id, message}` |
 | `system` | `hello {user, seq}` · `resync` |
@@ -305,6 +305,27 @@ Tools: `search_products, get_product, get_stock, get_cart, add_to_cart, remove_f
 propose_checkout, propose_cancel_order`. Cart edits run directly (reversible and visible). **Money / irreversible
 actions are proposals only — the user's click confirms; the LLM cannot execute them.** Memory per user: last 6 turns
 plus context (`path`, `product_id`, cart summary). No key / limits / errors → rules parser (`source:"rules"`).
+
+Tool signatures (the contract shared by the agent, the rules fallback and the eval set; money in cents):
+
+| Tool | Args | Kind |
+|---|---|---|
+| `search_products` | `query?, category?, color?, size?, brand?, min_price_cents?, max_price_cents?, sort?` (`relevance, price_asc, price_desc, rating, newest`) | read |
+| `get_product` | `product_id` | read |
+| `get_stock` | `product_id, size?, color?` | read |
+| `get_cart` | — | read |
+| `add_to_cart` | `product_id, size, color, quantity=1` (the server resolves the SKU; a missing size/colour on a multi-variant product → the agent asks) | write (direct) |
+| `remove_from_cart` | `product_id, size?, color?` | write (direct) |
+| `list_orders` | — | read |
+| `get_order` | `order_id` | read |
+| `propose_checkout` | `payment_method?` | proposal |
+| `propose_cancel_order` | `order_id` | proposal |
+| `reply` | — (answer or ask a clarifying question with no tool) | — |
+
+Eval set `tests/eval/queries.jsonl`, one JSON object per line:
+`{"id", "query", "history":[{"user","assistant"}], "context":{"path","product_id"?, "signed_in": bool}, "expect":{"tool", "args":{…}}, "tags":[…], "reason"}`.
+`expect.tool` is the FIRST action the agent should take; `expect.args` lists only the args that must match (subset, case-insensitive;
+money exact). Tags from: `basic, slang, typo, context, follow_up, multi_constraint, out_of_scope, ambiguous, order, cart, write, proposal, safety`.
 
 ## Phases and acceptance (Opus verifies each one live before committing)
 
@@ -331,3 +352,17 @@ plus context (`path`, `product_id`, cart summary). No key / limits / errors → 
 | `scripts/gen_data.py`, `scripts/validate_data.py`, `scripts/db_setup.py`, `scripts/pg.py`, `scripts/run_all.py`, `data/seed/**`, `tests/eval/queries.jsonl`, `loadtest/**`, `README.md`, `requirements.txt`, `.env.example`, `.gitignore` | Haiku |
 
 Nobody commits or pushes except Opus. Reports must paste the commands run and their real output.
+
+## Status (2026-11-19) and next steps
+
+Done and verified live: 5.1 (catalog, search with typo fallback, product pages), 5.2 (carts, checkout saga with
+compensation, recovery that never starts a charge, session WebSocket), 5.3 (outbox + NOTIFY, fulfilment worker,
+WatchOrders with overlap resume, cancel, orders pages), the System page, and the eval set (124 labelled queries,
+validated, not yet scored). The project was stopped here by the user's decision; nothing below is started.
+
+Next steps:
+1. 5.4 agent: tool loop over the gRPC clients, per-user memory, proposals for checkout/cancel, chat drawer on every
+   page, and a scorer for `tests/eval/queries.jsonl` (LLM vs rules). The 5.4 contract above is already written.
+2. 5.5: Locust load test with recorded numbers; delete `frontend/`, the v1 API leftovers, `client/` and v1 seed files.
+3. Known gaps: no real auth (demo "sign in as"); the per-user WebSocket event log is in memory, so the
+   orchestrator is still a single process; the test suite takes 2–8 minutes depending on machine load.

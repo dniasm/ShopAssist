@@ -57,7 +57,7 @@ def test_importing_the_orchestrator_loads_no_database_driver_at_runtime():
     assert out.stdout.strip() == "[]", out.stdout
 
 
-@pytest.mark.parametrize("service", ["catalog", "inventory", "customer"])
+@pytest.mark.parametrize("service", ["catalog", "inventory", "customer", "order", "payment"])
 def test_a_service_reads_only_its_own_database_url(service):
     own_var = SERVICE_DBS[service][0]
     for path in (SERVICES_DIR / service).rglob("*.py"):
