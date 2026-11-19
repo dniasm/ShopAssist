@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { SocketChannel, WsMessage } from "../../api/types";
+import type { SocketChannel, SocketMessage } from "../../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { appendEvent, eventsOn } from "./eventLog";
-import { parseWsMessage } from "./events";
+import { parseSocketMessage } from "./events";
 import { initialMachineState, reduceMachine, type MachineEffect, type MachineEvent, type MachineState, type MachineStatus } from "./socketMachine";
 
-export type SocketHandler = (envelope: WsMessage) => void;
+export type SocketHandler = (envelope: SocketMessage) => void;
 
 interface SocketApi {
   status: MachineStatus;
@@ -45,7 +45,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
   const machine = useRef<MachineState>(initialMachineState());
   const socket = useRef<WebSocket | null>(null);
   const timer = useRef<number | undefined>(undefined);
-  const log = useRef<WsMessage[]>([]);
+  const log = useRef<SocketMessage[]>([]);
   const subscribers = useRef(new Map<SocketChannel, Set<SocketHandler>>());
   const tokenRef = useRef(token);
   tokenRef.current = token;
@@ -69,7 +69,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
           ws.onopen = () => { if (socket.current === ws) dispatch({ type: "opened" }); };
           ws.onmessage = (e: MessageEvent<unknown>) => {
             if (socket.current !== ws || typeof e.data !== "string") return;
-            const envelope = parseWsMessage(e.data);
+            const envelope = parseSocketMessage(e.data);
             if (envelope) dispatch({ type: "message", envelope });
           };
           ws.onclose = (e: CloseEvent) => { if (socket.current === ws) { socket.current = null; dispatch({ type: "closed", code: e.code }); } };

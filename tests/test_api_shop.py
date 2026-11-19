@@ -68,8 +68,9 @@ class Shop:
         r = self.client.post("/api/session", json={"user_id": user_id}).json()
         return {"Authorization": f"Bearer {r['token']}"}, r["token"]
 
-    def ws(self, token, after=None):
-        reader = WsReader(self.client, f"/api/ws?token={token}" + (f"&after={after}" if after is not None else ""))
+    def ws(self, token, after=None, guest=None):
+        who = f"guest={guest}" if guest else f"token={token}"
+        reader = WsReader(self.client, f"/api/ws?{who}" + (f"&after={after}" if after is not None else ""))
         self.readers.append(reader)
         return reader
 
@@ -90,7 +91,7 @@ def make_shop(make_stack, catalog_running, loop_thread, temp_dbs, seed_dir):
     opened: list[tuple] = []
     customers: list = []
 
-    def make(payment_latency_ms=0, **settings_overrides) -> Shop:
+    def make(payment_latency_ms=0, llm=None, **settings_overrides) -> Shop:
         stack = make_stack(payment_latency_ms=payment_latency_ms)
         customer_running = start(loop_thread, temp_dbs, "customer", create_customer, seed_dir=seed_dir)  # fresh carts per test
         customers.append(customer_running)
@@ -98,7 +99,7 @@ def make_shop(make_stack, catalog_running, loop_thread, temp_dbs, seed_dir):
             catalog_addr=catalog_running.addr, inventory_addr=stack.inventory.addr, customer_addr=customer_running.addr,
             order_addr=stack.order.addr, payment_addr=stack.payment.addr, session_secret="s", **settings_overrides,
         )
-        client = AppClient(create_app(settings))
+        client = AppClient(create_app(settings, llm=llm))
         client.__enter__()
         shop = Shop(client, stack, [])
         opened.append((client, shop))

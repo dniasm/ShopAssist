@@ -258,6 +258,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chat */
+        post: operations["chat_api_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/proposals/{proposal_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm
+         * @description Run what the assistant proposed, AS THE USER, through the same code as the REST endpoints. Works once per proposal.
+         */
+        post: operations["confirm_api_chat_proposals__proposal_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/proposals/{proposal_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss */
+        post: operations["dismiss_api_chat_proposals__proposal_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ws/schema": {
         parameters: {
             query?: never;
@@ -330,6 +384,267 @@ export interface components {
             total_cents: number;
             /** Version */
             version: number;
+        };
+        /**
+         * ChatCard
+         * @description What the UI shows under a message. kind: products | product | stock | cart | order | orders | signin; `data` is that
+         *     kind's payload (the same shapes as the REST responses: ProductListResponse items, ProductDetailResponse, CartOut, Order...).
+         */
+        ChatCard: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "products" | "product" | "stock" | "cart" | "order" | "orders" | "signin";
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        /** ChatContextIn */
+        ChatContextIn: {
+            /**
+             * Path
+             * @default /
+             */
+            path: string;
+            /** Product Id */
+            product_id?: string | null;
+        };
+        /** ChatError */
+        ChatError: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "chat";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            data: components["schemas"]["ChatErrorData"];
+        };
+        /** ChatErrorData */
+        ChatErrorData: {
+            /** Turn Id */
+            turn_id: string;
+            /** Message */
+            message: string;
+        };
+        /** ChatIn */
+        ChatIn: {
+            /** Message */
+            message: string;
+            /**
+             * @default {
+             *       "path": "/"
+             *     }
+             */
+            context: components["schemas"]["ChatContextIn"];
+            /**
+             * Guest Id
+             * @description Signed-out visitors: a random id of your own; open /api/ws?guest=<id>.
+             */
+            guest_id?: string | null;
+        };
+        /** ChatMessage */
+        ChatMessage: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "chat";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "message";
+            data: components["schemas"]["ChatMessageData"];
+        };
+        /** ChatMessageData */
+        ChatMessageData: {
+            /** Turn Id */
+            turn_id: string;
+            /** Text */
+            text: string;
+            /** Cards */
+            cards: components["schemas"]["ChatCard"][];
+        };
+        /**
+         * ChatProposal
+         * @description Something the person must confirm: POST /api/chat/proposals/{proposal_id}/confirm (or /dismiss).
+         */
+        ChatProposal: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "chat";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "proposal";
+            data: components["schemas"]["ChatProposalData"];
+        };
+        /** ChatProposalData */
+        ChatProposalData: {
+            /** Turn Id */
+            turn_id: string;
+            /** Proposal Id */
+            proposal_id: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "checkout" | "cancel_order";
+            /** Args */
+            args: {
+                [key: string]: unknown;
+            };
+            /** Summary */
+            summary: string;
+        };
+        /** ChatToolCall */
+        ChatToolCall: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "chat";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tool_call";
+            data: components["schemas"]["ChatToolCallData"];
+        };
+        /** ChatToolCallData */
+        ChatToolCallData: {
+            /** Turn Id */
+            turn_id: string;
+            /** Tool */
+            tool: string;
+            /** Args */
+            args: {
+                [key: string]: unknown;
+            };
+        };
+        /** ChatToolResult */
+        ChatToolResult: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "chat";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tool_result";
+            data: components["schemas"]["ChatToolResultData"];
+        };
+        /** ChatToolResultData */
+        ChatToolResultData: {
+            /** Turn Id */
+            turn_id: string;
+            /** Tool */
+            tool: string;
+            /** Summary */
+            summary: string;
+        };
+        /** ChatTurnData */
+        ChatTurnData: {
+            /** Turn Id */
+            turn_id: string;
+        };
+        /** ChatTurnDone */
+        ChatTurnDone: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "chat";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "turn_done";
+            data: components["schemas"]["ChatTurnDoneData"];
+        };
+        /** ChatTurnDoneData */
+        ChatTurnDoneData: {
+            /** Turn Id */
+            turn_id: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "llm" | "rules";
+        };
+        /** ChatTurnStarted */
+        ChatTurnStarted: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "chat";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "turn_started";
+            data: components["schemas"]["ChatTurnData"];
         };
         /** CheckoutDone */
         CheckoutDone: {
@@ -522,7 +837,8 @@ export interface components {
         };
         /** HelloData */
         HelloData: {
-            user: components["schemas"]["User"];
+            /** @description null for a signed-out visitor connected with ?guest= */
+            user: components["schemas"]["User"] | null;
             /**
              * Seq
              * @description The user's latest event number; reconnect with ?after=<last seq you saw>.
@@ -570,6 +886,11 @@ export interface components {
         /** MeOut */
         MeOut: {
             user: components["schemas"]["User"];
+        };
+        /** OkOut */
+        OkOut: {
+            /** Ok */
+            ok: boolean;
         };
         /** Order */
         Order: {
@@ -899,6 +1220,11 @@ export interface components {
              */
             type: "resync";
             data: components["schemas"]["EmptyData"];
+        };
+        /** TurnOut */
+        TurnOut: {
+            /** Turn Id */
+            turn_id: string;
         };
         /** User */
         User: {
@@ -1805,6 +2131,182 @@ export interface operations {
             };
         };
     };
+    chat_api_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TurnOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    confirm_api_chat_proposals__proposal_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    dismiss_api_chat_proposals__proposal_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     ws_schema_api_ws_schema_get: {
         parameters: {
             query?: never;
@@ -1820,7 +2322,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SystemHello"] | components["schemas"]["SystemResync"] | components["schemas"]["CheckoutStep"] | components["schemas"]["CheckoutDone"] | components["schemas"]["CheckoutFailed"] | components["schemas"]["CheckoutInterrupted"] | components["schemas"]["OrderStatus"];
+                    "application/json": components["schemas"]["SystemHello"] | components["schemas"]["SystemResync"] | components["schemas"]["CheckoutStep"] | components["schemas"]["CheckoutDone"] | components["schemas"]["CheckoutFailed"] | components["schemas"]["CheckoutInterrupted"] | components["schemas"]["OrderStatus"] | components["schemas"]["ChatTurnStarted"] | components["schemas"]["ChatToolCall"] | components["schemas"]["ChatToolResult"] | components["schemas"]["ChatMessage"] | components["schemas"]["ChatProposal"] | components["schemas"]["ChatTurnDone"] | components["schemas"]["ChatError"];
                 };
             };
             /** @description Successful Response */

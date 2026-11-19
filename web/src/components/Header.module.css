@@ -12,7 +12,12 @@
 .link { text-decoration: none; color: var(--muted); padding: 17px 0; transition: color 150ms ease; }
 .link:hover { color: var(--text); }
 .link[aria-current="page"] { color: var(--text); font-weight: 500; }   /* the current page: a change of text colour, not a pill */
-.search { flex: 1 1 auto; min-width: 0; display: flex; justify-content: center; }
+.search { flex: 1 1 auto; min-width: 0; display: flex; justify-content: center; align-items: center; gap: 8px; }
+.ask {
+  display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; flex: none;
+  border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); font-weight: 500;
+}
+.ask:hover, .ask[aria-expanded="true"] { background: var(--raised); }
 .actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
 .search + .actions { margin-left: 0; }
 .cart {
@@ -34,7 +39,9 @@
   .link { padding: 12px 0; }
   .actions { order: 3; margin-left: 0; gap: 4px; }
   .search { order: 4; flex-basis: 100%; }
-  .search > * { max-width: none; }
+  .search > :first-child { max-width: none; }
+  .ask { height: 40px; width: 40px; padding: 0; justify-content: center; }
+  .askText { display: none; }
   .ordersLink { display: none; }   /* on a phone "My orders" lives in the account menu */
   .cartText { display: none; }
   .count { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; font-size: 11px; }

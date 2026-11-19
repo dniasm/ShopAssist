@@ -4,6 +4,7 @@ Envelope `{"seq","channel","type","data","ts"}`. Messages with seq 0 (`system/he
 not part of the per-user log; every logged event has a seq that only increases.
 """
 import asyncio
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Response, WebSocket, WebSocketDisconnect
@@ -14,6 +15,7 @@ from orchestrator.ws_schema import WsMessage
 from shopassist_proto import shopassist_pb2 as pb
 
 router = APIRouter()
+GUEST_ID = re.compile(r"[A-Za-z0-9_-]{8,64}")
 UNAUTHENTICATED_CLOSE = 4401
 TRY_AGAIN_LATER_CLOSE = 1013
 
@@ -33,23 +35,30 @@ async def ws_schema() -> Response:
 
 
 @router.websocket("/ws")
-async def session_socket(websocket: WebSocket, token: str = "", after: int | None = None):
+async def session_socket(websocket: WebSocket, token: str = "", after: int | None = None, guest: str = ""):
+    """`?token=` for a signed-in tab. `?guest=<id>` (no token) is a signed-out visitor: chat events only, no orders."""
     state = websocket.app.state
     await websocket.accept()  # accepted first so the browser can read our close code (4401), not just a failed handshake
+    user = None
     try:
-        user_id = state.tokens.verify(token)
-        user = await state.clients.call("customer", state.clients.customer.GetUser, pb.GetUserRequest(user_id=user_id), user_id=user_id)
+        if token or not GUEST_ID.fullmatch(guest):
+            owner = state.tokens.verify(token)
+            user = await state.clients.call("customer", state.clients.customer.GetUser, pb.GetUserRequest(user_id=owner), user_id=owner)
+        else:
+            owner = f"guest:{guest}"
     except ApiError as e:
         await websocket.close(code=UNAUTHENTICATED_CLOSE if e.code in ("unauthenticated", "not_found") else TRY_AGAIN_LATER_CLOSE)
         return
     hub = state.hub
-    state.watchers.socket_opened(user_id)  # one OrderService.WatchOrders stream per user, however many tabs
+    if user:
+        state.watchers.socket_opened(owner)  # one OrderService.WatchOrders stream per user, however many tabs
     # No await between subscribe and replay: everything older is in the replay, everything newer is in the queue.
-    inbox = hub.subscribe(user_id)
-    backlog, resync = hub.replay(user_id, after)
-    await state.watchers.wait_ready(user_id)  # from here on, order events cannot slip past this socket
+    inbox = hub.subscribe(owner)
+    backlog, resync = hub.replay(owner, after)
+    if user:
+        await state.watchers.wait_ready(owner)  # from here on, order events cannot slip past this socket
     try:
-        await websocket.send_json(system_message("hello", {"user": serialize.user(user), "seq": hub.latest_seq(user_id)}))
+        await websocket.send_json(system_message("hello", {"user": serialize.user(user) if user else None, "seq": hub.latest_seq(owner)}))
         if resync:
             await websocket.send_json(system_message("resync", {}))
         for event in backlog:
@@ -58,8 +67,9 @@ async def session_socket(websocket: WebSocket, token: str = "", after: int | Non
     except WebSocketDisconnect:
         pass
     finally:
-        hub.unsubscribe(user_id, inbox)
-        state.watchers.socket_closed(user_id)
+        hub.unsubscribe(owner, inbox)
+        if user:
+            state.watchers.socket_closed(owner)
 
 
 async def _pump(websocket: WebSocket, inbox: asyncio.Queue) -> None:

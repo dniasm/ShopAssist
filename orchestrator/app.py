@@ -8,7 +8,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from orchestrator import errors, routes_auth, routes_cart, routes_checkout, routes_health, routes_orders, routes_products, routes_ws
+from orchestrator import errors, routes_auth, routes_cart, routes_chat, routes_checkout, routes_health, routes_orders, routes_products, routes_ws
+from orchestrator.agent.loop import AgentLoop
+from orchestrator.agent.state import ConversationMemory, ProposalStore
 from orchestrator.clients import Clients
 from orchestrator.events import EventHub
 from orchestrator.order_watch import OrderWatchers
@@ -34,6 +36,7 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, w
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.clients = Clients(settings)
+        app.state.agent = AgentLoop(app.state.clients, app.state.hub, app.state.proposals, app.state.memory, app.state.llm)
         app.state.watchers = OrderWatchers(
             app.state.clients, app.state.hub, settings.order_watch_stop_seconds, settings.order_watch_retry_seconds)
         yield
@@ -47,6 +50,8 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, w
     app.state.settings = settings
     app.state.llm = llm
     app.state.hub = EventHub(settings.ws_buffer_size, settings.ws_keep_seconds)
+    app.state.proposals = ProposalStore()
+    app.state.memory = ConversationMemory()
     app.state.forwarding = set()  # (user_id, order_id) pairs whose checkout events are being relayed right now
     app.state.tasks = set()
     if not settings.session_secret:
@@ -57,7 +62,7 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, w
         allow_headers=["Authorization", "Content-Type"],
     )
     errors.install(app)
-    routers = (routes_health, routes_auth, routes_products, routes_cart, routes_orders, routes_checkout, routes_ws)
+    routers = (routes_health, routes_auth, routes_products, routes_cart, routes_orders, routes_checkout, routes_chat, routes_ws)
     for router in (m.router for m in routers):
         app.include_router(router, prefix="/api", responses=ERROR_RESPONSES)
     install_spa(app, web_dist if web_dist is not None else WEB_DIST)

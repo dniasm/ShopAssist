@@ -1,10 +1,10 @@
-/* What comes down the session socket. A frame is untyped JSON, so `parseWsMessage` checks it at runtime and builds a value of the
- * generated `WsMessage` union (schema: GET /api/ws/schema), which TypeScript then narrows on channel + type everywhere else. It
+/* What comes down the session socket. A frame is untyped JSON, so `parseSocketMessage` checks it at runtime and builds a value of the
+ * generated `SocketMessage` union (schema: GET /api/ws/schema), which TypeScript then narrows on channel + type everywhere else. It
  * constructs each message from checked fields rather than casting, so a frame that does not fit the contract is dropped, not trusted. */
 
 import type {
   CheckoutDoneData, CheckoutFailedData, CheckoutInterruptedData, CheckoutStepData, Order, OrderEvent, OrderLine, OrderStatusData,
-  Shortage, User, WsMessage,
+  ChatCard, ChatCardKind, ChatWsMessage, Shortage, SocketMessage, User,
 } from "../../api/types";
 
 type Rec = Record<string, unknown>;
@@ -63,7 +63,7 @@ export function parseOrder(v: unknown): Order | null {
 }
 
 /** One WebSocket text frame -> a typed message, or null if it is not part of the contract. */
-export function parseWsMessage(raw: string): WsMessage | null {
+export function parseSocketMessage(raw: string): SocketMessage | null {
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return null; }
   if (!isRec(value) || !isRec(value.data)) return null;
@@ -99,7 +99,39 @@ export function parseWsMessage(raw: string): WsMessage | null {
       if (typeof d.order_id !== "string") return null;
       return { seq, ts, channel: "order", type: "status", data: { order_id: d.order_id, status: str(d.status), message: str(d.message), event_id: num(d.event_id) } };
     default:
-      return null;
+      return parseChat(seq, ts, `${str(value.channel)}/${str(value.type)}`, d);
+  }
+}
+
+const CARD_KINDS = ["products", "product", "stock", "cart", "order", "orders"] as const satisfies readonly ChatCardKind[];
+
+function parseCards(v: unknown): ChatCard[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((c): ChatCard[] => {
+    const kind = isRec(c) ? CARD_KINDS.find((k) => k === c.kind) : undefined;
+    return isRec(c) && kind ? [{ kind, data: c.data }] : [];
+  });
+}
+
+/** The `chat` channel (TEMPORARY contract, see api/temporary.ts). Anything that does not fit is dropped. */
+function parseChat(seq: number, ts: string, key: string, d: Rec): ChatWsMessage | null {
+  if (!key.startsWith("chat/") || typeof d.turn_id !== "string") return null;
+  const turn_id = d.turn_id;
+  switch (key) {
+    case "chat/turn_started": return { seq, ts, channel: "chat", type: "turn_started", data: { turn_id } };
+    case "chat/tool_call":
+      if (typeof d.tool !== "string") return null;
+      return { seq, ts, channel: "chat", type: "tool_call", data: { turn_id, tool: d.tool, args: isRec(d.args) ? d.args : {} } };
+    case "chat/tool_result":
+      if (typeof d.tool !== "string") return null;
+      return { seq, ts, channel: "chat", type: "tool_result", data: { turn_id, tool: d.tool, summary: str(d.summary) } };
+    case "chat/message": return { seq, ts, channel: "chat", type: "message", data: { turn_id, text: str(d.text), cards: parseCards(d.cards) } };
+    case "chat/proposal":
+      if (typeof d.proposal_id !== "string") return null;
+      return { seq, ts, channel: "chat", type: "proposal", data: { turn_id, proposal_id: d.proposal_id, action: str(d.action), args: isRec(d.args) ? d.args : {}, summary: str(d.summary) } };
+    case "chat/turn_done": return { seq, ts, channel: "chat", type: "turn_done", data: { turn_id, source: d.source === "llm" ? "llm" : "rules" } };
+    case "chat/error": return { seq, ts, channel: "chat", type: "error", data: { turn_id, message: str(d.message) } };
+    default: return null;
   }
 }
 
@@ -112,7 +144,7 @@ export type CheckoutEvent =
   | { kind: "interrupted"; data: CheckoutInterruptedData };
 
 /** A `checkout` message as the saga's event, or null for any other channel. */
-export function toCheckoutEvent(message: WsMessage): CheckoutEvent | null {
+export function toCheckoutEvent(message: SocketMessage): CheckoutEvent | null {
   if (message.channel !== "checkout") return null;
   switch (message.type) {
     case "step": return { kind: "step", data: message.data };
@@ -123,8 +155,13 @@ export function toCheckoutEvent(message: WsMessage): CheckoutEvent | null {
   }
 }
 
+/** A `chat` channel message, or null. */
+export function toChatMessage(message: SocketMessage): ChatWsMessage | null {
+  return message.channel === "chat" ? message : null;
+}
+
 /** An `order` channel status change, or null. */
-export function toOrderStatus(message: WsMessage): OrderStatusData | null {
+export function toOrderStatus(message: SocketMessage): OrderStatusData | null {
   return message.channel === "order" ? message.data : null;
 }
 

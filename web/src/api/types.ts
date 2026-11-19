@@ -3,6 +3,7 @@
  * beyond naming. Every other module imports its API types from this file only. */
 
 import type { components, operations } from "./schema";
+import type { ChatWsMessage } from "./temporary";
 
 type Schemas = components["schemas"];
 
@@ -46,9 +47,14 @@ export type Shortage = Schemas["Shortage"];
 export type WsMessage = NonNullable<
   operations["ws_schema_api_ws_schema_get"]["responses"][200]["content"]
 >["application/json"];
-export type SocketChannel = WsMessage["channel"];
+// TEMPORARY: the chat variants are not in the schema yet (./temporary.ts). SocketMessage is every message the socket can carry.
+export type SocketMessage = WsMessage | ChatWsMessage;
+export type SocketChannel = SocketMessage["channel"];
 export type CheckoutStepData = Schemas["CheckoutStepData"];
 export type CheckoutDoneData = Schemas["CheckoutDoneData"];
 export type CheckoutFailedData = Schemas["CheckoutFailedData"];
 export type CheckoutInterruptedData = Schemas["CheckoutInterruptedData"];
 export type OrderStatusData = Schemas["OrderStatusData"];
+
+// TEMPORARY chat shapes, see ./temporary.ts
+export type { ChatAccepted, ChatCard, ChatCardKind, ChatContext, ChatRequest, ChatWsMessage, ProposalAck } from "./temporary";

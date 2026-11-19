@@ -25,7 +25,22 @@ export function Header() {
           {user && <NavLink to="/orders" className={`${styles.link} ${styles.ordersLink}`}>Orders</NavLink>}
           <NavLink to="/system" className={styles.link}>System</NavLink>
         </nav>
-        <div className={styles.search}><SearchBox /></div>
+        <div className={styles.search}>
+          <SearchBox />
+          <button
+            type="button"
+            className={styles.ask}
+            aria-label="Assistant"
+            aria-haspopup="dialog"
+            aria-expanded={open === "chat"}
+            aria-keyshortcuts="/"
+            title="Ask the assistant (press /)"
+            onClick={() => toggle("chat")}
+          >
+            <Icon name="chat" size={18} />
+            <span className={styles.askText}>Ask</span>
+          </button>
+        </div>
         <div className={styles.actions}>
           <button
             type="button"

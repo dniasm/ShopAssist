@@ -1,6 +1,6 @@
 import { request } from "./client";
 import type {
-  Cart, CancelOrderBody, CheckoutAccepted, ListProductsParams, LlmStatus, Order, OrderList, PaymentMethod, ProductDetail, ProductList, ServicesHealth,
+  Cart, CancelOrderBody, ChatAccepted, ChatRequest, CheckoutAccepted, ListProductsParams, LlmStatus, Order, OrderList, PaymentMethod, ProductDetail, ProductList, ProposalAck, ServicesHealth,
   Session, User,
 } from "./types";
 
@@ -71,4 +71,20 @@ export function getServicesHealth(signal?: AbortSignal): Promise<ServicesHealth>
 /** The Groq key pool: model, limits, and per key the state and what is left. Keys come masked; nothing more is ever sent. */
 export function getLlmStatus(signal?: AbortSignal): Promise<LlmStatus> {
   return request<LlmStatus>("GET", "/llm/status", { signal });
+}
+
+// ---- chat (TEMPORARY types, see api/temporary.ts) ----
+
+/** Starts an assistant turn; its progress arrives on the WebSocket's `chat` channel. */
+export function sendChat(body: ChatRequest, signal?: AbortSignal): Promise<ChatAccepted> {
+  return request<ChatAccepted>("POST", "/chat", { body, signal });
+}
+
+/** Runs the proposed write as the signed-in user. A proposal can be confirmed once: a second try is a 409. */
+export function confirmProposal(proposalId: string, signal?: AbortSignal): Promise<ProposalAck> {
+  return request<ProposalAck>("POST", `/chat/proposals/${encodeURIComponent(proposalId)}/confirm`, { signal });
+}
+
+export function dismissProposal(proposalId: string, signal?: AbortSignal): Promise<ProposalAck> {
+  return request<ProposalAck>("POST", `/chat/proposals/${encodeURIComponent(proposalId)}/dismiss`, { signal });
 }

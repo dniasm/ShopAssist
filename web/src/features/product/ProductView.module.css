@@ -30,7 +30,7 @@
   .crumbs li[aria-current="page"] { display: none; }   /* the h1 right below says it; the long name only wrapped */
   .media { max-width: none; padding: 8px; }
   .buy { align-items: stretch; flex-direction: column; }
-  .buy > :last-child { width: 100%; }
-  .buy > :last-child :global(.btn) { width: 100%; }
+  .buy > :not(:first-child) { width: 100%; }
+  .buy > :not(:first-child) :global(.btn), .buy > :global(.btn) { width: 100%; }
   .qty { grid-template-columns: auto 1fr; align-items: center; }
 }

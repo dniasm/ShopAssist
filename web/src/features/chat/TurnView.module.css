@@ -1,0 +1,10 @@
+.turn { display: grid; gap: 10px; }
+.user { justify-self: end; max-width: 88%; margin: 0; padding: 8px 12px; border-radius: var(--radius-card); background: var(--raised); overflow-wrap: anywhere; white-space: pre-wrap; }
+.assistant { display: grid; gap: 10px; max-width: 100%; min-width: 0; }
+.message { display: grid; gap: 8px; }
+.text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.thinking { margin: 0; color: var(--muted); }
+.error { margin: 0; padding: 8px 10px; border-radius: var(--radius-control); background: var(--pill-negative-bg); color: var(--pill-negative-ink); }
+.error :global(.btn) { height: auto; color: inherit; padding: 0 2px; }
+.source { margin: 0; color: var(--faint); font-size: var(--fs-small); line-height: 16px; }
+.signIn { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }

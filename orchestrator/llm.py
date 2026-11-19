@@ -124,7 +124,7 @@ class LLMClient:
             now=now,
         )
 
-    def _body(self, text: str) -> dict:
+    def _body(self, text: str, system: str = SYSTEM_PROMPT, schema_name: str = "intent_result", schema: dict | None = None) -> dict:
         s = self._settings
         return {
             "model": s.llm_model,
@@ -132,12 +132,25 @@ class LLMClient:
             "max_completion_tokens": s.llm_max_tokens,
             "reasoning_effort": s.llm_reasoning_effort,
             "include_reasoning": False,
-            "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": text}],
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}],
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {"name": "intent_result", "strict": True, "schema": RESPONSE_SCHEMA},
+                "json_schema": {"name": schema_name, "strict": True, "schema": schema or RESPONSE_SCHEMA},
             },
         }
+
+    async def complete_json(self, system: str, user: str, schema_name: str, schema: dict, parse: Callable[[dict], object]):
+        """One strict-JSON completion through the key pool; `parse` validates the decoded object (raise LLMError to reject).
+
+        The agent planner uses this; `detect` below is the older intent call and shares the same rotation and budget.
+        """
+        body = self._body(user, system, schema_name, schema)
+        est_tokens = sum(len(m["content"]) for m in body["messages"]) // 4 + self._settings.llm_max_tokens
+        try:
+            async with asyncio.timeout(self._timeout):
+                return await self._rotate(body, est_tokens, parse)
+        except TimeoutError:
+            raise LLMError(f"LLM budget of {self._timeout:g}s exhausted") from None
 
     async def detect(self, text: str) -> tuple[str, dict]:
         body = self._body(text)
@@ -150,7 +163,7 @@ class LLMClient:
         except TimeoutError:
             raise LLMError(f"LLM budget of {self._timeout:g}s exhausted") from None
 
-    async def _rotate(self, body: dict, est_tokens: int) -> tuple[str, dict]:
+    async def _rotate(self, body: dict, est_tokens: int, parse: Callable[[dict], object] = validate):
         tried: set[int] = set()   # keys that failed softly for this request
         soft_retry_left = True    # timeout / 5xx / bad JSON: at most one retry, on another key
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as http:
@@ -179,7 +192,7 @@ class LLMClient:
                         await self.pool.record(lease.index, status, headers, tokens)
                         content = data["choices"][0]["message"]["content"]
                         content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
-                        return validate(json.loads(content))
+                        return parse(json.loads(content))
                     except LLMError:
                         raise
                     except (ValueError, KeyError, IndexError, TypeError, AttributeError):
