@@ -342,6 +342,26 @@ class ListUsersResponse(_message.Message):
     users: _containers.RepeatedCompositeFieldContainer[User]
     def __init__(self, users: _Optional[_Iterable[_Union[User, _Mapping]]] = ...) -> None: ...
 
+class AuthenticateRequest(_message.Message):
+    __slots__ = ("email", "password")
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    PASSWORD_FIELD_NUMBER: _ClassVar[int]
+    email: str
+    password: str
+    def __init__(self, email: _Optional[str] = ..., password: _Optional[str] = ...) -> None: ...
+
+class CreateUserRequest(_message.Message):
+    __slots__ = ("name", "email", "password", "city")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    PASSWORD_FIELD_NUMBER: _ClassVar[int]
+    CITY_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    email: str
+    password: str
+    city: str
+    def __init__(self, name: _Optional[str] = ..., email: _Optional[str] = ..., password: _Optional[str] = ..., city: _Optional[str] = ...) -> None: ...
+
 class GetUserRequest(_message.Message):
     __slots__ = ("user_id",)
     USER_ID_FIELD_NUMBER: _ClassVar[int]

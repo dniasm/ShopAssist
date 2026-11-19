@@ -490,6 +490,16 @@ class CustomerServiceStub:
                 request_serializer=shopassist__proto_dot_shopassist__pb2.GetUserRequest.SerializeToString,
                 response_deserializer=shopassist__proto_dot_shopassist__pb2.User.FromString,
                 _registered_method=True)
+        self.Authenticate = channel.unary_unary(
+                '/shopassist.v2.CustomerService/Authenticate',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.AuthenticateRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.User.FromString,
+                _registered_method=True)
+        self.CreateUser = channel.unary_unary(
+                '/shopassist.v2.CustomerService/CreateUser',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.CreateUserRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.User.FromString,
+                _registered_method=True)
         self.GetCart = channel.unary_unary(
                 '/shopassist.v2.CustomerService/GetCart',
                 request_serializer=shopassist__proto_dot_shopassist__pb2.GetCartRequest.SerializeToString,
@@ -518,6 +528,20 @@ class CustomerServiceServicer:
 
     def GetUser(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Authenticate(self, request, context):
+        """UNAUTHENTICATED: wrong email or password (never says which)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateUser(self, request, context):
+        """ALREADY_EXISTS: email taken; INVALID_ARGUMENT: bad input
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -551,6 +575,16 @@ def add_CustomerServiceServicer_to_server(servicer, server):
             'GetUser': grpc.unary_unary_rpc_method_handler(
                     servicer.GetUser,
                     request_deserializer=shopassist__proto_dot_shopassist__pb2.GetUserRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.User.SerializeToString,
+            ),
+            'Authenticate': grpc.unary_unary_rpc_method_handler(
+                    servicer.Authenticate,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.AuthenticateRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.User.SerializeToString,
+            ),
+            'CreateUser': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateUser,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.CreateUserRequest.FromString,
                     response_serializer=shopassist__proto_dot_shopassist__pb2.User.SerializeToString,
             ),
             'GetCart': grpc.unary_unary_rpc_method_handler(
@@ -622,6 +656,60 @@ class CustomerService:
             target,
             '/shopassist.v2.CustomerService/GetUser',
             shopassist__proto_dot_shopassist__pb2.GetUserRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.User.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Authenticate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.CustomerService/Authenticate',
+            shopassist__proto_dot_shopassist__pb2.AuthenticateRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.User.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateUser(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.CustomerService/CreateUser',
+            shopassist__proto_dot_shopassist__pb2.CreateUserRequest.SerializeToString,
             shopassist__proto_dot_shopassist__pb2.User.FromString,
             options,
             channel_credentials,

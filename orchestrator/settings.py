@@ -31,6 +31,7 @@ class Settings:
     port: int = 8011
     session_secret: str = field(default="", repr=False)  # signs session tokens; secret, so out of repr/logs
     session_max_age_seconds: int = 12 * 3600
+    signup_code: str = field(default="", repr=False)  # SIGNUP_CODE: when set, creating an account needs it
     unary_timeout: float = 2.0  # deadline for every unary gRPC call
     health_timeout: float = 1.5  # a health probe must answer quickly or count as down
     checkout_first_event_timeout: float = 5.0  # POST /checkout waits this long for the order id
@@ -63,6 +64,7 @@ class Settings:
             payment_addr=env("PAYMENT_ADDR") or d.payment_addr,
             port=int(env("ORCHESTRATOR_PORT") or d.port),
             session_secret=env("SESSION_SECRET") or secrets.token_urlsafe(32),  # random: tokens die with the process
+            signup_code=(env("SIGNUP_CODE") or "").strip(),
             llm_base_url=env("LLM_BASE_URL") or d.llm_base_url,
             # LLM_API_KEYS is the list; the legacy single LLM_API_KEY is merged in.
             llm_api_keys=parse_keys(env("LLM_API_KEYS"), env("LLM_API_KEY")),

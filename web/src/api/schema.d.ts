@@ -61,15 +61,18 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/users": {
+    "/api/signups": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Users */
-        get: operations["list_users_api_users_get"];
+        /**
+         * Signups
+         * @description Whether creating an account needs the invite code (SIGNUP_CODE).
+         */
+        get: operations["signups_api_signups_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -87,8 +90,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Session */
+        /**
+         * Create Session
+         * @description Sign in with email and password. A wrong email and a wrong password get the same answer.
+         */
         post: operations["create_session_api_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign Up
+         * @description Create an account and sign in as it.
+         */
+        post: operations["sign_up_api_signup_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -809,7 +835,7 @@ export interface components {
              * Code
              * @enum {string}
              */
-            code: "invalid" | "unauthenticated" | "not_found" | "conflict" | "out_of_stock" | "payment_declined" | "unavailable" | "internal";
+            code: "invalid" | "unauthenticated" | "forbidden" | "rate_limited" | "not_found" | "conflict" | "out_of_stock" | "payment_declined" | "unavailable" | "internal";
             /** Message */
             message: string;
             /** Details */
@@ -1147,8 +1173,10 @@ export interface components {
         };
         /** SessionIn */
         SessionIn: {
-            /** User Id */
-            user_id: string;
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
         };
         /** SessionOut */
         SessionOut: {
@@ -1164,6 +1192,35 @@ export interface components {
             requested: number;
             /** Available */
             available: number;
+        };
+        /** SignUpIn */
+        SignUpIn: {
+            /** Name */
+            name: string;
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /**
+             * City
+             * @default
+             */
+            city: string;
+            /**
+             * Invite
+             * @description Required when the shop has a SIGNUP_CODE; see GET /api/signups.
+             * @default
+             */
+            invite: string;
+        };
+        /** SignupsOut */
+        SignupsOut: {
+            /**
+             * Signups
+             * @description 'invite': creating an account needs the shop's invite code.
+             * @enum {string}
+             */
+            signups: "open" | "invite";
         };
         /** Sku */
         Sku: {
@@ -1247,11 +1304,6 @@ export interface components {
             email: string;
             /** City */
             city: string;
-        };
-        /** UsersOut */
-        UsersOut: {
-            /** Users */
-            users: components["schemas"]["User"][];
         };
     };
     responses: never;
@@ -1430,7 +1482,7 @@ export interface operations {
             };
         };
     };
-    list_users_api_users_get: {
+    signups_api_signups_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1445,7 +1497,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UsersOut"];
+                    "application/json": components["schemas"]["SignupsOut"];
                 };
             };
             /** @description Error envelope */
@@ -1501,6 +1553,66 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sign_up_api_signup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignUpIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -32,6 +32,18 @@ orders live. Each service owns its own Postgres database. Everything runs locall
 - `run_all.py --web` also starts the Vite dev server on port 5173.
 - `run_all.py` refuses to start if a port it needs is busy. It never kills other processes.
 
+### Sign-in
+
+Accounts sign in with email and password (**Sign in** at the top right, or **Create an account** there).
+
+- **Demo accounts.** The six seeded customers share the password `DEMO_PASSWORD` (default `shopassist-demo`), for
+  example `priya.raman@example.com`. The sign-in dialog has a "Use the demo account" button. Set `DEMO_PASSWORD=` (empty)
+  to turn demo logins off; accounts that already have a password keep it.
+- **New accounts** are open by default. Set `SIGNUP_CODE` to require an invite code.
+- **How it is stored.** The Customer service keeps salted PBKDF2-SHA256 hashes (600,000 rounds), never passwords. The
+  orchestrator throttles wrong passwords (5 per email per address, 20 per address, per 15 minutes) and issues the signed
+  session token the rest of the API and the WebSocket use. The rules and code come from the day7 project's accounts.
+
 Web app:
 
 ```powershell
@@ -105,7 +117,7 @@ call them `key#1`, `key#2`, and so on.
 
 All settings are environment variables; `.env.example` lists them with comments: the service addresses
 (`CATALOG_ADDR` … `PAYMENT_ADDR`), `ORCHESTRATOR_PORT` (8011), `RESERVATION_TTL_SECONDS`, `FULFILMENT_STEP_SECONDS`
-(seconds between order status steps), `PAYMENT_LATENCY_MS` and `SESSION_SECRET`.
+(seconds between order status steps), `PAYMENT_LATENCY_MS`, `SESSION_SECRET`, `DEMO_PASSWORD` and `SIGNUP_CODE`.
 
 ## Troubleshooting
 

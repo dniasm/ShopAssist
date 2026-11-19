@@ -1,23 +1,46 @@
-/* A dialog floats, so it may carry the one shadow in the app. The scrim is flat. */
+/* Two columns like day7's log-in page, in this shop's tokens: the form on a white surface, a raised panel beside it.
+   A dialog floats, so it may carry the one shadow in the app. The scrim is flat. */
 .dialog {
-  width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; margin: auto;
+  width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; margin: auto;
   border: 1px solid var(--border); border-radius: var(--radius-card);
   background: var(--surface); color: var(--text); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
 }
 .dialog::backdrop { background: var(--scrim); }
-.body { display: grid; gap: 16px; padding: 20px; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr); }
+.formSide { display: grid; gap: 20px; align-content: start; padding: 24px; }
 .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.head p { margin-top: 2px; }
-.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.row {
-  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 8px 10px; text-align: left;
-  border: 0; border-radius: var(--radius-control); background: transparent;
-  transition: background-color 150ms ease;
+.head p { margin-top: 4px; }
+.title { font-size: var(--fs-title); line-height: 32px; font-weight: 600; letter-spacing: -0.01em; }
+
+.form { display: grid; gap: 12px; }
+.label { display: grid; gap: 6px; font-weight: 500; }
+.label :global(.field) { height: 36px; font-weight: 400; }
+.rule { margin-top: -6px; }
+.submit { width: 100%; margin-top: 4px; }
+.error {
+  padding: 8px 12px; border-radius: var(--radius-control);
+  background: var(--pill-negative-bg); color: var(--pill-negative-ink);
 }
-.row:hover:not(:disabled) { background: var(--raised); }
-.row:disabled { cursor: progress; opacity: 0.6; }
-.who { display: grid; min-width: 0; flex: 1; }
-.who > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.name { font-weight: 500; }
-.skelRow { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 10px; }
-.failure { color: var(--negative); }
+
+.panel {
+  display: grid; gap: 20px; align-content: start; padding: 24px;
+  background: var(--raised); border-left: 1px solid var(--border);
+  border-radius: 0 var(--radius-card) var(--radius-card) 0;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-size: var(--fs-section); font-weight: 600; }
+.points { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.points li { display: grid; gap: 2px; }
+.demo {
+  display: grid; gap: 6px; justify-items: start; padding: 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface);
+}
+.demo :global(.btn) { margin-top: 6px; }
+
+/* Narrow: one column; the panel drops below the form and keeps only the demo shortcut. */
+@media (max-width: 640px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .formSide { padding: 20px; }
+  .panel { padding: 0 20px 20px; background: transparent; border-left: 0; border-radius: 0; }
+  .brand, .points { display: none; }
+}

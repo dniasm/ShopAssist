@@ -9,7 +9,7 @@ from tests.conftest import AppClient
 
 from orchestrator.app import create_app
 from orchestrator.settings import Settings
-from tests.fixtures import INVENTORY, PRODUCTS, SKUS, USERS
+from tests.fixtures import DEMO_PASSWORD, EMAIL_OF, INVENTORY, PRODUCTS, SKUS, USERS
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +34,7 @@ def free_port() -> int:
 
 
 def sign_in(client, user_id="U-01"):
-    r = client.post("/api/session", json={"user_id": user_id})
+    r = client.post("/api/session", json={"email": EMAIL_OF[user_id], "password": DEMO_PASSWORD})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
@@ -82,13 +82,12 @@ def test_llm_status_without_keys(client):
 
 # ---------------- users, session, me ----------------
 
-def test_users_lists_demo_users(client):
-    users = client.get("/api/users").json()["users"]
-    assert users == sorted(USERS, key=lambda u: u["user_id"]) and len(users) == 12
+def test_the_customer_list_is_not_public_any_more(client):
+    error(client.get("/api/users"), 404, "not_found")  # with passwords, listing every account would help guessers
 
 
-def test_session_returns_token_and_user_and_me_accepts_it(client):
-    r = client.post("/api/session", json={"user_id": "U-02"})
+def test_signing_in_with_email_and_password_returns_a_token_that_me_accepts(client):
+    r = client.post("/api/session", json={"email": "GRACE@example.test", "password": DEMO_PASSWORD})  # email: any case
     assert r.status_code == 200
     body = r.json()
     assert body["user"]["user_id"] == "U-02" and body["token"]
@@ -96,13 +95,18 @@ def test_session_returns_token_and_user_and_me_accepts_it(client):
     assert me.json() == {"user": body["user"]}
 
 
-def test_session_for_unknown_user_is_not_found(client):
-    error(client.post("/api/session", json={"user_id": "U-99"}), 404, "not_found")
+def test_a_wrong_password_and_an_unknown_email_get_the_same_answer(client):
+    wrong = client.post("/api/session", json={"email": EMAIL_OF["U-03"], "password": "not-the-password"})
+    unknown = client.post("/api/session", json={"email": "nobody@example.test", "password": DEMO_PASSWORD})
+    error(wrong, 401, "unauthenticated")
+    error(unknown, 401, "unauthenticated")
+    assert wrong.json()["error"]["message"] == unknown.json()["error"]["message"] == "Wrong email or password."
 
 
 def test_session_body_is_validated(client):
     error(client.post("/api/session", json={}), 422, "invalid")
-    error(client.post("/api/session", json={"user_id": ""}), 422, "invalid")
+    error(client.post("/api/session", json={"email": "ada@example.test", "password": ""}), 422, "invalid")
+    error(client.post("/api/session", json={"user_id": "U-01"}), 422, "invalid")  # the old demo picker is gone
 
 
 def test_me_requires_a_valid_token(client, settings):

@@ -17,6 +17,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 load_dotenv(REPO_ROOT / ".env")
+# Logins: seeded users get this password, and hashing uses few rounds (600,000 per check would slow every sign-in).
+os.environ["DEMO_PASSWORD"] = "demo-password-for-tests"
+os.environ["PASSWORD_ROUNDS"] = "1000"
 
 import grpc  # noqa: E402
 import psycopg  # noqa: E402
@@ -95,6 +98,15 @@ def customer_running(loop_thread, session_dbs, seed_dir):
     r = start(loop_thread, session_dbs, "customer", create_service, seed_dir=seed_dir)
     yield r
     stop(loop_thread, session_dbs, r)
+
+
+@pytest.fixture
+def fresh_customer_running(loop_thread, temp_dbs, seed_dir):
+    """A customer service of its own, for tests that create accounts."""
+    from services.customer.server import create_service
+    r = start(loop_thread, temp_dbs, "customer", create_service, seed_dir=seed_dir)
+    yield r
+    stop(loop_thread, temp_dbs, r)
 
 
 @pytest.fixture(scope="session")

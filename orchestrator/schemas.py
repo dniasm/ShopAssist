@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class ErrorBody(BaseModel):
-    code: Literal["invalid", "unauthenticated", "not_found", "conflict", "out_of_stock", "payment_declined", "unavailable", "internal"]
+    code: Literal["invalid", "unauthenticated", "forbidden", "rate_limited", "not_found", "conflict", "out_of_stock", "payment_declined", "unavailable", "internal"]
     message: str
     details: dict | None = None
 
@@ -66,12 +66,21 @@ class User(BaseModel):
     city: str
 
 
-class UsersOut(BaseModel):
-    users: list[User]
-
-
 class SessionIn(BaseModel):
-    user_id: str = Field(min_length=1, max_length=64)
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class SignUpIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=256)
+    city: str = Field("", max_length=64)
+    invite: str = Field("", max_length=128, description="Required when the shop has a SIGNUP_CODE; see GET /api/signups.")
+
+
+class SignupsOut(BaseModel):
+    signups: Literal["open", "invite"] = Field(description="'invite': creating an account needs the shop's invite code.")
 
 
 class SessionOut(BaseModel):

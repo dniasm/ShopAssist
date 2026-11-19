@@ -27,6 +27,48 @@ async def get_user(pool: AsyncConnectionPool, user_id: str) -> dict | None:
         return await cur.fetchone()
 
 
+async def set_missing_passwords(pool: AsyncConnectionPool, password_hash: str) -> int:
+    """Give every user without a password this one (the seeded demo users). Users who have one keep it."""
+    async with pool.connection() as conn:
+        cur = await conn.execute("UPDATE users SET password_hash = %s WHERE password_hash = ''", (password_hash,))
+        return cur.rowcount
+
+
+async def credentials(pool: AsyncConnectionPool, email: str) -> dict | None:
+    """The user with this email (any case) and their password hash, or None."""
+    async with pool.connection() as conn:
+        cur = await conn.execute(
+            "SELECT user_id, name, email, city, password_hash FROM users WHERE lower(email) = lower(%s)", (email,)
+        )
+        return await cur.fetchone()
+
+
+class EmailTaken(Exception):
+    pass
+
+
+async def create_user(pool: AsyncConnectionPool, name: str, email: str, city: str, password_hash: str) -> dict:
+    """A new user with the next free id (U-07 after U-06) and an empty cart, in one transaction."""
+    async with pool.connection() as conn:
+        # One sign-up at a time picks the next id; reads (logins, carts) are not blocked by this lock mode.
+        await conn.execute("LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE")
+        cur = await conn.execute("SELECT 1 FROM users WHERE lower(email) = lower(%s)", (email,))
+        if await cur.fetchone():
+            raise EmailTaken(email)
+        cur = await conn.execute(
+            "SELECT coalesce(max(substring(user_id FROM '^U-(\\d+)$')::int), 0) + 1 AS n FROM users"
+        )
+        user_id = f"U-{(await cur.fetchone())['n']:02d}"
+        cur = await conn.execute(
+            "INSERT INTO users (user_id, name, email, city, password_hash) VALUES (%s, %s, %s, %s, %s)"
+            " RETURNING user_id, name, email, city",
+            (user_id, name, email, city, password_hash),
+        )
+        user = await cur.fetchone()
+        await conn.execute("INSERT INTO carts (user_id) VALUES (%s)", (user_id,))
+        return user
+
+
 class UnknownUser(Exception):
     pass
 

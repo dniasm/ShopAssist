@@ -22,7 +22,7 @@ export class ApiError extends Error {
 
 // `satisfies` makes this fail to compile if the API adds or removes an error code, so the list cannot drift.
 const KNOWN_CODES = {
-  invalid: true, unauthenticated: true, not_found: true, conflict: true, out_of_stock: true,
+  invalid: true, unauthenticated: true, forbidden: true, rate_limited: true, not_found: true, conflict: true, out_of_stock: true,
   payment_declined: true, unavailable: true, internal: true,
 } satisfies Record<ErrorCode, true>;
 

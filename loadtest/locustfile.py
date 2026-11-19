@@ -3,7 +3,7 @@
 Run (see loadtest/README.md):
     .venv\Scripts\locust.exe -f loadtest/locustfile.py --host http://127.0.0.1:8011 --headless -u 25 -r 5 -t 60s
 
-Every simulated user signs in as one of the demo users U-01..U-06, then repeats a weighted mix of
+Every simulated user signs in (email and DEMO_PASSWORD) as one of the demo users U-01..U-06, then repeats a weighted mix of
 browse / search / filter / product page / cart / checkout / orders. Chat is OFF by default (it spends the
 shared LLM quota); pass --with-chat to enable it.
 """
@@ -14,7 +14,10 @@ from collections import Counter
 
 from locust import HttpUser, between, events, task
 
-DEMO_USERS = [f"U-0{i}" for i in range(1, 7)]
+# The six seeded demo accounts (data/seed/v2/customers.json); they share DEMO_PASSWORD (default "shopassist-demo").
+DEMO_EMAILS = ["priya.raman@example.com", "tomas.lindqvist@example.com", "hana.mori@example.com",
+               "daniel.osei@example.com", "lucia.ferrand@example.com", "samuel.adeyemi@example.com"]
+DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD") or "shopassist-demo"
 CATEGORIES = ["accessories", "backpacks", "headphones", "hoodies", "jackets", "jeans", "shoes",
               "sunglasses", "t-shirts", "watches"]
 SEARCHES = ["jacket", "black hoodie", "running shoes", "wireless headphones", "leather", "watch",
@@ -55,8 +58,8 @@ class Shopper(HttpUser):
     def on_start(self):
         self.seen_products = []
         self.seen_skus = []
-        user_id = random.choice(DEMO_USERS)
-        with self.client.post("/api/session", json={"user_id": user_id}, name="POST /api/session",
+        email = random.choice(DEMO_EMAILS)
+        with self.client.post("/api/session", json={"email": email, "password": DEMO_PASSWORD}, name="POST /api/session",
                               catch_response=True) as r:
             if r.status_code == 200:
                 self.token = r.json()["token"]

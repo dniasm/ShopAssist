@@ -8,6 +8,8 @@ type Schemas = components["schemas"];
 
 export type User = Schemas["User"];
 export type Session = Schemas["SessionOut"];
+export type SignUpInput = Schemas["SignUpIn"];
+export type Signups = Schemas["SignupsOut"]["signups"];
 export type Sku = Schemas["Sku"];
 export type Product = Schemas["Product"];
 export type ProductCard = Schemas["ProductCard"];

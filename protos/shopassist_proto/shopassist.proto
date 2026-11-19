@@ -163,6 +163,18 @@ message User {
 
 message ListUsersRequest {}
 message ListUsersResponse { repeated User users = 1; }
+
+// Logins. The password goes only to the Customer service, which owns users and stores salted PBKDF2 hashes.
+message AuthenticateRequest {
+  string email = 1;                 // any case
+  string password = 2;
+}
+message CreateUserRequest {
+  string name = 1;                  // 1-64 characters
+  string email = 2;                 // unique, any case
+  string password = 3;              // 8-256 characters
+  string city = 4;                  // optional
+}
 message GetUserRequest { string user_id = 1; }        // NOT_FOUND if unknown (used to sign in)
 
 message CartLine {
@@ -190,6 +202,8 @@ message ClearCartRequest { int64 if_version = 1; }         // 0 = unconditional;
 service CustomerService {
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
   rpc GetUser(GetUserRequest) returns (User);
+  rpc Authenticate(AuthenticateRequest) returns (User);  // UNAUTHENTICATED: wrong email or password (never says which)
+  rpc CreateUser(CreateUserRequest) returns (User);      // ALREADY_EXISTS: email taken; INVALID_ARGUMENT: bad input
   rpc GetCart(GetCartRequest) returns (Cart);
   rpc SetCartLine(SetCartLineRequest) returns (Cart);
   rpc ClearCart(ClearCartRequest) returns (Cart);

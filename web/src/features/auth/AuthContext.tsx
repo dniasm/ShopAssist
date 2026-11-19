@@ -1,17 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { setAuthToken, setUnauthenticatedHandler } from "../../api/client";
-import { createSession, getMe } from "../../api/endpoints";
-import type { User } from "../../api/types";
+import { createSession, getMe, signUp as createAccount } from "../../api/endpoints";
+import type { Session, SignUpInput, User } from "../../api/types";
 import { SignInDialog } from "./SignInDialog";
 import { loadSession, saveSession } from "./storage";
 
 interface AuthValue {
   user: User | null;
   token: string | null;
-  /** Signs in as an existing demo user. Rejects with an ApiError the dialog shows. */
-  signIn: (userId: string) => Promise<void>;
+  /** Signs in with email and password. Rejects with an ApiError the dialog shows. */
+  signIn: (email: string, password: string) => Promise<void>;
+  /** Creates an account and signs in as it. Rejects with an ApiError the dialog shows. */
+  signUp: (input: SignUpInput) => Promise<void>;
   signOut: () => void;
-  /** Opens the "Sign in as" picker from anywhere. `then` runs once, after a successful sign-in (e.g. finish an Add to cart). */
+  /** Opens the sign-in dialog from anywhere. `then` runs once, after a successful sign-in (e.g. finish an Add to cart). */
   openSignIn: (then?: () => void) => void;
 }
 
@@ -40,14 +42,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => apply(null), [apply]);
 
-  const signIn = useCallback(async (userId: string) => {
-    apply(await createSession(userId));
+  const finish = useCallback((next: Session) => {
+    apply(next);
     setPickerOpen(false);
     const then = afterSignIn.current;
     afterSignIn.current = null;
     // Let React commit the new user first, so whatever continues runs as the signed-in shopper.
     if (then) window.setTimeout(then, 0);
   }, [apply]);
+
+  const signIn = useCallback(async (email: string, password: string) => finish(await createSession(email, password)), [finish]);
+  const signUp = useCallback(async (input: SignUpInput) => finish(await createAccount(input)), [finish]);
 
   const closePicker = useCallback(() => { afterSignIn.current = null; setPickerOpen(false); }, []);
 
@@ -70,14 +75,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: session?.user ?? null,
     token: session?.token ?? null,
     signIn,
+    signUp,
     signOut,
     openSignIn: (then) => { afterSignIn.current = then ?? null; setPickerOpen(true); },
-  }), [session, signIn, signOut]);
+  }), [session, signIn, signUp, signOut]);
 
   return (
     <AuthContext.Provider value={value}>
       {children}
-      <SignInDialog open={pickerOpen} onClose={closePicker} onPick={signIn} />
+      <SignInDialog open={pickerOpen} onClose={closePicker} onSignIn={signIn} onSignUp={signUp} />
     </AuthContext.Provider>
   );
 }

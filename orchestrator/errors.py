@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 log = logging.getLogger(__name__)
 
 STATUS = {
-    "invalid": 422, "unauthenticated": 401, "not_found": 404, "conflict": 409, "out_of_stock": 409,
+    "invalid": 422, "unauthenticated": 401, "forbidden": 403, "rate_limited": 429, "not_found": 404, "conflict": 409, "out_of_stock": 409,
     "payment_declined": 402, "unavailable": 503, "internal": 500,
 }
 GRPC_TO_CODE = {

@@ -195,7 +195,7 @@ Orchestrator (FastAPI :8011): gateway + agent. NO database driver, ever.
   +-- InventoryService  :50052  db "inventory"  stock per sku, reservations (TTL)
   +-- OrderService      :50053  db "orders"     orders, checkout saga, fulfilment worker, outbox
   |        +-- gRPC --> Catalog (prices), Inventory (reserve/commit/release/restock), Payment
-  +-- CustomerService   :50054  db "customer"   demo users, carts
+  +-- CustomerService   :50054  db "customer"   users, password hashes, carts
   +-- PaymentService    :50055  db "payment"    simulated charges/refunds
 ```
 
@@ -249,11 +249,16 @@ Orchestrator (FastAPI :8011): gateway + agent. NO database driver, ever.
   OUT_FOR_DELIVERY→DELIVERED one step per `FULFILMENT_STEP_SECONDS`, each step an outbox event.
   **Reading an order never writes.**
 
-## Auth (demo, no passwords)
+## Auth (email and password; rules from day7's accounts)
 
-`POST /api/session {"user_id"}` → user must exist (`CustomerService.GetUser`) → `{"token","user"}`. Token =
-`itsdangerous`-signed `{user_id}` with 12 h max age, key `SESSION_SECRET`. All `/api/*` except `/api/health*`,
-`/api/users`, `/api/session`, `/api/products*` need `Authorization: Bearer <token>`; the WebSocket takes `?token=`.
+`POST /api/session {"email","password"}` → `CustomerService.Authenticate` (salted PBKDF2-SHA256, 600,000 rounds; a wrong
+email and a wrong password get the same 401) → `{"token","user"}`. `POST /api/signup {"name","email","password","invite"?}`
+→ `CustomerService.CreateUser` (next id `U-NN`, email unique in any case, 409 if taken) → 201 `{"token","user"}`; with
+`SIGNUP_CODE` set, a wrong or missing invite is 403. `GET /api/signups` → `{"signups": "open"|"invite"}`. Wrong passwords
+are throttled in the orchestrator (429 after 5 per email per address, 20 per address, in 15 minutes). Seeded users get
+`DEMO_PASSWORD` at start. Token = `itsdangerous`-signed `{user_id}` with 12 h max age, key `SESSION_SECRET`. All `/api/*`
+except `/api/health*`, `/api/session`, `/api/signup*`, `/api/products*` need `Authorization: Bearer <token>`; the
+WebSocket takes `?token=`. (`GET /api/users`, the demo picker, was removed with the passwords.)
 The orchestrator forwards the user as gRPC metadata `x-user-id`; services enforce ownership.
 
 ## REST contract (orchestrator, all under /api, JSON)
@@ -267,8 +272,9 @@ Errors: HTTP status + `{"error": {"code", "message", "details"?}}`. Codes: `inva
 | GET `/api/health` | | `{"status":"ok"}` |
 | GET `/api/health/services` | | `{"all_up","checked_at","services":[{"name","service","address","status":"up"/"down","latency_ms","error"}]}` via grpc.health.v1 |
 | GET `/api/llm/status` | | as Phase 2 |
-| GET `/api/users` | | `{"users":[User]}` |
-| POST `/api/session` | `{"user_id"}` | `{"token","user"}` |
+| POST `/api/session` | `{"email","password"}` | `{"token","user"}`; 401 wrong credentials, 429 throttled |
+| POST `/api/signup` | `{"name","email","password","city"?,"invite"?}` | 201 `{"token","user"}`; 409 email taken, 403 invite |
+| GET `/api/signups` | | `{"signups":"open"\|"invite"}` |
 | GET `/api/me` | | `{"user"}` |
 | GET `/api/products` | `q, category*, brand*, color*, size*, min_price_cents, max_price_cents, sort` (`relevance, price_asc, price_desc, rating, newest`), `page_size, page_token`; `*` = repeatable | `{"products":[ProductCard],"total","next_page_token","facets":[{"field","values":[{"value","count"}]}],"price_min_cents","price_max_cents"}`; ProductCard = Product without `skus` plus `"in_stock"` (one batched GetStock per page) |
 | GET `/api/products/{id}` | | `{"product": Product, "stock":[{"sku_id","size","color","available"}]}` |
@@ -366,7 +372,7 @@ Next steps:
    written after seeing the set, so that number is optimistic). Next: pace the LLM eval, more keys, move chat memory
    and the WS event log out of process.
 2. 5.5 DONE (2026-11-19): Locust load test (`loadtest/`, numbers in `loadtest/RESULTS.md`); `frontend/`, `client/`, the v1 seed files, `orchestrator/intent.py` and `tests/test_intent.py` removed (git history keeps them); v1 README sections replaced.
-3. Known gaps: no real auth (demo "sign in as"); the per-user WebSocket event log is in memory, so the
+3. Known gaps: no password reset or email verification; the per-user WebSocket event log is in memory, so the
    orchestrator is still a single process; the test suite takes 2–8 minutes depending on machine load.
 
 ## 5.4 resumed (2026-11-19) — scorer interface

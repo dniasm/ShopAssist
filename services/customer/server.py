@@ -1,6 +1,12 @@
-"""CustomerService (:50054): demo users and carts. Run: python -m services.customer.server"""
+"""CustomerService (:50054): users, their logins and their carts. Run: python -m services.customer.server
+
+Seeded demo users have no password of their own: at start every user without one gets DEMO_PASSWORD (default
+"shopassist-demo"; empty disables demo logins). Accounts made by CreateUser always have their own.
+"""
 import asyncio
 import logging
+import os
+import re
 from pathlib import Path
 
 import grpc
@@ -13,11 +19,16 @@ from services.common.seed import read_seed, seed_dir as default_seed_dir, seed_i
 from services.common.server import Service, listen_address
 from services.common.util import iso
 from services.customer import db
+from services.customer.passwords import MAX_PASSWORD, MIN_PASSWORD, check_password, hash_password
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 MAX_LINE_QUANTITY = 10
+DEFAULT_DEMO_PASSWORD = "shopassist-demo"
+EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]+$")
+# Checked even when the email is unknown, so a wrong email takes as long as a wrong password (no account probing).
+_DUMMY_HASH = hash_password("not a real password")
 
 
 def to_user(row: dict) -> pb.User:
@@ -44,6 +55,27 @@ class CustomerServicer(pb_grpc.CustomerServiceServicer):
         if row is None:
             await context.abort(grpc.StatusCode.NOT_FOUND, f"user {request.user_id} not found")
         return to_user(row)
+
+    async def Authenticate(self, request, context):
+        row = await db.credentials(self.pool, request.email.strip())
+        ok = await asyncio.to_thread(check_password, request.password, row["password_hash"] if row else _DUMMY_HASH)
+        if row is None or not ok:
+            await context.abort(grpc.StatusCode.UNAUTHENTICATED, "wrong email or password")
+        return to_user(row)
+
+    async def CreateUser(self, request, context):
+        name, email, city = request.name.strip(), request.email.strip(), request.city.strip()
+        if not 1 <= len(name) <= 64:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "A name is 1-64 characters.")
+        if len(email) > 254 or not EMAIL.match(email):
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "That does not look like an email address.")
+        if not MIN_PASSWORD <= len(request.password) <= MAX_PASSWORD:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"A password is {MIN_PASSWORD}-{MAX_PASSWORD} characters.")
+        password_hash = await asyncio.to_thread(hash_password, request.password)
+        try:
+            return to_user(await db.create_user(self.pool, name, email, city[:64], password_hash))
+        except db.EmailTaken:
+            await context.abort(grpc.StatusCode.ALREADY_EXISTS, "an account with that email already exists")
 
     async def GetCart(self, request, context):
         user_id = await require_user(context)
@@ -74,12 +106,16 @@ class CustomerServicer(pb_grpc.CustomerServiceServicer):
             await context.abort(grpc.StatusCode.ABORTED, str(e))
 
 
-async def create_service(url: str, *, seed_dir: Path | None = None, address: str = "127.0.0.1:0") -> Service:
+async def create_service(url: str, *, seed_dir: Path | None = None, address: str = "127.0.0.1:0",
+                         demo_password: str | None = None) -> Service:
     pool = await create_pool(url)
     await apply_migrations(pool, MIGRATIONS)
     data = read_seed(seed_dir or default_seed_dir(), "customers.json")
     if data is not None:
         await seed_if_empty(pool, "users", lambda conn: db.load_seed(conn, data))
+    demo = os.environ.get("DEMO_PASSWORD", DEFAULT_DEMO_PASSWORD) if demo_password is None else demo_password
+    if demo:  # one hash for all of them: they share the password anyway, and start-up hashes once, not per user
+        await db.set_missing_passwords(pool, await asyncio.to_thread(hash_password, demo))
     service = Service("customer", pool)
     service.register(pb_grpc.add_CustomerServiceServicer_to_server, CustomerServicer(pool), "shopassist.v2.CustomerService")
     service.bind(address)

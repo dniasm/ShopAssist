@@ -1,20 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-import { listUsers } from "../../api/endpoints";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { getSignups } from "../../api/endpoints";
 import { describeError } from "../../api/errors";
-import { ErrorBlock } from "../../components/StateBlocks";
-import { useAsyncData } from "../../hooks/useAsyncData";
-import { Icon } from "../../components/Icon";
-import { Avatar } from "./Avatar";
+import type { SignUpInput, Signups } from "../../api/types";
+import { Icon, Mark } from "../../components/Icon";
+import { EMPTY_FORM, MIN_PASSWORD, formProblem, type CredentialsForm, type Mode } from "./credentials";
 import styles from "./SignInDialog.module.css";
+
+// The seeded demo account offered on the side panel; every seeded user shares DEMO_PASSWORD (README, "Sign-in").
+const DEMO = { email: "priya.raman@example.com", password: "shopassist-demo" };
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  onPick: (userId: string) => Promise<void>;
+  onSignIn: (email: string, password: string) => Promise<void>;
+  onSignUp: (input: SignUpInput) => Promise<void>;
 }
 
-/** The demo "Sign in as" picker: no passwords, just a list of the shop's customers. */
-export function SignInDialog({ open, onClose, onPick }: Props) {
+/** Sign in or create an account. Layout and flow from day7's log-in page, in this shop's tokens: the form on the
+ *  left, a quiet panel on the right (hidden on narrow screens). Opened from anywhere through useAuth().openSignIn. */
+export function SignInDialog({ open, onClose, onSignIn, onSignUp }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -32,62 +36,123 @@ export function SignInDialog({ open, onClose, onPick }: Props) {
       onClose={onClose}
       onClick={(e) => { if (e.target === ref.current) onClose(); }}
     >
-      {open && <Picker onClose={onClose} onPick={onPick} />}
+      {open && <AuthForm onClose={onClose} onSignIn={onSignIn} onSignUp={onSignUp} />}
     </dialog>
   );
 }
 
-function Picker({ onClose, onPick }: { onClose: () => void; onPick: (userId: string) => Promise<void> }) {
-  const users = useAsyncData(listUsers, "users");
-  const [pending, setPending] = useState<string | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+function AuthForm({ onClose, onSignIn, onSignUp }: Omit<Props, "open">) {
+  const [mode, setMode] = useState<Mode>("signin");
+  const [form, setForm] = useState<CredentialsForm>(EMPTY_FORM);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [signups, setSignups] = useState<Signups>("open");
+  const registering = mode === "signup";
+  const needsInvite = signups === "invite";
 
-  async function choose(userId: string) {
-    setPending(userId);
-    setFailure(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    getSignups(controller.signal).then(setSignups).catch(() => undefined);  // unknown: the server asks if it must
+    return () => controller.abort();
+  }, []);
+
+  const set = (field: keyof CredentialsForm) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const problem = formProblem(mode, form, needsInvite);
+    if (problem) { setError(problem); return; }
+    setError(null);
+    setBusy(true);
     try {
-      await onPick(userId);
+      if (registering) {
+        await onSignUp({ name: form.name.trim(), email: form.email.trim(), password: form.password, city: "", invite: form.invite.trim() });
+      } else {
+        await onSignIn(form.email.trim(), form.password);
+      }
     } catch (err) {
-      setFailure(describeError(err));
-      setPending(null);
+      setError(describeError(err));
+      setBusy(false);
     }
   }
 
-  return (
-    <div className={styles.body}>
-      <header className={styles.head}>
-        <div>
-          <h2 id="signin-title" className="section-title">Sign in as</h2>
-          <p className="muted">Pick a customer to shop as. There are no passwords in this demo.</p>
-        </div>
-        <button type="button" className="btn icon" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
-      </header>
+  function switchMode() {
+    setMode(registering ? "signin" : "signup");
+    setError(null);
+  }
 
-      {users.status === "loading" && (
-        <ul className={styles.list} aria-label="Loading customers">
-          {[0, 1, 2, 3].map((i) => (
-            <li key={i} className={styles.skelRow}><span className="skel" style={{ width: 28, height: 28, borderRadius: 14 }} /><span className="skel" style={{ width: "40%" }} /></li>
-          ))}
+  return (
+    <div className={styles.layout}>
+      <section className={styles.formSide}>
+        <header className={styles.head}>
+          <div>
+            <h2 id="signin-title" className={styles.title}>{registering ? "Create your account" : "Sign in"}</h2>
+            <p className="muted">
+              {registering ? "Your cart, orders and assistant chats stay with your account." : "Welcome back. Sign in to see your cart and orders."}
+            </p>
+          </div>
+          <button type="button" className="btn icon" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
+        </header>
+
+        <form className={styles.form} onSubmit={(e) => void submit(e)} noValidate>
+          {registering && (
+            <label className={styles.label}>
+              Name
+              <input className="field" autoComplete="name" maxLength={64} value={form.name} onChange={set("name")} autoFocus />
+            </label>
+          )}
+          <label className={styles.label}>
+            Email
+            <input className="field" type="email" autoComplete="email" maxLength={254} value={form.email} onChange={set("email")}
+              autoFocus={!registering} />
+          </label>
+          <label className={styles.label}>
+            Password
+            <input className="field" type="password" autoComplete={registering ? "new-password" : "current-password"} maxLength={256}
+              value={form.password} onChange={set("password")} aria-describedby={registering ? "password-rules" : undefined} />
+          </label>
+          {registering && <p id="password-rules" className={`muted small ${styles.rule}`}>At least {MIN_PASSWORD} characters.</p>}
+          {registering && needsInvite && (
+            <>
+              <label className={styles.label}>
+                Invite code
+                <input className="field" autoComplete="off" maxLength={128} value={form.invite} onChange={set("invite")}
+                  aria-describedby="invite-rules" />
+              </label>
+              <p id="invite-rules" className={`muted small ${styles.rule}`}>Ask the shop's owner for one.</p>
+            </>
+          )}
+
+          {error && <p className={styles.error} role="alert">{error}</p>}
+
+          <button type="submit" className={`btn primary large ${styles.submit}`} disabled={busy}>
+            {busy ? (registering ? "Creating account…" : "Signing in…") : registering ? "Create account" : "Sign in"}
+          </button>
+        </form>
+
+        <p className="muted">
+          {registering ? "Already have an account?" : "New here?"}{" "}
+          <button type="button" className="btn text" onClick={switchMode}>{registering ? "Sign in" : "Create an account"}</button>
+        </p>
+      </section>
+
+      <aside className={styles.panel} aria-label="About ShopAssist">
+        <div className={styles.brand}><Mark size={22} /><span>ShopAssist</span></div>
+        <ul className={styles.points}>
+          <li><strong>Live orders.</strong> <span className="muted">Watch each order go from confirmed to delivered.</span></li>
+          <li><strong>A shopping assistant.</strong> <span className="muted">Ask for products; it never pays without your click.</span></li>
+          <li><strong>Your cart, everywhere.</strong> <span className="muted">Saved to your account, not to this browser.</span></li>
         </ul>
-      )}
-      {users.status === "error" && <ErrorBlock error={users.error} what="customers" onRetry={users.reload} />}
-      {users.status === "ready" && (
-        <ul className={styles.list}>
-          {users.data.map((u) => (
-            <li key={u.user_id}>
-              <button type="button" className={styles.row} disabled={pending !== null} onClick={() => void choose(u.user_id)}>
-                <Avatar userId={u.user_id} name={u.name} size={32} />
-                <span className={styles.who}>
-                  <span className={styles.name}>{u.name}</span>
-                  <span className="muted small">{u.city} · {u.email}</span>
-                </span>
-                {pending === u.user_id && <span className="muted small" role="status">Signing in…</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {failure && <p className={styles.failure} role="alert">{failure}</p>}
+        {!registering && (
+          <div className={styles.demo}>
+            <p className="small"><strong>Trying it out?</strong></p>
+            <p className="muted small">Demo account {DEMO.email}, password {DEMO.password}.</p>
+            <button type="button" className="btn" onClick={() => { setForm({ ...EMPTY_FORM, ...DEMO }); setError(null); }}>
+              Use the demo account
+            </button>
+          </div>
+        )}
+      </aside>
     </div>
   );
 }

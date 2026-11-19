@@ -77,6 +77,8 @@ USERS = [
     # spare users, so tests that mutate carts or orders can each use their own
     *({"user_id": f"U-{n:02d}", "name": f"Test User {n}", "email": f"u{n}@example.test", "city": "Testville"} for n in range(3, 13)),
 ]
+DEMO_PASSWORD = "demo-password-for-tests"  # conftest sets DEMO_PASSWORD to this before any service starts
+EMAIL_OF = {u["user_id"]: u["email"] for u in USERS}
 
 # Two historic orders (one delivered, one cancelled and refunded), with the payments behind them.
 _LINE = {"sku_id": "SKU-100001", "product_id": "P-1001", "name": "Seed Item", "size": "ONE", "color": "black",

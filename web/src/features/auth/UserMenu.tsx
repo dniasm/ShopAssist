@@ -46,7 +46,7 @@ export function UserMenu() {
             <span className="muted small">{user.city}</span>
           </div>
           <Link to="/orders" className={styles.item} onClick={close}>My orders</Link>
-          <button type="button" className={styles.item} onClick={() => { close(); openSignIn(); }}>Switch user</button>
+          <button type="button" className={styles.item} onClick={() => { close(); openSignIn(); }}>Switch account</button>
           <button type="button" className={styles.item} onClick={() => { close(); signOut(); }}>Sign out</button>
         </div>
       )}

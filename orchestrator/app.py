@@ -16,6 +16,7 @@ from orchestrator.events import EventHub
 from orchestrator.order_watch import OrderWatchers
 from orchestrator.llm import LLMClient
 from orchestrator.schemas import ErrorResponse
+from orchestrator.login_limits import LoginLimits
 from orchestrator.session import SessionTokens
 from orchestrator.settings import SECRET_WARNING, Settings
 from orchestrator.spa import install_spa
@@ -54,6 +55,7 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, w
     app.state.memory = ConversationMemory()
     app.state.forwarding = set()  # (user_id, order_id) pairs whose checkout events are being relayed right now
     app.state.tasks = set()
+    app.state.login_limits = LoginLimits()
     if not settings.session_secret:
         log.warning(SECRET_WARNING)
     app.state.tokens = SessionTokens(settings.session_secret or secrets.token_urlsafe(32), settings.session_max_age_seconds)

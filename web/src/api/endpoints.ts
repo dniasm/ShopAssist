@@ -1,18 +1,23 @@
 import { request } from "./client";
 import type {
   Cart, CancelOrderBody, ChatAccepted, ChatRequest, CheckoutAccepted, ListProductsParams, LlmStatus, Order, OrderList, PaymentMethod, ProductDetail, ProductList, ProposalAck, ServicesHealth,
-  Session, User,
+  Session, SignUpInput, Signups, User,
 } from "./types";
 
 /** One function per REST route. Components never build URLs; hooks call these. */
 
-export async function listUsers(signal?: AbortSignal): Promise<User[]> {
-  const res = await request<{ users: User[] }>("GET", "/users", { signal });
-  return res.users;
+export function createSession(email: string, password: string, signal?: AbortSignal): Promise<Session> {
+  return request<Session>("POST", "/session", { body: { email, password }, signal });
 }
 
-export function createSession(userId: string, signal?: AbortSignal): Promise<Session> {
-  return request<Session>("POST", "/session", { body: { user_id: userId }, signal });
+export function signUp(input: SignUpInput, signal?: AbortSignal): Promise<Session> {
+  return request<Session>("POST", "/signup", { body: input, signal });
+}
+
+/** "invite" when creating an account needs the shop's invite code. */
+export async function getSignups(signal?: AbortSignal): Promise<Signups> {
+  const res = await request<{ signups: Signups }>("GET", "/signups", { signal });
+  return res.signups;
 }
 
 export async function getMe(signal?: AbortSignal): Promise<User> {

@@ -64,6 +64,8 @@ const fetchTransport: Transport = async (method, path, opts, token) => {
   return parsed;
 };
 
+const CREDENTIAL_PATHS = new Set(["/session", "/signup"]);
+
 /** path is relative to /api, e.g. "/products". Resolves to the parsed JSON body typed by the caller's endpoint wrapper. */
 export async function request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
   const token = authToken;
@@ -71,7 +73,10 @@ export async function request<T>(method: string, path: string, opts: RequestOpti
     // The one place untyped JSON becomes T: each wrapper in endpoints.ts names a type generated from the OpenAPI schema.
     return (await fetchTransport(method, path, opts, token)) as T;
   } catch (err) {
-    if (err instanceof ApiError && err.isUnauthenticated && token && authToken === token) unauthenticatedHandler?.();
+    // A 401 from the credential routes is a wrong password, not an expired session: it must not sign anyone out.
+    if (err instanceof ApiError && err.isUnauthenticated && token && authToken === token && !CREDENTIAL_PATHS.has(path)) {
+      unauthenticatedHandler?.();
+    }
     throw err;
   }
 }

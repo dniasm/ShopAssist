@@ -14,7 +14,7 @@ A [Locust](https://locust.io) script that drives the orchestrator's REST API lik
 .venv\Scripts\locust.exe -f loadtest/locustfile.py --host http://127.0.0.1:8011
 ```
 
-What a simulated user does: signs in as a random demo user (U-01..U-06), then repeats a weighted mix of browsing the
+What a simulated user does: signs in (email and `DEMO_PASSWORD`) as a random demo user (U-01..U-06), then repeats a weighted mix of browsing the
 catalog (sort, search, category and price filters), opening product pages, adding stocked SKUs to the cart, viewing the
 cart, checking out (80 % `card_ok`, 20 % `card_declined`) and listing orders. Checkout answers 409/422 (cart emptied or
 short of stock by another simulated user on the same demo account) are business outcomes, not failures; they are tallied

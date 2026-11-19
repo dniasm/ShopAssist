@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketDisconnect
 from orchestrator.app import create_app
 from orchestrator.settings import Settings
 from tests.conftest import start, stop
+from tests.fixtures import DEMO_PASSWORD, EMAIL_OF
 from tests.helpers import SKU_PRICE, rows, sku_with
 
 STEPS = ["VALIDATING", "RESERVING", "CHARGING", "CONFIRMING"]
@@ -65,7 +66,7 @@ class Shop:
     readers: list
 
     def login(self, user_id):
-        r = self.client.post("/api/session", json={"user_id": user_id}).json()
+        r = self.client.post("/api/session", json={"email": EMAIL_OF[user_id], "password": DEMO_PASSWORD}).json()
         return {"Authorization": f"Bearer {r['token']}"}, r["token"]
 
     def ws(self, token, after=None, guest=None):
