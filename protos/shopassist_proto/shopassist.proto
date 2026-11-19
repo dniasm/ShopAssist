@@ -40,7 +40,7 @@ message Product {
 }
 
 enum SortBy {
-  SORT_RELEVANCE = 0;      // falls back to rating when there is no query
+  SORT_RELEVANCE = 0;      // text match first, then engagement (rating_count); engagement alone when there is no query
   SORT_PRICE_ASC = 1;
   SORT_PRICE_DESC = 2;
   SORT_RATING = 3;

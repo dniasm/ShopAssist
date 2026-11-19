@@ -14,8 +14,11 @@ from services.catalog.query import fuzzy_text, parse_search, prefix_tsquery
 TRGM_EXPR = "lower(name || ' ' || brand || ' ' || category)"
 FUZZY_MIN_SIMILARITY = 0.35
 
+# Relevance is engagement (how many shoppers rated a product), not the score itself: "rating" is its own sort, and a
+# 5.0 from three people should not outrank a 4.6 from three hundred.
+ENGAGEMENT = "rating_count DESC, rating DESC"
 SORTS = {  # tie-break on product_id so offset paging is stable
-    "relevance": "rating DESC, rating_count DESC, product_id",
+    "relevance": f"{ENGAGEMENT}, product_id",
     "price_asc": "price_cents ASC, product_id",
     "price_desc": "price_cents DESC, product_id",
     "rating": "rating DESC, rating_count DESC, product_id",
@@ -88,8 +91,8 @@ def _relevance_order(f: Filters) -> str:
     if not f.query.strip():
         return SORTS["relevance"]
     if f.fuzzy:
-        return f"word_similarity(%(fq)s, {TRGM_EXPR}) DESC, rating DESC, rating_count DESC, product_id"
-    return f"ts_rank_cd(search, {_tsquery(f.query)[0]}) DESC, rating DESC, rating_count DESC, product_id"
+        return f"word_similarity(%(fq)s, {TRGM_EXPR}) DESC, {ENGAGEMENT}, product_id"
+    return f"ts_rank_cd(search, {_tsquery(f.query)[0]}) DESC, {ENGAGEMENT}, product_id"
 
 
 def _where(f: Filters, exclude: str = "") -> tuple[str, dict]:

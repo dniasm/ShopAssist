@@ -120,6 +120,17 @@ def test_sorts_order_results(catalog):
     assert newest == sorted(newest, reverse=True)
 
 
+def test_relevance_ranks_by_engagement_not_by_rating(catalog):
+    def listed(sort, query=""):
+        return list(catalog.ListProducts(pb.ListProductsRequest(sort=sort, query=query, page_size=100)).products)
+    relevance = listed(pb.SORT_RELEVANCE)
+    assert [(p.rating_count, p.rating) for p in relevance] == sorted(((p.rating_count, p.rating) for p in relevance), reverse=True)
+    assert [p.product_id for p in relevance] != [p.product_id for p in listed(pb.SORT_RATING)]  # two different orders
+    # with a query, equally good text matches are ordered by engagement too
+    matched = listed(pb.SORT_RELEVANCE, "reliable")  # every fixture description says "reliable": the text rank ties
+    assert [p.rating_count for p in matched] == sorted((p.rating_count for p in matched), reverse=True)
+
+
 def test_page_size_defaults_to_24_and_is_capped_at_100(catalog):
     assert len(catalog.ListProducts(pb.ListProductsRequest()).products) == 24
     assert len(catalog.ListProducts(pb.ListProductsRequest(page_size=1000)).products) == len(PRODUCTS)
