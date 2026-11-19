@@ -120,15 +120,32 @@ def test_sorts_order_results(catalog):
     assert newest == sorted(newest, reverse=True)
 
 
-def test_relevance_ranks_by_engagement_not_by_rating(catalog):
+def weighted_rating(product, products) -> float:
+    """The relevance score: the rating pulled towards the catalog mean, less so the more ratings it has."""
+    counts = sorted(p["rating_count"] for p in products)
+    mid = len(counts) // 2
+    m = max(counts[mid] if len(counts) % 2 else (counts[mid - 1] + counts[mid]) / 2, 1)
+    rated = [p["rating"] for p in products if p["rating_count"] > 0]
+    c = sum(rated) / len(rated)
+    return (product["rating_count"] * product["rating"] + m * c) / (product["rating_count"] + m)
+
+
+def test_relevance_weighs_the_rating_by_how_many_people_gave_it(catalog):
     def listed(sort, query=""):
-        return list(catalog.ListProducts(pb.ListProductsRequest(sort=sort, query=query, page_size=100)).products)
-    relevance = listed(pb.SORT_RELEVANCE)
-    assert [(p.rating_count, p.rating) for p in relevance] == sorted(((p.rating_count, p.rating) for p in relevance), reverse=True)
-    assert [p.product_id for p in relevance] != [p.product_id for p in listed(pb.SORT_RATING)]  # two different orders
-    # with a query, equally good text matches are ordered by engagement too
-    matched = listed(pb.SORT_RELEVANCE, "reliable")  # every fixture description says "reliable": the text rank ties
-    assert [p.rating_count for p in matched] == sorted((p.rating_count for p in matched), reverse=True)
+        return [p.product_id for p in catalog.ListProducts(pb.ListProductsRequest(sort=sort, query=query, page_size=100)).products]
+    by_id = {p["product_id"]: p for p in PRODUCTS}
+    scores = [weighted_rating(by_id[i], PRODUCTS) for i in listed(pb.SORT_RELEVANCE)]
+    assert all(a >= b - 1e-9 for a, b in zip(scores, scores[1:]))
+    assert listed(pb.SORT_RELEVANCE) != listed(pb.SORT_RATING)  # the raw score is its own sort
+    # with a query, equally good text matches are ordered the same way
+    matched = [weighted_rating(by_id[i], PRODUCTS) for i in listed(pb.SORT_RELEVANCE, "reliable")]
+    assert all(a >= b - 1e-9 for a, b in zip(matched, matched[1:]))
+
+
+def test_a_top_rating_from_few_people_does_not_top_the_relevance_list(catalog):
+    """5.0 from 5 people (P-2002) is first by rating but not by relevance."""
+    top = lambda sort: catalog.ListProducts(pb.ListProductsRequest(sort=sort, page_size=1)).products[0].product_id
+    assert top(pb.SORT_RATING) == "P-2002" and top(pb.SORT_RELEVANCE) != "P-2002"
 
 
 def test_page_size_defaults_to_24_and_is_capped_at_100(catalog):

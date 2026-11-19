@@ -14,11 +14,18 @@ from services.catalog.query import fuzzy_text, parse_search, prefix_tsquery
 TRGM_EXPR = "lower(name || ' ' || brand || ' ' || category)"
 FUZZY_MIN_SIMILARITY = 0.35
 
-# Relevance is engagement (how many shoppers rated a product), not the score itself: "rating" is its own sort, and a
-# 5.0 from three people should not outrank a 4.6 from three hundred.
-ENGAGEMENT = "rating_count DESC, rating DESC"
+# Relevance weighs a product's rating by how many shoppers gave it (a Bayesian average, as in IMDb's weighted rating):
+#   score = (v * R + m * C) / (v + m)
+# R = the product's rating, v = its number of ratings, C = the catalog's mean rating, m = the catalog's median number
+# of ratings. A product with few ratings is pulled towards C, one with many keeps its own rating, so neither a 4.9 from
+# two people nor a 2.9 from two thousand rises to the top. The plain "rating" sort is the raw score.
+# C and m come from the catalog itself (each subquery runs once per query); GREATEST keeps m above zero.
+PRIOR_MEAN = "(SELECT coalesce(avg(rating) FILTER (WHERE rating_count > 0), 0) FROM products)"
+PRIOR_WEIGHT = "(SELECT GREATEST(percentile_cont(0.5) WITHIN GROUP (ORDER BY rating_count), 1) FROM products)"
+WEIGHTED = (f"(rating_count * rating + {PRIOR_WEIGHT} * {PRIOR_MEAN}) / (rating_count + {PRIOR_WEIGHT})"
+            " DESC, rating_count DESC")
 SORTS = {  # tie-break on product_id so offset paging is stable
-    "relevance": f"{ENGAGEMENT}, product_id",
+    "relevance": f"{WEIGHTED}, product_id",
     "price_asc": "price_cents ASC, product_id",
     "price_desc": "price_cents DESC, product_id",
     "rating": "rating DESC, rating_count DESC, product_id",
@@ -91,8 +98,8 @@ def _relevance_order(f: Filters) -> str:
     if not f.query.strip():
         return SORTS["relevance"]
     if f.fuzzy:
-        return f"word_similarity(%(fq)s, {TRGM_EXPR}) DESC, {ENGAGEMENT}, product_id"
-    return f"ts_rank_cd(search, {_tsquery(f.query)[0]}) DESC, {ENGAGEMENT}, product_id"
+        return f"word_similarity(%(fq)s, {TRGM_EXPR}) DESC, {WEIGHTED}, product_id"
+    return f"ts_rank_cd(search, {_tsquery(f.query)[0]}) DESC, {WEIGHTED}, product_id"
 
 
 def _where(f: Filters, exclude: str = "") -> tuple[str, dict]:
