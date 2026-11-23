@@ -57,7 +57,7 @@ async def read_auth(websocket: WebSocket, timeout: float) -> dict | None:
         if len(raw) > MAX_AUTH_MESSAGE_CHARS:
             return None
         message = json.loads(raw)
-    except (asyncio.TimeoutError, ValueError, KeyError, RuntimeError):  # no message / not JSON / a binary frame
+    except (asyncio.TimeoutError, ValueError, KeyError, RuntimeError, WebSocketDisconnect):  # no message / not JSON / binary / gone
         return None
     return message if isinstance(message, dict) and message.get("type") == "auth" else None
 
@@ -76,7 +76,10 @@ async def session_socket(websocket: WebSocket, after: int | None = None):
     await websocket.accept()  # accepted first so the browser can read our close code (4401), not just a failed handshake
     auth = await read_auth(websocket, settings.ws_auth_timeout_seconds)
     if auth is None:
-        await websocket.close(code=UNAUTHENTICATED_CLOSE, reason="expected an auth message first")
+        try:
+            await websocket.close(code=UNAUTHENTICATED_CLOSE, reason="expected an auth message first")
+        except RuntimeError:  # the client already left before authenticating
+            pass
         return
     token, guest = auth.get("token"), auth.get("guest")
     user = None
