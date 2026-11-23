@@ -73,8 +73,10 @@ export function parseSocketMessage(raw: string): SocketMessage | null {
   const d = value.data;
 
   switch (`${str(value.channel)}/${str(value.type)}`) {
+    case "system/auth_ok":
+      return { seq, ts, channel: "system", type: "auth_ok", data: { guest: d.guest === true } };
     case "system/hello": {
-      // user is null for a signed-out visitor connected with ?guest=; a hello with no user field at all is not the contract
+      // user is null for a signed-out visitor (authenticated with a guest id); a hello with no user field at all is not the contract
       const user = d.user === null ? null : parseUser(d.user);
       if (d.user === undefined || (d.user !== null && !user)) return null;
       return { seq, ts, channel: "system", type: "hello", data: { user, seq: num(d.seq) } };

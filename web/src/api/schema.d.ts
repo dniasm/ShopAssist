@@ -362,6 +362,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AuthOkData */
+        AuthOkData: {
+            /**
+             * Guest
+             * @description True when the socket was authenticated as a signed-out visitor (`{type: auth, guest}`).
+             */
+            guest: boolean;
+        };
         /** CancelIn */
         CancelIn: {
             /** Idempotency Key */
@@ -874,11 +882,11 @@ export interface components {
         };
         /** HelloData */
         HelloData: {
-            /** @description null for a signed-out visitor connected with ?guest= */
+            /** @description null for a signed-out visitor (authenticated with a guest id) */
             user: components["schemas"]["User"] | null;
             /**
              * Seq
-             * @description The user's latest event number; reconnect with ?after=<last seq you saw>.
+             * @description The user's latest event number; reconnect with /api/ws?after=<last seq you saw>.
              */
             seq: number;
         };
@@ -1243,6 +1251,31 @@ export interface components {
             color: string;
             /** Available */
             available: number;
+        };
+        /**
+         * SystemAuthOk
+         * @description Reply to the client's first message `{"type":"auth","token":...}` or `{"type":"auth","guest":...}`. Nothing else is sent
+         *     (and no other client message is read) before this; after it comes `hello`, then the replay. Anything else closes with 4401.
+         */
+        SystemAuthOk: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "system";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "auth_ok";
+            data: components["schemas"]["AuthOkData"];
         };
         /** SystemHello */
         SystemHello: {
@@ -2445,7 +2478,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SystemHello"] | components["schemas"]["SystemResync"] | components["schemas"]["CheckoutStep"] | components["schemas"]["CheckoutDone"] | components["schemas"]["CheckoutFailed"] | components["schemas"]["CheckoutInterrupted"] | components["schemas"]["OrderStatus"] | components["schemas"]["ChatTurnStarted"] | components["schemas"]["ChatToolCall"] | components["schemas"]["ChatToolResult"] | components["schemas"]["ChatMessage"] | components["schemas"]["ChatProposal"] | components["schemas"]["ChatTurnDone"] | components["schemas"]["ChatError"];
+                    "application/json": components["schemas"]["SystemAuthOk"] | components["schemas"]["SystemHello"] | components["schemas"]["SystemResync"] | components["schemas"]["CheckoutStep"] | components["schemas"]["CheckoutDone"] | components["schemas"]["CheckoutFailed"] | components["schemas"]["CheckoutInterrupted"] | components["schemas"]["OrderStatus"] | components["schemas"]["ChatTurnStarted"] | components["schemas"]["ChatToolCall"] | components["schemas"]["ChatToolResult"] | components["schemas"]["ChatMessage"] | components["schemas"]["ChatProposal"] | components["schemas"]["ChatTurnDone"] | components["schemas"]["ChatError"];
                 };
             };
             /** @description Successful Response */

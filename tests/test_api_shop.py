@@ -20,11 +20,18 @@ STEPS = ["VALIDATING", "RESERVING", "CHARGING", "CONFIRMING"]
 class WsReader:
     """Reads a TestClient websocket on a thread so tests can wait with a timeout instead of hanging."""
 
-    def __init__(self, client, path):
+    def __init__(self, client, path, auth=None, headers=None):
+        """`auth` is the first message to send (None: send nothing). The `system/auth_ok` reply is consumed here, so
+        tests that only care about the stream still see `hello` first."""
         self.items: queue.Queue = queue.Queue()
-        self._ctx = client.websocket_connect(path)
+        self._ctx = client.websocket_connect(path, headers=headers or {})
         self._ws = self._ctx.__enter__()
+        if auth is not None:
+            self._ws.send_json(auth)
         threading.Thread(target=self._pump, daemon=True).start()
+        if auth is not None and ("token" in auth or "guest" in auth):
+            first = self.items.get(timeout=10)
+            assert isinstance(first, dict) and (first["channel"], first["type"]) == ("system", "auth_ok"), first
 
     def _pump(self):
         try:
@@ -69,9 +76,11 @@ class Shop:
         r = self.client.post("/api/session", json={"email": EMAIL_OF[user_id], "password": DEMO_PASSWORD}).json()
         return {"Authorization": f"Bearer {r['token']}"}, r["token"]
 
-    def ws(self, token, after=None, guest=None):
-        who = f"guest={guest}" if guest else f"token={token}"
-        reader = WsReader(self.client, f"/api/ws?{who}" + (f"&after={after}" if after is not None else ""))
+    def ws(self, token, after=None, guest=None, auth="default", headers=None):
+        """Open the socket and authenticate with the first message: `auth` overrides it (None sends nothing)."""
+        if auth == "default":
+            auth = {"type": "auth", "guest": guest} if guest else {"type": "auth", "token": token}
+        reader = WsReader(self.client, "/api/ws" + (f"?after={after}" if after is not None else ""), auth=auth, headers=headers)
         self.readers.append(reader)
         return reader
 
@@ -330,13 +339,98 @@ def test_orders_endpoints_are_scoped_to_the_signed_in_user(make_shop):
 
 # ---------------- session websocket ----------------
 
-def test_websocket_rejects_a_missing_or_bad_token_with_close_code_4401(make_shop):
+def closed_with(shop, first=None, headers=None, raw=None):
+    """Connect, send `first` (a JSON message) or `raw` (text), and return the close code the server answers with."""
+    with shop.client.websocket_connect("/api/ws", headers=headers or {}) as ws:
+        if first is not None:
+            ws.send_json(first)
+        if raw is not None:
+            ws.send_text(raw)
+        with pytest.raises(WebSocketDisconnect) as e:
+            ws.receive_json()
+    return e.value.code
+
+
+def test_websocket_takes_no_credentials_from_the_url(make_shop):
     shop = make_shop()
-    for path in ("/api/ws", "/api/ws?token=garbage"):
-        with shop.client.websocket_connect(path) as ws:
-            with pytest.raises(WebSocketDisconnect) as e:
+    _, token = shop.login("U-01")
+    with shop.client.websocket_connect(f"/api/ws?token={token}&guest=abcdefgh") as ws:  # the old query parameters do nothing
+        with pytest.raises(WebSocketDisconnect) as e:
+            ws.send_json({"type": "ping"})
+            ws.receive_json()
+    assert e.value.code == 4401
+
+
+def test_websocket_without_an_auth_message_is_closed_4401_after_the_timeout(make_shop):
+    shop = make_shop(ws_auth_timeout_seconds=0.3)
+    started = time.monotonic()
+    assert closed_with(shop) == 4401
+    assert 0.25 <= time.monotonic() - started < 5
+
+
+def test_websocket_bad_or_malformed_first_message_is_closed_4401(make_shop):
+    shop = make_shop()
+    _, token = shop.login("U-01")
+    assert closed_with(shop, {"type": "auth", "token": "garbage"}) == 4401
+    assert closed_with(shop, {"type": "auth", "token": token + "x"}) == 4401
+    assert closed_with(shop, {"type": "auth"}) == 4401
+    assert closed_with(shop, {"type": "auth", "guest": "short"}) == 4401  # not a valid guest id
+    assert closed_with(shop, {"type": "auth", "token": 123}) == 4401
+    assert closed_with(shop, raw="not json") == 4401
+    assert closed_with(shop, raw="[1, 2]") == 4401
+    assert closed_with(shop, raw='{"type":"auth","guest":"' + "a" * 5000 + '"}') == 4401  # over the size cap
+
+
+def test_websocket_messages_before_auth_are_not_processed(make_shop):
+    shop = make_shop()
+    _, token = shop.login("U-01")
+    # the token is right, but the first message is not the auth message: closed, no auth_ok, no hello, nothing replayed
+    with shop.client.websocket_connect("/api/ws") as ws:
+        ws.send_json({"type": "subscribe", "token": token})
+        ws.send_json({"type": "auth", "token": token})
+        with pytest.raises(WebSocketDisconnect) as e:
+            ws.receive_json()
+    assert e.value.code == 4401
+    assert shop.client.app.state.hub.latest_seq("U-01") == 0
+
+
+def test_websocket_auth_with_a_token_replies_auth_ok_then_hello(make_shop):
+    shop = make_shop()
+    _, token = shop.login("U-02")
+    with shop.client.websocket_connect("/api/ws") as ws:
+        ws.send_json({"type": "auth", "token": token})
+        ok, hello = ws.receive_json(), ws.receive_json()
+    assert (ok["channel"], ok["type"], ok["seq"], ok["data"]) == ("system", "auth_ok", 0, {"guest": False})
+    assert hello["type"] == "hello" and hello["data"]["user"]["user_id"] == "U-02"
+
+
+def test_websocket_guest_auth_works_with_the_guest_limits(make_shop):
+    shop = make_shop()
+    with shop.client.websocket_connect("/api/ws") as ws:
+        ws.send_json({"type": "auth", "guest": "guest-visitor-1"})
+        ok, hello = ws.receive_json(), ws.receive_json()
+    assert ok["data"] == {"guest": True} and hello["data"]["user"] is None
+
+
+def test_websocket_rejects_a_foreign_origin_before_the_handshake(make_shop):
+    shop = make_shop()
+    _, token = shop.login("U-01")
+    for origin in ("https://evil.example", "http://localhost:5174", "null", "http://testserver.evil.example"):
+        with pytest.raises(WebSocketDisconnect) as e:
+            with shop.client.websocket_connect("/api/ws", headers={"origin": origin}) as ws:
+                ws.send_json({"type": "auth", "token": token})
                 ws.receive_json()
-        assert e.value.code == 4401
+        assert e.value.code == 1008, origin
+
+
+def test_websocket_allows_its_own_origin_the_dev_server_and_non_browser_clients(make_shop):
+    shop = make_shop(ws_allowed_origins=("http://localhost:5173",))
+    _, token = shop.login("U-01")
+    for origin in ("http://testserver", "http://localhost:5173", None):  # own host (TestClient's Host is `testserver`)
+        headers = {"origin": origin} if origin else None
+        with shop.client.websocket_connect("/api/ws", headers=headers or {}) as ws:
+            ws.send_json({"type": "auth", "token": token})
+            assert ws.receive_json()["type"] == "auth_ok", origin
 
 
 def test_reconnecting_with_after_replays_exactly_the_missed_events(make_shop):
@@ -441,7 +535,7 @@ def test_the_websocket_schema_is_published_in_openapi_through_a_schema_only_rout
     route = spec["paths"]["/api/ws/schema"]["get"]
     assert route["responses"]["204"] and route["responses"]["200"]["content"]["application/json"]["schema"]
     schemas = spec["components"]["schemas"]
-    for name in ("SystemHello", "SystemResync", "CheckoutStep", "CheckoutDone", "CheckoutFailed", "CheckoutInterrupted", "OrderStatus"):
+    for name in ("SystemAuthOk", "SystemHello", "SystemResync", "CheckoutStep", "CheckoutDone", "CheckoutFailed", "CheckoutInterrupted", "OrderStatus"):
         assert name in schemas, name
     assert shop.client.get("/api/ws/schema").status_code == 204
 

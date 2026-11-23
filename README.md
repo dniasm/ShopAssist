@@ -7,7 +7,7 @@ orders live. Each service owns its own Postgres database. Everything runs locall
 
 ### Architecture
 
-- The browser app (`web/`, React + TypeScript) calls REST under `/api` and holds one WebSocket per signed-in tab (`/api/ws`).
+- The browser app (`web/`, React + TypeScript) calls REST under `/api` and holds one WebSocket per signed-in tab (`/api/ws`, authenticated by its first message).
 - The orchestrator (FastAPI, port 8011) is the gateway and the shopping agent. It has no database driver; it only calls gRPC.
 - Five gRPC services, each with its own Postgres database and login role: catalog (50051), inventory (50052), order (50053), customer (50054), payment (50055).
 - Checkout is a saga: reserve stock, charge, confirm. A failure compensates the steps already done, and a recovery task finishes or compensates orders left pending.
@@ -45,6 +45,7 @@ Accounts sign in with email and password (**Sign in** at the top right, or **Cre
 - **How it is stored.** The Customer service keeps salted PBKDF2-SHA256 hashes (600,000 rounds), never passwords. The
   orchestrator throttles wrong passwords (5 per email per address, 20 per address, per 15 minutes) and issues the signed
   session token the rest of the API and the WebSocket use. The rules and code come from the day7 project's accounts.
+- **WebSocket auth.** `/api/ws?after=<n>` takes no credentials in the URL. The first message must be `{"type":"auth","token":...}` (or `{"type":"auth","guest":"<id>"}`) within 5 s; the server replies `system/auth_ok`, otherwise it closes with 4401. A browser `Origin` must be the orchestrator's own host or in `WS_ALLOWED_ORIGINS` (default: the Vite dev server).
 
 Web app:
 
@@ -119,7 +120,7 @@ call them `key#1`, `key#2`, and so on.
 
 All settings are environment variables; `.env.example` lists them with comments: the service addresses
 (`CATALOG_ADDR` … `PAYMENT_ADDR`), `ORCHESTRATOR_PORT` (8011), `RESERVATION_TTL_SECONDS`, `FULFILMENT_STEP_SECONDS`
-(seconds between order status steps), `PAYMENT_LATENCY_MS`, `SESSION_SECRET`, `SVC_KEY_ORCHESTRATOR`/`SVC_KEY_ORDER`, `DEMO_PASSWORD` and `SIGNUP_CODE`.
+(seconds between order status steps), `PAYMENT_LATENCY_MS`, `SESSION_SECRET`, `SVC_KEY_ORCHESTRATOR`/`SVC_KEY_ORDER`, `WS_AUTH_TIMEOUT_SECONDS`, `WS_ALLOWED_ORIGINS`, `DEMO_PASSWORD` and `SIGNUP_CODE`.
 
 ## Troubleshooting
 

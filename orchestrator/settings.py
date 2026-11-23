@@ -35,6 +35,10 @@ class Settings:
     unary_timeout: float = 2.0  # deadline for every unary gRPC call
     health_timeout: float = 1.5  # a health probe must answer quickly or count as down
     checkout_first_event_timeout: float = 5.0  # POST /checkout waits this long for the order id
+    ws_auth_timeout_seconds: float = 5.0  # a new WebSocket must send its auth message within this long, or it is closed (4401)
+    # Origins (besides the orchestrator's own host) allowed to open the WebSocket: the Vite dev server. A request with
+    # no Origin header is not a browser (browsers always send one), so it is not a cross-site hijack and is let through.
+    ws_allowed_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
     ws_buffer_size: int = 500  # events kept per user for WebSocket replay
     ws_keep_seconds: float = 3600  # how long a user's log outlives their last socket
     order_watch_stop_seconds: float = 30  # a user's order stream stops this long after their last socket closes
@@ -65,6 +69,8 @@ class Settings:
             port=int(env("ORCHESTRATOR_PORT") or d.port),
             session_secret=env("SESSION_SECRET") or secrets.token_urlsafe(32),  # random: tokens die with the process
             signup_code=(env("SIGNUP_CODE") or "").strip(),
+            ws_auth_timeout_seconds=float(env("WS_AUTH_TIMEOUT_SECONDS") or d.ws_auth_timeout_seconds),
+            ws_allowed_origins=parse_keys(env("WS_ALLOWED_ORIGINS")) or d.ws_allowed_origins,
             llm_base_url=env("LLM_BASE_URL") or d.llm_base_url,
             # LLM_API_KEYS is the list; the legacy single LLM_API_KEY is merged in.
             llm_api_keys=parse_keys(env("LLM_API_KEYS"), env("LLM_API_KEY")),

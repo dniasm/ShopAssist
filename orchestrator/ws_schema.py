@@ -24,12 +24,25 @@ class _Envelope(BaseModel):
 
 # ---- system ----
 class HelloData(BaseModel):
-    user: User | None = Field(description="null for a signed-out visitor connected with ?guest=")
-    seq: int = Field(description="The user's latest event number; reconnect with ?after=<last seq you saw>.")
+    user: User | None = Field(description="null for a signed-out visitor (authenticated with a guest id)")
+    seq: int = Field(description="The user's latest event number; reconnect with /api/ws?after=<last seq you saw>.")
 
 
 class EmptyData(BaseModel):
     pass
+
+
+class AuthOkData(BaseModel):
+    guest: bool = Field(description="True when the socket was authenticated as a signed-out visitor (`{type: auth, guest}`).")
+
+
+class SystemAuthOk(_Envelope):
+    """Reply to the client's first message `{"type":"auth","token":...}` or `{"type":"auth","guest":...}`. Nothing else is sent
+    (and no other client message is read) before this; after it comes `hello`, then the replay. Anything else closes with 4401."""
+
+    channel: Literal["system"]
+    type: Literal["auth_ok"]
+    data: AuthOkData
 
 
 class SystemHello(_Envelope):
@@ -198,7 +211,7 @@ class ChatError(_Chat):
 
 
 WsMessage = Annotated[
-    Union[SystemHello, SystemResync, CheckoutStep, CheckoutDone, CheckoutFailed, CheckoutInterrupted, OrderStatus,
+    Union[SystemAuthOk, SystemHello, SystemResync, CheckoutStep, CheckoutDone, CheckoutFailed, CheckoutInterrupted, OrderStatus,
           ChatTurnStarted, ChatToolCall, ChatToolResult, ChatMessage, ChatProposal, ChatTurnDone, ChatError],
     Field(discriminator="type"),
 ]

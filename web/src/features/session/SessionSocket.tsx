@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useDrawer } from "../drawer/DrawerContext";
 import { appendEvent, eventsOn } from "./eventLog";
 import { parseSocketMessage } from "./events";
+import { authFrame, isAuthOk, socketUrl } from "./handshake";
 import { guestIdForBrowser } from "./ids";
 import { initialMachineState, reduceMachine, type MachineEffect, type MachineEvent, type MachineState, type MachineStatus } from "./socketMachine";
 
@@ -31,13 +32,6 @@ export function useSocketChannel(channel: SocketChannel, handler: SocketHandler,
   latest.current = handler;
   const replay = options?.replay ?? false;
   useEffect(() => subscribe(channel, (env) => latest.current(env), { replay }), [subscribe, channel, replay]);
-}
-
-/** A signed-in tab connects with its token; a signed-out visitor with a guest id of their own (chat events only). */
-function socketUrl(who: { token: string } | { guest: string }, after: number): string {
-  const scheme = window.location.protocol === "https:" ? "wss" : "ws";
-  const identity = "token" in who ? `token=${encodeURIComponent(who.token)}` : `guest=${encodeURIComponent(who.guest)}`;
-  return `${scheme}://${window.location.host}/api/ws?${identity}&after=${after}`;
 }
 
 /** One WebSocket per signed-in tab. All the connection rules live in socketMachine.ts; this component only performs the
@@ -77,14 +71,17 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
           const currentGuest = guestRef.current;
           const who = currentToken ? { token: currentToken } : currentGuest ? { guest: currentGuest } : null;
           if (!who) return;
-          const ws = new WebSocket(socketUrl(who, effect.after));
+          const ws = new WebSocket(socketUrl(window.location, effect.after));  // no credentials in the URL
           socket.current = ws;
           // Events from a socket that is no longer the current one (closed on purpose, replaced) are ignored.
-          ws.onopen = () => { if (socket.current === ws) dispatch({ type: "opened" }); };
+          // First message: who we are. The socket counts as open only once the server answers system/auth_ok.
+          ws.onopen = () => { if (socket.current === ws) ws.send(authFrame(who)); };
           ws.onmessage = (e: MessageEvent<unknown>) => {
             if (socket.current !== ws || typeof e.data !== "string") return;
             const envelope = parseSocketMessage(e.data);
-            if (envelope) dispatch({ type: "message", envelope });
+            if (!envelope) return;
+            if (isAuthOk(envelope)) dispatch({ type: "opened" });
+            else dispatch({ type: "message", envelope });
           };
           ws.onclose = (e: CloseEvent) => { if (socket.current === ws) { socket.current = null; dispatch({ type: "closed", code: e.code }); } };
           return;
