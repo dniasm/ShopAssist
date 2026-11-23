@@ -12,6 +12,7 @@ import grpc
 import psycopg
 import pytest
 
+from tests import authchan
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
 from tests.conftest import run, start, stop
@@ -139,7 +140,7 @@ def test_twenty_concurrent_reserves_for_one_unit_yield_exactly_one_winner(invent
     sku = sku_with(1)
 
     async def scenario():
-        async with grpc.aio.insecure_channel(inventory_running.addr) as ch:
+        async with authchan.aio_channel(inventory_running.addr) as ch:
             stub = pb_grpc.InventoryServiceStub(ch)
             results = await asyncio.gather(*(
                 stub.Reserve(pb.ReserveRequest(reservation_id=f"R-C{i}", lines=lines((sku, 1)))) for i in range(20)
@@ -158,7 +159,7 @@ def test_opposite_order_reservations_do_not_deadlock_or_oversell(inventory_runni
     a, b = sku_with(4), sku_with(4, skip=1)
 
     async def scenario():
-        async with grpc.aio.insecure_channel(inventory_running.addr) as ch:
+        async with authchan.aio_channel(inventory_running.addr) as ch:
             stub = pb_grpc.InventoryServiceStub(ch)
             calls = []
             for i in range(30):
@@ -266,7 +267,7 @@ def test_background_sweeper_expires_reservations_by_itself(loop_thread, temp_dbs
     running = start(loop_thread, temp_dbs, "inventory", create_service, seed_dir=seed_dir, sweep_seconds=0.1)
     try:
         sku = sku_with(4)
-        with grpc.insecure_channel(running.addr) as ch:
+        with authchan.channel(running.addr) as ch:
             stub = pb_grpc.InventoryServiceStub(ch)
             assert reserve(stub, "R-AUTO", (sku, 2), ttl=1).ok
             deadline = datetime.now() + timedelta(seconds=6)

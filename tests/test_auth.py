@@ -7,6 +7,7 @@ import pytest
 from orchestrator.app import create_app
 from orchestrator.login_limits import MAX_ADDRESS_FAILURES, MAX_FAILURES, WINDOW, LoginLimits
 from orchestrator.settings import Settings
+from tests import authchan
 from services.customer.passwords import check_password, hash_password
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
@@ -27,7 +28,7 @@ def test_a_hash_is_salted_pbkdf2_and_only_the_right_password_matches_it():
 
 @pytest.fixture
 def fresh_customer(fresh_customer_running):
-    with grpc.insecure_channel(fresh_customer_running.addr) as ch:
+    with authchan.channel(fresh_customer_running.addr) as ch:
         yield pb_grpc.CustomerServiceStub(ch)
 
 

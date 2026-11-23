@@ -11,6 +11,7 @@ orders live. Each service owns its own Postgres database. Everything runs locall
 - The orchestrator (FastAPI, port 8011) is the gateway and the shopping agent. It has no database driver; it only calls gRPC.
 - Five gRPC services, each with its own Postgres database and login role: catalog (50051), inventory (50052), order (50053), customer (50054), payment (50055).
 - Checkout is a saga: reserve stock, charge, confirm. A failure compensates the steps already done, and a recovery task finishes or compensates orders left pending.
+- gRPC calls between processes are authenticated: each caller (orchestrator, order) signs every call with its own `SVC_KEY_*` secret (short-lived HMAC token in metadata). A service rejects missing/bad tokens (`UNAUTHENTICATED`) and callers it does not allow (`PERMISSION_DENIED`); only `grpc.health.v1` Check is open. `x-user-id` is therefore trusted only from an authenticated caller. Keys are written to `.env` by `scripts/db_setup.py`.
 - Order status changes go to an outbox table in the same transaction as the change, then `NOTIFY` announces them. `WatchOrders` replays missed events and then listens.
 - Postgres 17 runs from native binaries (no Docker): one server, five databases.
 
@@ -24,7 +25,7 @@ orders live. Each service owns its own Postgres database. Everything runs locall
 
 ```powershell
 .venv\Scripts\python.exe scripts/pg.py start          # starts Postgres on localhost:5432
-.venv\Scripts\python.exe scripts/db_setup.py          # first time only: creates the 5 databases and roles, writes the URLs to .env
+.venv\Scripts\python.exe scripts/db_setup.py          # first time only: creates the 5 databases and roles, writes the URLs and secrets to .env
 .venv\Scripts\python.exe scripts/run_all.py           # starts the services and the orchestrator; Ctrl+C stops them all
 ```
 
@@ -118,7 +119,7 @@ call them `key#1`, `key#2`, and so on.
 
 All settings are environment variables; `.env.example` lists them with comments: the service addresses
 (`CATALOG_ADDR` … `PAYMENT_ADDR`), `ORCHESTRATOR_PORT` (8011), `RESERVATION_TTL_SECONDS`, `FULFILMENT_STEP_SECONDS`
-(seconds between order status steps), `PAYMENT_LATENCY_MS`, `SESSION_SECRET`, `DEMO_PASSWORD` and `SIGNUP_CODE`.
+(seconds between order status steps), `PAYMENT_LATENCY_MS`, `SESSION_SECRET`, `SVC_KEY_ORCHESTRATOR`/`SVC_KEY_ORDER`, `DEMO_PASSWORD` and `SIGNUP_CODE`.
 
 ## Troubleshooting
 
@@ -143,6 +144,7 @@ databases. The test files in `tests/`:
 | `test_common.py`, `test_isolation.py` | Shared service helpers (migrations, idempotency, seeding); the orchestrator has no database driver and only talks gRPC. |
 | `test_catalog.py`, `test_catalog_query.py`, `test_inventory.py`, `test_customer.py`, `test_payment.py` | Each gRPC service through a real channel against a temporary database; catalog search, filters, facets and typo fallback. |
 | `test_order_saga.py`, `test_order_recovery.py`, `test_order_events.py`, `test_order_fulfilment.py`, `test_order_migrations.py` | The checkout saga and its compensation (including concurrent checkouts for one unit), crash recovery, the outbox and `WatchOrders`, the fulfilment worker and cancel, the order migrations. |
+| `test_service_auth.py` | Service-to-service auth: no/forged/expired/wrong-audience tokens, caller allowlist, health stays open. |
 | `test_api.py`, `test_api_shop.py`, `test_api_orders.py`, `test_events_hub.py` | The REST gateway end to end (auth, catalog, cart, checkout, orders, WebSocket replay and resync). |
 | `test_agent_planner.py`, `test_agent_rules.py`, `test_agent_chat.py`, `test_eval_scorer.py` | The agent: LLM and rules planning, tools, proposals, the chat turn over WebSocket, and the eval scorer. |
 | `test_llm.py`, `test_keypool.py` | The LLM client with mocked HTTP (key rotation, retries, budgets, no key in logs) and the key pool's limits and cooling. |

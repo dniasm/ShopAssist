@@ -20,10 +20,14 @@ load_dotenv(REPO_ROOT / ".env")
 # Logins: seeded users get this password, and hashing uses few rounds (600,000 per check would slow every sign-in).
 os.environ["DEMO_PASSWORD"] = "demo-password-for-tests"
 os.environ["PASSWORD_ROUNDS"] = "1000"
+# Service-to-service keys: fixed test values, never the ones in .env.
+os.environ["SVC_KEY_ORCHESTRATOR"] = "test-key-orchestrator-0123456789abcdef"
+os.environ["SVC_KEY_ORDER"] = "test-key-order-0123456789abcdef"
 
 import grpc  # noqa: E402
 import psycopg  # noqa: E402
 
+from tests import authchan
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc  # noqa: E402
 from tests import harness  # noqa: E402
 from tests.fixtures import write_seed_dir  # noqa: E402
@@ -129,19 +133,19 @@ def inventory_running(loop_thread, temp_dbs, seed_dir):
 
 @pytest.fixture(scope="session")
 def catalog(catalog_running):
-    with grpc.insecure_channel(catalog_running.addr) as ch:
+    with authchan.channel(catalog_running.addr) as ch:
         yield pb_grpc.CatalogServiceStub(ch)
 
 
 @pytest.fixture
 def inventory(inventory_running):
-    with grpc.insecure_channel(inventory_running.addr) as ch:
+    with authchan.channel(inventory_running.addr) as ch:
         yield pb_grpc.InventoryServiceStub(ch)
 
 
 @pytest.fixture(scope="session")
 def customer(customer_running):
-    with grpc.insecure_channel(customer_running.addr) as ch:
+    with authchan.channel(customer_running.addr) as ch:
         yield pb_grpc.CustomerServiceStub(ch)
 
 
@@ -156,7 +160,7 @@ def payment_running(loop_thread, temp_dbs, seed_dir):
 
 @pytest.fixture
 def payment(payment_running):
-    with grpc.insecure_channel(payment_running.addr) as ch:
+    with authchan.channel(payment_running.addr) as ch:
         yield pb_grpc.PaymentServiceStub(ch)
 
 

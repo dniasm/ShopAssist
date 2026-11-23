@@ -8,6 +8,7 @@ import grpc
 import psycopg
 import pytest
 
+from tests import authchan
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
 from tests.conftest import run
@@ -17,7 +18,7 @@ SRC = Path(__file__).resolve().parents[1] / "services" / "order"
 
 
 def cancel(addr, user, order_id, key="cancel-1"):
-    with grpc.insecure_channel(addr) as ch:
+    with authchan.channel(addr) as ch:
         return pb_grpc.OrderServiceStub(ch).CancelOrder(pb.CancelOrderRequest(order_id=order_id, idempotency_key=key), metadata=as_user(user))
 
 
@@ -142,7 +143,7 @@ def test_cancel_is_idempotent_and_owned(make_stack):
         with pytest.raises(grpc.RpcError) as e:
             cancel(stack.order.addr, user, oid)
         assert e.value.code() == code
-    with grpc.insecure_channel(stack.order.addr) as ch:
+    with authchan.channel(stack.order.addr) as ch:
         stub = pb_grpc.OrderServiceStub(ch)
         assert code_of(lambda: stub.CancelOrder(pb.CancelOrderRequest(order_id=other.order_id, idempotency_key="k"))) == grpc.StatusCode.UNAUTHENTICATED
         assert code_of(lambda: stub.CancelOrder(pb.CancelOrderRequest(order_id=other.order_id), metadata=as_user("U-01"))) == grpc.StatusCode.INVALID_ARGUMENT
@@ -170,7 +171,7 @@ def test_cancel_racing_the_fulfilment_worker_has_exactly_one_winner(make_stack):
 
     async def cancel_after(order, delay):
         await asyncio.sleep(delay)
-        async with grpc.aio.insecure_channel(stack.order.addr) as ch:
+        async with authchan.aio_channel(stack.order.addr) as ch:
             req = pb.CancelOrderRequest(order_id=order.order_id, idempotency_key=f"r-{order.order_id}")
             return await pb_grpc.OrderServiceStub(ch).CancelOrder(req, metadata=as_user("U-01"))
 

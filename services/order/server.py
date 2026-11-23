@@ -13,6 +13,7 @@ from services.common.idempotency import KeyReused, fingerprint
 from services.common.migrate import apply_migrations
 from services.common.seed import read_seed, seed_dir as default_seed_dir, seed_if_empty
 from services.common.server import Service, listen_address
+from shopassist_proto.svcauth import aio_channel
 from services.common.util import decode_offset, encode_offset, page_size
 from services.order import convert, db
 from services.order.cancel import Canceller, NotCancellable, OrderNotFound
@@ -189,7 +190,7 @@ async def create_service(
         await seed_if_empty(pool, "orders", lambda conn: db.load_seed(conn, orders, payment_ids, categories))
         await db.backfill_categories(pool, categories)
 
-    channels = {name: grpc.aio.insecure_channel(addr) for name, addr in
+    channels = {name: aio_channel(addr, "order", audience=name) for name, addr in
                 (("catalog", catalog_addr), ("inventory", inventory_addr), ("payment", payment_addr))}
     deps = Deps(
         pool=pool, catalog=pb_grpc.CatalogServiceStub(channels["catalog"]),

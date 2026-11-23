@@ -6,6 +6,7 @@ import grpc
 import psycopg
 import pytest
 
+from tests import authchan
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
 from tests.conftest import run, start, stop
@@ -60,7 +61,7 @@ def test_charge_rejects_bad_input(payment):
 
 def test_ten_concurrent_charges_with_one_key_make_one_payment(payment_running):
     async def scenario():
-        async with grpc.aio.insecure_channel(payment_running.addr) as ch:
+        async with authchan.aio_channel(payment_running.addr) as ch:
             stub = pb_grpc.PaymentServiceStub(ch)
             req = pb.ChargeRequest(idempotency_key="charge:O-C", order_id="O-C", amount_cents=900, payment_method="card_ok")
             return {r.payment_id for r in await asyncio.gather(*(stub.Charge(req) for _ in range(10)))}
@@ -73,7 +74,7 @@ def test_latency_is_applied(loop_thread, temp_dbs, seed_dir):
     from services.payment.server import create_service
     r = start(loop_thread, temp_dbs, "payment", create_service, seed_dir=seed_dir, latency_ms=250)
     try:
-        with grpc.insecure_channel(r.addr) as ch:
+        with authchan.channel(r.addr) as ch:
             started = time.monotonic()
             charge(pb_grpc.PaymentServiceStub(ch))
             assert time.monotonic() - started >= 0.25
@@ -112,7 +113,7 @@ def test_concurrent_refunds_of_one_payment_succeed_exactly_once(payment, payment
     paid = charge(payment)
 
     async def scenario():
-        async with grpc.aio.insecure_channel(payment_running.addr) as ch:
+        async with authchan.aio_channel(payment_running.addr) as ch:
             stub = pb_grpc.PaymentServiceStub(ch)
             results = await asyncio.gather(*(
                 stub.Refund(pb.RefundRequest(idempotency_key=f"refund:try-{i}", payment_id=paid.payment_id, amount_cents=5000))

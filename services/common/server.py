@@ -15,6 +15,8 @@ import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from psycopg_pool import AsyncConnectionPool
 
+from shopassist_proto.svcauth import AuthInterceptor
+
 log = logging.getLogger(__name__)
 STOP_PATIENCE_SECONDS = 5.0  # how long past the grace period we wait for gRPC to finish stopping
 
@@ -25,10 +27,12 @@ def listen_address(env_var: str, default: str) -> str:
 
 
 class Service:
-    def __init__(self, name: str, pool: AsyncConnectionPool):
+    def __init__(self, name: str, pool: AsyncConnectionPool, auth: AuthInterceptor | None = None):
         self.name = name
         self.pool = pool
-        self.server = grpc.aio.server()
+        # Every call must carry a valid service token (see svcauth) before any servicer runs; only health Check is open.
+        # Raises when a SVC_KEY_* secret is missing, so a mis-configured service refuses to start instead of running open.
+        self.server = grpc.aio.server(interceptors=[auth or AuthInterceptor.for_service(name)])
         self._health = health.aio.HealthServicer()
         health_pb2_grpc.add_HealthServicer_to_server(self._health, self.server)
         self._grpc_names: list[str] = [""]  # "" is the whole-server health entry

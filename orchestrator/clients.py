@@ -10,6 +10,7 @@ from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 from orchestrator.errors import from_grpc
 from orchestrator.settings import Settings
+from shopassist_proto.svcauth import aio_channel, load_key
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
 
 USER_HEADER = "x-user-id"
@@ -29,7 +30,8 @@ class Clients:
         self._timeout = settings.unary_timeout
         self._health_timeout = settings.health_timeout
         self.addresses = {name: getattr(settings, attr) for name, (_, _, attr) in SERVICES.items()}
-        self._channels = {name: grpc.aio.insecure_channel(addr) for name, addr in self.addresses.items()}
+        key = load_key("orchestrator")  # raises when SVC_KEY_ORCHESTRATOR is missing: no unsigned calls
+        self._channels = {name: aio_channel(addr, "orchestrator", audience=name, key=key) for name, addr in self.addresses.items()}
         self.catalog = SERVICES["catalog"][1](self._channels["catalog"])
         self.inventory = SERVICES["inventory"][1](self._channels["inventory"])
         self.order = SERVICES["order"][1](self._channels["order"])

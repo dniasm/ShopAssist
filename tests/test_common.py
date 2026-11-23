@@ -3,6 +3,7 @@ import grpc
 import pytest
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
+from tests import authchan
 from services.catalog import db as catalog_db
 from services.catalog.server import MIGRATIONS as CATALOG_MIGRATIONS, create_service as create_catalog
 from services.common.auth import require_user
@@ -127,7 +128,7 @@ def test_require_user_aborts_unauthenticated_when_missing(md):
 
 
 def test_every_service_serves_grpc_health(catalog_running):
-    with grpc.insecure_channel(catalog_running.addr) as ch:
+    with authchan.channel(catalog_running.addr) as ch:
         stub = health_pb2_grpc.HealthStub(ch)
         for name in ("", "shopassist.v2.CatalogService"):
             assert stub.Check(health_pb2.HealthCheckRequest(service=name)).status == health_pb2.HealthCheckResponse.SERVING
@@ -157,7 +158,7 @@ def test_cancelling_serve_forever_shuts_the_service_down_gracefully(loop_thread,
         service = await create_catalog(temp_dbs.create("catalog"), seed_dir=seed_dir)
         task = asyncio.create_task(service.serve_forever())
         await asyncio.sleep(0.3)  # serving
-        async with grpc.aio.insecure_channel(f"127.0.0.1:{service.port}") as ch:
+        async with authchan.aio_channel(f"127.0.0.1:{service.port}") as ch:
             stub = health_pb2_grpc.HealthStub(ch)
             before = (await stub.Check(health_pb2.HealthCheckRequest(service=""))).status
         task.cancel()

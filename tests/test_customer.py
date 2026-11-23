@@ -3,6 +3,7 @@ import grpc
 import psycopg
 import pytest
 
+from tests import authchan
 from shopassist_proto import shopassist_pb2 as pb
 from tests.fixtures import USERS
 
@@ -103,7 +104,7 @@ def test_clear_cart_checks_the_version_it_was_given(customer):
 
 def test_concurrent_edits_lose_nothing_and_count_every_change(customer_running):
     async def scenario():
-        async with grpc.aio.insecure_channel(customer_running.addr) as ch:
+        async with authchan.aio_channel(customer_running.addr) as ch:
             stub = pb_grpc.CustomerServiceStub(ch)
             await asyncio.gather(*(
                 stub.SetCartLine(pb.SetCartLineRequest(sku_id=f"SKU-{i}", product_id="P-1", quantity=1), metadata=as_user("U-09"))

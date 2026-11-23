@@ -5,6 +5,7 @@ import grpc
 import psycopg
 import pytest
 
+from tests import authchan
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
 from tests.fixtures import INVENTORY, PRODUCTS, SKUS
@@ -47,7 +48,7 @@ def checkout_request(key: str, lines, method: str = "card_ok") -> pb.CheckoutReq
 
 async def checkout(addr: str, user: str, key: str, lines, method: str = "card_ok") -> list[pb.CheckoutEvent]:
     """Run one Checkout to the end of its stream; raises grpc.aio.AioRpcError if the stream breaks."""
-    async with grpc.aio.insecure_channel(addr) as ch:
+    async with authchan.aio_channel(addr) as ch:
         call = pb_grpc.OrderServiceStub(ch).Checkout(checkout_request(key, lines, method), metadata=as_user(user))
         return [event async for event in call]
 
@@ -62,7 +63,7 @@ def steps(events) -> list[tuple[str, str]]:
 
 
 def get_order(addr: str, user: str, order_id: str) -> pb.Order:
-    with grpc.insecure_channel(addr) as ch:
+    with authchan.channel(addr) as ch:
         return pb_grpc.OrderServiceStub(ch).GetOrder(pb.GetOrderRequest(order_id=order_id), metadata=as_user(user))
 
 
@@ -73,7 +74,7 @@ async def collect_events(
 
     The cursor message that opens an `after=-1` stream (no order id) is dropped unless `keep_cursor`."""
     events: list[pb.OrderEvent] = []
-    async with grpc.aio.insecure_channel(addr) as ch:
+    async with authchan.aio_channel(addr) as ch:
         call = pb_grpc.OrderServiceStub(ch).WatchOrders(
             pb.WatchOrdersRequest(order_id=order_id, after_event_id=after), metadata=as_user(user))
 

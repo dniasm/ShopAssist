@@ -6,7 +6,8 @@ Usage (from the repo root; the server must be running, see scripts/pg.py):
 
 Needs PG_ADMIN_URL in .env (superuser). Writes these .env lines and nothing else:
     CATALOG_DATABASE_URL, INVENTORY_DATABASE_URL, ORDER_DATABASE_URL,
-    CUSTOMER_DATABASE_URL, PAYMENT_DATABASE_URL, SESSION_SECRET (only if missing).
+    CUSTOMER_DATABASE_URL, PAYMENT_DATABASE_URL, SESSION_SECRET, SVC_KEY_ORCHESTRATOR and SVC_KEY_ORDER
+    (the last three only if missing; the SVC_KEY_* values authenticate service-to-service gRPC calls).
 Every other .env line is preserved byte for byte. Passwords are never printed.
 
 Isolation: each role owns its database. CONNECT is revoked from PUBLIC and granted only to that role,
@@ -39,6 +40,7 @@ SERVICES = [
     ("payment", "svc_payment", "PAYMENT_DATABASE_URL"),
 ]
 SESSION_VAR = "SESSION_SECRET"
+SERVICE_KEY_VARS = ("SVC_KEY_ORCHESTRATOR", "SVC_KEY_ORDER")  # one secret per gRPC caller identity
 
 
 def _env_values() -> dict:
@@ -188,6 +190,12 @@ def main() -> int:
                 report.append(f"{SESSION_VAR}: generated")
             else:
                 report.append(f"{SESSION_VAR}: already set")
+            for var in SERVICE_KEY_VARS:
+                if not env.get(var):
+                    updates[var] = secrets.token_urlsafe(32)
+                    report.append(f"{var}: generated")
+                else:
+                    report.append(f"{var}: already set")
     except psycopg.Error as exc:
         sys.exit(f"db_setup: database operation failed: {type(exc).__name__}: {exc}")
 

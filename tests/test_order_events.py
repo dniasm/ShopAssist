@@ -9,6 +9,7 @@ import grpc
 import psycopg
 import pytest
 
+from tests import authchan
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
 from tests.conftest import run
@@ -155,7 +156,7 @@ def test_two_watchers_of_one_order_each_see_every_step_once(make_stack):
 def test_watching_is_scoped_to_the_caller_and_needs_an_identity(make_stack):
     stack = make_stack()
     order = run(checkout(stack.order.addr, "U-01", "k-own", [(sku_with(4), 1)]))[-1].order
-    with grpc.insecure_channel(stack.order.addr) as ch:
+    with authchan.channel(stack.order.addr) as ch:
         stub = pb_grpc.OrderServiceStub(ch)
         assert code_of(lambda: next(stub.WatchOrders(pb.WatchOrdersRequest(order_id=order.order_id), metadata=as_user("U-02")))) == grpc.StatusCode.NOT_FOUND
         assert code_of(lambda: next(stub.WatchOrders(pb.WatchOrdersRequest()))) == grpc.StatusCode.UNAUTHENTICATED
@@ -203,7 +204,7 @@ def test_reading_orders_never_writes(make_stack):
     snapshot = lambda: (rows(stack.order.url, "SELECT count(*), max(event_id) FROM order_events"),  # noqa: E731
                         rows(stack.order.url, "SELECT order_id, status, saga_step, updated_at FROM orders ORDER BY order_id"))
     before = snapshot()
-    with grpc.insecure_channel(stack.order.addr) as ch:
+    with authchan.channel(stack.order.addr) as ch:
         stub = pb_grpc.OrderServiceStub(ch)
         for _ in range(25):
             stub.GetOrder(pb.GetOrderRequest(order_id=order.order_id), metadata=as_user("U-01"))

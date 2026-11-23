@@ -6,6 +6,7 @@ checkout leaves nothing held, and a repeated key never creates a second order.
 import grpc
 import pytest
 
+from tests import authchan
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
 from tests.conftest import run
@@ -85,7 +86,7 @@ def test_unknown_sku_fails_validation_without_touching_stock_or_money(make_stack
 
 def test_bad_requests_are_invalid_argument(make_stack):
     stack = make_stack()
-    with grpc.insecure_channel(stack.order.addr) as ch:
+    with authchan.channel(stack.order.addr) as ch:
         stub = pb_grpc.OrderServiceStub(ch)
         for req in (checkout_request("k", []), checkout_request("", [(sku_with(4), 1)]), checkout_request("k", [(sku_with(4), 0)]),
                     checkout_request("k", [(sku_with(4), 1)], method="")):
@@ -206,7 +207,7 @@ def test_users_can_only_read_their_own_orders(make_stack):
     with pytest.raises(grpc.RpcError) as e:
         get_order(stack.order.addr, "U-01", "O-nope")
     assert e.value.code() == grpc.StatusCode.NOT_FOUND
-    with grpc.insecure_channel(stack.order.addr) as ch:
+    with authchan.channel(stack.order.addr) as ch:
         stub = pb_grpc.OrderServiceStub(ch)
         assert code_of(lambda: stub.GetOrder(pb.GetOrderRequest(order_id=order.order_id))) == grpc.StatusCode.UNAUTHENTICATED
         assert not stub.ListOrders(pb.ListOrdersRequest(), metadata=as_user("U-03")).orders
@@ -216,7 +217,7 @@ def test_list_orders_is_newest_first_paged_and_scoped_to_the_user(make_stack):
     stack = make_stack()
     made = [run(checkout(stack.order.addr, "U-01", f"k-l{i}", [(sku_with(4), 1)]))[-1].order.order_id for i in range(3)]
     run(checkout(stack.order.addr, "U-02", "k-other", [(sku_with(4), 1)]))
-    with grpc.insecure_channel(stack.order.addr) as ch:
+    with authchan.channel(stack.order.addr) as ch:
         stub = pb_grpc.OrderServiceStub(ch)
         page1 = stub.ListOrders(pb.ListOrdersRequest(page_size=2), metadata=as_user("U-01"))
         page2 = stub.ListOrders(pb.ListOrdersRequest(page_size=2, page_token=page1.next_page_token), metadata=as_user("U-01"))
