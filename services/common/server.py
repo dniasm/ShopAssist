@@ -22,8 +22,14 @@ STOP_PATIENCE_SECONDS = 5.0  # how long past the grace period we wait for gRPC t
 
 
 def listen_address(env_var: str, default: str) -> str:
-    """Services listen on the same variable the orchestrator dials, e.g. CATALOG_ADDR=localhost:50051."""
-    return os.environ.get(env_var) or default
+    """Services listen on the same variable the orchestrator dials, e.g. CATALOG_ADDR=localhost:50051.
+
+    In containers the address others dial ("catalog:50051") is not one to bind to, so GRPC_LISTEN_HOST
+    (e.g. 0.0.0.0) replaces the host part and keeps the port.
+    """
+    address = os.environ.get(env_var) or default
+    host = os.environ.get("GRPC_LISTEN_HOST")
+    return f"{host}:{address.rsplit(':', 1)[1]}" if host else address
 
 
 class Service:
