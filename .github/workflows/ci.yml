@@ -26,7 +26,7 @@ jobs:
           python-version: "3.14"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python scripts/db_setup.py
+      - run: cp .env.example .env && python scripts/db_setup.py
       - run: pytest -q -rs
 
   web:
