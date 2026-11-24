@@ -1,4 +1,4 @@
-name : CI
+name: CI
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
 
 jobs:
   backend:
-    rins-on: ubuntu-latest
-    sevices:
+    runs-on: ubuntu-latest
+    services:
       postgres:
         image: postgres:17
         env:
@@ -17,7 +17,6 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
-
     env:
       PG_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
@@ -35,13 +34,13 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses:actions/checkout@v4
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm CI
+      - run: npm ci
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
