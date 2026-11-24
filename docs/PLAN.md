@@ -190,7 +190,7 @@ Browser: web/ (Vite + React + TypeScript + React Router, single-page app)
   | REST /api/*   +   ONE WebSocket per signed-in tab: /api/ws
   v
 Orchestrator (FastAPI :8011): gateway + agent. NO database driver, ever.
-  | gRPC (+ metadata x-user-id)
+  | gRPC (+ metadata x-svc-caller / x-svc-token signed per call, and x-user-id)
   +-- CatalogService    :50051  db "catalog"    products, skus, full-text search
   +-- InventoryService  :50052  db "inventory"  stock per sku, reservations (TTL)
   +-- OrderService      :50053  db "orders"     orders, checkout saga, fulfilment worker, outbox
@@ -228,6 +228,10 @@ Orchestrator (FastAPI :8011): gateway + agent. NO database driver, ever.
 | `CATALOG_ADDR` … `PAYMENT_ADDR` | `localhost:50051` … `localhost:50055` |
 | `ORCHESTRATOR_PORT` | `8011` |
 | `SESSION_SECRET` | random, written by `db_setup.py` if missing; signs session tokens |
+| `SVC_KEY_ORCHESTRATOR`, `SVC_KEY_ORDER` | random, written by `db_setup.py` if missing; each gRPC caller signs its calls with its own key; a service without them refuses to start |
+| `WS_AUTH_TIMEOUT_SECONDS` | `5`; a new WebSocket must send its auth message within this long |
+| `WS_ALLOWED_ORIGINS` | comma-separated browser origins allowed to open the WebSocket besides the orchestrator's own host (default the Vite dev server, `http://localhost:5173`, `http://127.0.0.1:5173`) |
+| `DEMO_PASSWORD`, `SIGNUP_CODE` | password the seeded users get (default `shopassist-demo`); optional invite code for sign-up |
 | `RESERVATION_TTL_SECONDS` | `600` |
 | `FULFILMENT_STEP_SECONDS` | `8` (tests ~0.05) |
 | `PAYMENT_LATENCY_MS` | `300` |
@@ -258,12 +262,20 @@ email and a wrong password get the same 401) → `{"token","user"}`. `POST /api/
 are throttled in the orchestrator (429 after 5 per email per address, 20 per address, in 15 minutes). Seeded users get
 `DEMO_PASSWORD` at start. Token = `itsdangerous`-signed `{user_id}` with 12 h max age, key `SESSION_SECRET`. All `/api/*`
 except `/api/health*`, `/api/session`, `/api/signup*`, `/api/products*` need `Authorization: Bearer <token>`; the
-WebSocket takes `?token=`. (`GET /api/users`, the demo picker, was removed with the passwords.)
-The orchestrator forwards the user as gRPC metadata `x-user-id`; services enforce ownership.
+WebSocket gets the token in its first message, never in the URL (see below). (`GET /api/users`, the demo picker, was
+removed with the passwords.) The orchestrator forwards the user as gRPC metadata `x-user-id`; services enforce ownership.
+
+**Service-to-service auth (gRPC).** `x-user-id` is trusted only from an authenticated caller. Every gRPC call carries
+`x-svc-caller` (`orchestrator` or `order`) and `x-svc-token` = `<expiry>.<HMAC-SHA256(SVC_KEY_<caller>,
+"caller\naudience\nmethod\nexpiry")>`, made by the client interceptors in `shopassist_proto/svcauth.py` (valid 30 s, one
+service, one method). Each server's `AuthInterceptor` checks it before any handler runs: missing, bad, expired (or more
+than 60 s ahead) or for another service/method → `UNAUTHENTICATED`; an authentic caller that is not allowed →
+`PERMISSION_DENIED`. Allowed: orchestrator → all five; order → catalog, inventory, payment. Only
+`grpc.health.v1.Health/Check` is open. A service missing its keys refuses to start.
 
 ## REST contract (orchestrator, all under /api, JSON)
 
-Errors: HTTP status + `{"error": {"code", "message", "details"?}}`. Codes: `invalid` 422, `unauthenticated` 401,
+Errors: HTTP status + `{"error": {"code", "message", "details"?}}`. Codes: `invalid` 422, `unauthenticated` 401, `forbidden` 403, `rate_limited` 429,
 `not_found` 404, `conflict` 409, `out_of_stock` 409, `payment_declined` 402, `unavailable` 503
 (`details.service` names the gRPC service). Money fields are integer cents named `*_cents`; the client formats.
 
@@ -289,9 +301,15 @@ Errors: HTTP status + `{"error": {"code", "message", "details"?}}`. Codes: `inva
 | POST `/api/chat/proposals/{proposal_id}/confirm` | | 202 `{"ok":true}`; runs the proposed write as the user; result on WS |
 | POST `/api/chat/proposals/{proposal_id}/dismiss` | | `{"ok":true}` |
 
-## WebSocket `/api/ws?token=…&after=<seq>`
+## WebSocket `/api/ws?after=<seq>`
 
-One socket per signed-in tab, server → client. Envelope: `{"seq","channel","type","data","ts"}` with channel
+Handshake: a browser `Origin` must be the orchestrator's own host or in `WS_ALLOWED_ORIGINS`, otherwise the upgrade is
+refused (403). After accept the client's first message must be `{"type":"auth","token":"<session token>"}` or
+`{"type":"auth","guest":"<guest id>"}` (a signed-out visitor: chat events only; at most 4096 characters) within `WS_AUTH_TIMEOUT_SECONDS`; the server answers
+`system/auth_ok`, then `system/hello` and the replay. No message, a bad message or a bad token → close 4401; services
+down during auth → close 1013.
+
+One socket per signed-in tab; after the auth message, server → client only. Envelope: `{"seq","channel","type","data","ts"}` with channel
 `chat | checkout | order | system`. `seq` is per user and strictly increasing. The orchestrator keeps the last 500
 events per user in memory (dropped 1 h after that user's last socket closes); `after=N` replays `seq > N` first;
 if N is older than the buffer it sends `system/resync` and the client refetches. While a user has a socket open the
@@ -302,7 +320,7 @@ orchestrator holds one `OrderService.WatchOrders` stream for them.
 | `checkout` | `step {order_id, step, state, message, shortages?}` · `done {order}` · `failed {order_id, reason, shortages?}` · `interrupted {order_id, message}` (the stream broke; the outcome is unknown and will be settled by recovery — the order's final status arrives later on channel `order`; never claim success or failure on `interrupted`) |
 | `order` | `status {order_id, status, message, event_id}` |
 | `chat` | `turn_started {turn_id}` · `tool_call {turn_id, tool, args}` · `tool_result {turn_id, tool, summary}` · `message {turn_id, text, cards:[{kind, data}]}` (kind: products, product, stock, cart, order, orders) · `proposal {turn_id, proposal_id, action, args, summary}` · `turn_done {turn_id, source:"llm"/"rules"}` · `error {turn_id, message}` |
-| `system` | `hello {user, seq}` · `resync` |
+| `system` | `auth_ok {guest}` · `hello {user, seq}` · `resync` |
 
 ## Agent (5.4)
 
