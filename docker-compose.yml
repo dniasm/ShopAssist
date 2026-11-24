@@ -1,0 +1,118 @@
+# ShopAssist in Docker. First run: python scripts/docker_env.py (writes the gitignored .docker-env/ secrets).
+name: shopassist
+
+x-app: &app
+  build: .
+  image: shopassist:local
+  restart: unless-stopped
+  environment: &addrs
+    GRPC_LISTEN_HOST: 0.0.0.0
+    ORCHESTRATOR_HOST: 0.0.0.0
+    CATALOG_ADDR: catalog:50051
+    INVENTORY_ADDR: inventory:50052
+    ORDER_ADDR: order:50053
+    CUSTOMER_ADDR: customer:50054
+    PAYMENT_ADDR: payment:50055
+
+x-service: &service
+  <<: *app
+  depends_on:
+    db-init:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    env_file: .docker-env/postgres.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  db-init:
+    <<: *app
+    restart: "no"
+    env_file: .docker-env/init.env
+    command: ["python", "scripts/docker_db_init.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  catalog:
+    <<: *service
+    env_file: .docker-env/catalog.env
+    command: ["python", "-m", "services.catalog.server"]
+    healthcheck:
+      test: ["CMD", "python", "scripts/grpc_healthcheck.py", "50051"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  inventory:
+    <<: *service
+    env_file: .docker-env/inventory.env
+    command: ["python", "-m", "services.inventory.server"]
+    healthcheck:
+      test: ["CMD", "python", "scripts/grpc_healthcheck.py", "50052"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  order:
+    <<: *service
+    env_file: .docker-env/order.env
+    command: ["python", "-m", "services.order.server"]
+    healthcheck:
+      test: ["CMD", "python", "scripts/grpc_healthcheck.py", "50053"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  customer:
+    <<: *service
+    env_file: .docker-env/customer.env
+    command: ["python", "-m", "services.customer.server"]
+    healthcheck:
+      test: ["CMD", "python", "scripts/grpc_healthcheck.py", "50054"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  payment:
+    <<: *service
+    env_file: .docker-env/payment.env
+    command: ["python", "-m", "services.payment.server"]
+    healthcheck:
+      test: ["CMD", "python", "scripts/grpc_healthcheck.py", "50055"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  orchestrator:
+    <<: *app
+    env_file: .docker-env/orchestrator.env
+    ports:
+      - "127.0.0.1:8011:8011"   # this machine only; the demo is not exposed to the network
+    depends_on:
+      catalog:
+        condition: service_healthy
+      inventory:
+        condition: service_healthy
+      order:
+        condition: service_healthy
+      customer:
+        condition: service_healthy
+      payment:
+        condition: service_healthy
+
+volumes:
+  pgdata:

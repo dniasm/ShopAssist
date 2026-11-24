@@ -73,6 +73,22 @@ The agent eval set `tests/eval/queries.jsonl` is kept for a later phase; check i
 
 The first version (v1: SQLite, `POST /query`, `frontend/`, `client/`) is no longer in the tree; it is in git history (everything before the "v2 phase 5.5" commit).
 
+### Run with Docker
+
+Everything (Postgres 17, the five services, the orchestrator and the web app) runs in containers; only port 8011 is published.
+
+```powershell
+python scripts/docker_env.py        # once: random secrets into the gitignored .docker-env/ (never printed, never committed)
+docker compose up --build           # first start builds the image and creates the databases
+```
+
+Open http://localhost:8011 and sign in as `priya.raman@example.com` / `shopassist-demo`. Add `LLM_API_KEYS=...` to
+`.docker-env/orchestrator.env` for the optional LLM (without it the rule-based parser answers).
+
+`docker compose down` stops everything and keeps the data (Postgres volume `pgdata`); `docker compose down -v` also deletes
+it, so the next `up` re-creates and re-seeds the databases. After `docker_env.py --force` run `down -v` first (the volume keeps the old passwords).
+On Windows run compose from PowerShell, not Git Bash (path-case problem with `docker compose build`).
+
 ### Reset the data
 
 ```powershell
