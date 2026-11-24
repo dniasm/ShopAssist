@@ -227,6 +227,8 @@ Orchestrator (FastAPI :8011): gateway + agent. NO database driver, ever.
 | `CATALOG_DATABASE_URL`, `INVENTORY_DATABASE_URL`, `ORDER_DATABASE_URL`, `CUSTOMER_DATABASE_URL`, `PAYMENT_DATABASE_URL` | per-service role URLs, written to `.env` by `db_setup.py` with random passwords |
 | `CATALOG_ADDR` … `PAYMENT_ADDR` | `localhost:50051` … `localhost:50055` |
 | `ORCHESTRATOR_PORT` | `8011` |
+| `ORCHESTRATOR_HOST` | `127.0.0.1`; Docker sets `0.0.0.0` so the container accepts outside connections |
+| `GRPC_LISTEN_HOST` | unset = listen on `<NAME>_ADDR`; Docker sets `0.0.0.0` (host replaced, port kept) while others dial `catalog:50051` etc. |
 | `SESSION_SECRET` | random, written by `db_setup.py` if missing; signs session tokens |
 | `SVC_KEY_ORCHESTRATOR`, `SVC_KEY_ORDER` | random, written by `db_setup.py` if missing; each gRPC caller signs its calls with its own key; a service without them refuses to start |
 | `WS_AUTH_TIMEOUT_SECONDS` | `5`; a new WebSocket must send its auth message within this long |
