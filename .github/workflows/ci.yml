@@ -30,7 +30,8 @@ jobs:
       - run: pytest -q -rs
 
   web:
-    runs-on: ubuntu-latestdefaults:
+    runs-on: ubuntu-latest
+    defaults:
       run:
         working-directory: web
     steps:
