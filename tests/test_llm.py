@@ -352,3 +352,67 @@ def test_status_and_logs_never_contain_a_full_key(caplog):
     with pytest.raises(LLMError) as err:
         ask(failing, "x")
     assert K1 not in str(err.value) and K2 not in str(err.value)
+
+
+# ---------------- tool calling (chat) ----------------
+
+TOOLS = [{"type": "function", "function": {"name": "search", "parameters": {"type": "object", "properties": {}}}}]
+MSGS = [{"role": "system", "content": "You are a shop assistant."}, {"role": "user", "content": "red hoodie"}]
+
+
+def tool_reply(*calls, content=None, usage=None) -> httpx.Response:
+    tcs = [{"id": i, "type": "function", "function": {"name": n, "arguments": a}} for i, n, a in calls]
+    return httpx.Response(200, json={"choices": [{"message": {"content": content, "tool_calls": tcs}}],
+                                     "usage": usage or {"prompt_tokens": 80, "completion_tokens": 20, "total_tokens": 100}})
+
+
+def test_chat_returns_tool_calls():
+    up = Upstream({K1: [tool_reply(("c1", "search", '{"q": "red hoodie"}'))], K2: [ok()]})
+    out = asyncio.run(up.client().chat(MSGS, TOOLS))
+    assert out == {"content": None, "tool_calls": [{"id": "c1", "name": "search", "args": {"q": "red hoodie"}}], "usage": 100}
+    body = up.bodies[0]
+    assert body["tools"] == TOOLS and body["tool_choice"] == "auto" and body["messages"] == MSGS
+    assert body["temperature"] == 0 and body["max_completion_tokens"] == 700 and body["include_reasoning"] is False
+
+
+def test_chat_text_reply_has_no_tool_calls():
+    resp = httpx.Response(200, json={"choices": [{"message": {"content": "Hi!"}}], "usage": {"total_tokens": 7}})
+    out = asyncio.run(Upstream({K1: [resp], K2: [resp]}).client().chat(MSGS, TOOLS))
+    assert out == {"content": "Hi!", "tool_calls": [], "usage": 7}
+
+
+def test_chat_bad_arguments_marked():
+    up = Upstream({K1: [tool_reply(("a", "search", "{not json"), ("b", "search", '{"q": "x"}'))], K2: [ok()]})
+    out = asyncio.run(up.client().chat(MSGS, TOOLS))
+    assert out["tool_calls"][0]["args"] == {"_error": "bad arguments"}
+    assert out["tool_calls"][1]["args"] == {"q": "x"}
+
+
+def test_chat_rotates_on_429():
+    up = Upstream({K1: [rate_limited()], K2: [tool_reply(("c1", "search", "{}"))]})
+    out = asyncio.run(up.client().chat(MSGS, TOOLS))
+    assert out["tool_calls"][0]["id"] == "c1" and up.calls == [K1, K2]
+
+
+def test_chat_raises_llmerror_on_failure():
+    up = Upstream({K1: [httpx.Response(400, json={})], K2: [httpx.Response(400, json={})]})
+    with pytest.raises(LLMError):
+        asyncio.run(up.client().chat(MSGS, TOOLS))
+
+
+def test_model_override_sent():
+    up = Upstream({K1: [tool_reply(), ok()], K2: [ok()]})
+    client = up.client()
+    asyncio.run(client.chat(MSGS, TOOLS, model="openai/gpt-oss-20b", max_tokens=50))
+    asyncio.run(client.complete_json("s", "u", "intent_result", RESPONSE_SCHEMA, validate, model="m2"))
+    assert up.bodies[0]["model"] == "openai/gpt-oss-20b" and up.bodies[0]["max_completion_tokens"] == 50
+    assert up.bodies[1]["model"] == "m2"
+
+
+def test_call_logged_without_key_or_content(caplog):
+    up = Upstream({K1: [tool_reply(("c", "search", "{}"))], K2: [ok()]})
+    with caplog.at_level(logging.INFO, logger="orchestrator.llm"):
+        asyncio.run(up.client().chat(MSGS, TOOLS))
+    text = caplog.text
+    assert "llm call model=openai/gpt-oss-120b prompt=80 completion=20" in text
+    assert K1 not in text and "red hoodie" not in text
