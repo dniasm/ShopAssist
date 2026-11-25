@@ -39,12 +39,13 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, w
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.clients = Clients(settings)
-        app.state.agent = AgentLoop(app.state.clients, app.state.hub, app.state.proposals, app.state.memory, app.state.llm)
         app.state.watchers = OrderWatchers(
             app.state.clients, app.state.hub, settings.order_watch_stop_seconds, settings.order_watch_retry_seconds)
         embedder = Embedder(settings)
         app.state.memory_reader = MemoryReader(app.state.clients, embedder)
         app.state.memory_worker = MemoryWorker(app.state.clients, app.state.llm, embedder, settings)
+        app.state.agent = AgentLoop(app.state.clients, app.state.hub, app.state.proposals, app.state.memory, app.state.llm,
+                                    app.state.memory_reader, app.state.memory_worker)
         app.state.memory_worker.start()
         yield
         await app.state.memory_worker.close()
