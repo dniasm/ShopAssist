@@ -22,6 +22,14 @@ class LLMError(Exception):
     pass
 
 
+def _tool_use_failed(resp: httpx.Response) -> bool:
+    """Groq's HTTP 400 for a tool call the model got wrong (error code `tool_use_failed`)."""
+    try:
+        return resp.json()["error"]["code"] == "tool_use_failed"
+    except (ValueError, KeyError, TypeError):
+        return False
+
+
 def _failed_generation(resp: httpx.Response) -> dict | None:
     """The model's own JSON from a 400 `json_validate_failed` error body, or None."""
     try:
@@ -160,7 +168,9 @@ class LLMClient:
                         reason = "unusable response body"
                 elif status is not None:
                     await self.pool.record(lease.index, status, headers)
-                    if status < 500:
+                    if status == 400 and _tool_use_failed(payload):
+                        reason = "tool_use_failed"  # the model wrote a malformed tool call: a fresh sample usually works
+                    elif status < 500:
                         raise LLMError(reason)  # other 4xx: the request itself is wrong, another key won't help
 
                 # Soft failure (timeout, 5xx, bad JSON): don't blame the key; one retry elsewhere, else give up.

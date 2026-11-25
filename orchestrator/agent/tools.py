@@ -166,8 +166,20 @@ class AgentTools:
         color = a.get("color") or (colors[0] if len(colors) == 1 else None)
         sku = next((s for s in product.skus if size and color and s.size.lower() == str(size).lower() and s.color.lower() == str(color).lower()), None)
         if sku is None:
-            ask = f"Which size and colour would you like for {product.name}? Sizes: {', '.join(product.sizes)}; colours: {', '.join(product.colors)}."
-            return result(ask, final=ask)
+            size_ok = bool(size) and any(s.size.lower() == str(size).lower() for s in product.skus)
+            color_ok = bool(color) and any(s.color.lower() == str(color).lower() for s in product.skus)
+            if size_ok and not color_ok:
+                ask = f"Which colour would you like for {product.name} in {size}? Colours: {', '.join(product.colors)}."
+            elif color_ok and not size_ok:
+                ask = f"Which size would you like for {product.name} in {color}? Sizes: {', '.join(product.sizes)}."
+            else:
+                ask = f"Which size and colour would you like for {product.name}? Sizes: {', '.join(product.sizes)}; colours: {', '.join(product.colors)}."
+            # The product card goes with the question, so the next turn knows which product the answer is about.
+            options = [{"sku_id": s.sku_id, "size": s.size, "color": s.color, "available": available.get(s.sku_id, 0)} for s in product.skus]
+            asked = card("product", {"product": {**serialize.product(product), "skus": [serialize.sku(s) for s in product.skus]},
+                                     "stock": options})
+            pending = f"Pending: add {product.name} [{product.product_id}]" + (f" size {size}" if size_ok else "") + (f" colour {color}" if color_ok else "")
+            return result(f"{ask}\n{pending}", asked, final=ask)
         if available.get(sku.sku_id, 0) <= 0:
             sold = f"Sorry, {product.name} in {sku.size} {sku.color} is sold out."
             return result(sold, final=sold)

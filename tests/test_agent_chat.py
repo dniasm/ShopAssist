@@ -71,6 +71,9 @@ def message_of(msgs):
     return next(m for m in msgs if m["type"] == "message")["data"]
 
 
+NAME_OF = {p["product_id"]: p["name"] for p in PRODUCTS}
+
+
 def sku_row(on_hand=4):
     sku = next(s for s in SKUS if s["sku_id"] == sku_with(on_hand))
     return sku["product_id"], sku["size"], sku["color"], sku["sku_id"]
@@ -123,6 +126,18 @@ def test_simple_add_is_one_llm_call(make_shop):
     assert types(msgs) == ["turn_started", "conversation", "tool_call", "tool_result", "message", "turn_done"]
     assert len(llm.requests) == 1 and msgs[-1]["data"]["source"] == "llm"
     assert message_of(msgs)["text"].startswith("Added ") and message_of(msgs)["cards"][0]["kind"] == "cart"
+    assert [l["sku_id"] for l in shop.client.get("/api/cart", headers=headers).json()["lines"]] == [sku]
+
+
+def test_a_search_for_a_requested_add_does_not_end_the_turn(make_shop):
+    pid, size, color, sku = sku_row()
+    shop, llm = llm_shop(make_shop, uses(("search", {"query": NAME_OF[pid]})),
+                         uses(("cart", {"action": "add", "product_id": pid, "size": size, "color": color})))
+    headers, ws = open_chat(shop)
+    say(shop, headers, f"find {NAME_OF[pid]} and add it in {size} {color}")
+    msgs = turn(ws)
+    assert len(llm.requests) == 2 and types(msgs).count("tool_call") == 2
+    assert message_of(msgs)["text"].startswith("Added ")
     assert [l["sku_id"] for l in shop.client.get("/api/cart", headers=headers).json()["lines"]] == [sku]
 
 

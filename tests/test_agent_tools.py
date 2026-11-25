@@ -99,6 +99,15 @@ def test_add_missing_variant_asks(env):
     assert env.lines() == []  # nothing was written
 
 
+def test_add_with_size_only_asks_just_the_colour_and_carries_the_product(env):
+    m, _ = hoodie_pair()
+    out = env.run("cart", {"action": "add", "product_id": m["product_id"], "size": m["size"]})
+    assert out["final"].startswith("Which colour") and "Sizes:" not in out["final"] and "P-" not in out["final"]
+    assert out["card"]["kind"] == "product" and out["card"]["data"]["product"]["product_id"] == m["product_id"]
+    assert f"Pending: add" in out["text"] and m["product_id"] in out["text"]
+    assert env.lines() == []
+
+
 def test_add_names_product_not_id_and_adds_to_existing_quantity(env):
     m, _ = hoodie_pair()
     out = env.run("cart", {"action": "add", "product_id": m["product_id"], "size": m["size"], "color": m["color"]})

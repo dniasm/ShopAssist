@@ -400,6 +400,13 @@ def test_chat_raises_llmerror_on_failure():
         asyncio.run(up.client().chat(MSGS, TOOLS))
 
 
+def test_chat_retries_once_after_a_malformed_tool_call():
+    bad = httpx.Response(400, json={"error": {"code": "tool_use_failed", "message": "bad call"}})
+    up = Upstream({K1: [bad], K2: [tool_reply(("c2", "search", "{}"))]})
+    out = asyncio.run(up.client().chat(MSGS, TOOLS))
+    assert out["tool_calls"][0]["id"] == "c2" and up.calls == [K1, K2]
+
+
 def test_model_override_sent():
     up = Upstream({K1: [tool_reply(), ok()], K2: [ok()]})
     client = up.client()

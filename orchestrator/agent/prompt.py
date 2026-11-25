@@ -10,10 +10,12 @@ def _fn(name: str, description: str, properties: dict, required: list[str] | Non
 
 
 _S, _I = {"type": "string"}, {"type": "integer"}
+CATEGORIES = ["headphones", "hoodies", "backpacks", "watches", "sunglasses", "t-shirts", "jeans", "jackets", "shoes", "accessories"]
+_CAT = {"type": "string", "enum": CATEGORIES}
 
 TOOLS: list[dict] = [
     _fn("search", "Find products. Prices in dollars. 6 per page.", {
-        "query": _S, "category": _S, "brand": _S, "color": _S, "size": _S, "min_price": _I, "max_price": _I,
+        "query": _S, "category": _CAT, "brand": _S, "color": _S, "size": _S, "min_price": _I, "max_price": _I,
         "sort": {"type": "string", "enum": SORTS}, "page": {"type": "integer", "description": "1-based"}}),
     _fn("product", "Details and stock of 1-3 products.", {
         "ids": {"type": "array", "items": _S, "maxItems": 3}, "size": _S, "color": _S}, ["ids"]),
@@ -40,5 +42,8 @@ Rules:
 - Saved facts (recall_facts) are hints about the person. The latest message always wins over them.
 - When the person says it, that, or the first one, it means the product on the current page or the one just discussed.
 - Keep earlier constraints in follow-ups: "show me hoodies" then "in navy?" means navy hoodies.
-- Before add, remove or set_qty on a cart line, use the exact line_id from cart view when you have no id yet.
+- Do what was asked in this turn with tool calls. Never reply that you will do something; do it, then say it is done.
+- The cart in Memory is current; use its line ids directly instead of viewing the cart again.
+- Line ids are internal: never ask the person for one. Take it from the cart in Memory or a cart result. If exactly one line matches what they name, act on it; if several match, ask which by size and colour.
+- If your last reply asked a question, the new message usually answers it: finish that action (e.g. add the product you asked about, with the colour they just gave).
 - Keep replies short."""

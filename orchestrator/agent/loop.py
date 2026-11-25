@@ -31,6 +31,8 @@ TITLE_CHARS = 60
 LLM_DOWN = "I can't do that right now. Please try again in a minute."
 READ_ONLY = {"search_products", "get_product", "get_stock", "get_cart", "list_orders", "get_order"}  # the rules planner's read tools
 WRITE_WORDS = re.compile(r"\b(add|remove|delete|cancel|check ?out|buy|purchase|put|take out)\b", re.I)
+# A search's own reply ends the turn only for a plain browse; an answer to a question ("green then, M and L") goes on.
+BROWSE_WORDS = re.compile(r"\b(show|find|search|look(?:ing)? for|browse|list|any|anything|similar|got|have you|do you have|recommend|suggest)\b", re.I)
 PRODUCT_ID = re.compile(r"P-\d+")
 BRACKETED_ID = re.compile(r"\s*[(\[]\s*(P-\d+)\s*[)\]]")
 
@@ -112,6 +114,9 @@ class AgentLoop:
         """The model/tool loop. Returns (text, text is a tool's own `final`, model calls, tokens). Raises LLMError."""
         seen: set[str] = set()
         calls = tokens = 0
+        message = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        # "find X and add it", or an answer to a question: a lookup alone does not finish the turn
+        lookup_ends_turn = bool(BROWSE_WORDS.search(message)) and not WRITE_WORDS.search(message)
         for _ in range(MAX_STEPS):
             reply = await self.llm.chat(messages, TOOLS)
             calls += 1
@@ -134,7 +139,8 @@ class AgentLoop:
                 messages.append({"role": "tool", "tool_call_id": c["id"], "content": out["text"]})
             if repeated:
                 return self.said(results), False, calls, tokens  # it asked again for what it already has: answer with that
-            if len(wanted) == 1 and results[-1]["final"] and not results[-1]["error"]:
+            lookup_goes_on = wanted[0]["name"] in ("search", "product") and not lookup_ends_turn
+            if len(wanted) == 1 and results[-1]["final"] and not results[-1]["error"] and not lookup_goes_on:
                 return results[-1]["final"], True, calls, tokens
         return self.said(results), False, calls, tokens
 
