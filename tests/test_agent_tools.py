@@ -179,15 +179,18 @@ def test_open_page_paths(env):
 def test_orders_and_cancel_proposal(env):
     ws = env.shop.ws(env.token)
     ws.get()
-    assert env.run("orders")["text"] == "No orders yet."
+    empty = env.run("orders")
+    assert empty["text"] == "No orders yet." and empty["final"] == "You have no orders yet."
     m, _ = hoodie_pair()
     env.put(m, 1)
     order_id = env.shop.checkout(env.headers, "k-tools").json()["order_id"]
     ws.until("done")
     out = env.run("orders")
     assert out["card"]["kind"] == "orders" and out["text"].startswith(order_id) and "confirmed" in out["text"]
+    assert out["final"] == "Here are your latest orders:"
     detail = env.run("orders", {"order_id": order_id})
     assert detail["card"]["kind"] == "order" and detail["card"]["data"]["order"]["order_id"] == order_id
+    assert detail["final"].startswith(f"Order {order_id} is confirmed: 1 × ") and "P-" not in detail["final"]
     assert env.run("open_page", {"kind": "order", "order_id": order_id})["navigate"] == {"path": f"/orders/{order_id}"}
     cancels = count_calls(env.shop, "CancelOrder")
     proposed = env.run("cancel_order", {"order_id": order_id})

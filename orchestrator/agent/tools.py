@@ -209,12 +209,13 @@ class AgentTools:
             data = serialize.order(order)
             items = ", ".join(f"{l['quantity']} × {l['name']} ({l['size']}, {l['color']})" for l in data["lines"])
             last = data["history"][-1]["message"] if data["history"] else ""
-            return result(f"{order_line(data)}\n{items}\nLatest: {last}", card("order", {"order": data}))
+            final = f"Order {data['order_id']} is {status_word(data['status'])}: {items}." + (f" Latest: {last}" if last else "")
+            return result(f"{order_line(data)}\n{items}\nLatest: {last}", card("order", {"order": data}), final=final)
         reply = await self.clients.call("order", self.clients.order.ListOrders, pb.ListOrdersRequest(page_size=5), user_id=user_id)
         orders = [serialize.order_summary(o) for o in reply.orders]
         if not orders:
-            return result("No orders yet.", card("orders", {"orders": []}))
-        return result("\n".join(order_line(o) for o in orders), card("orders", {"orders": orders}))
+            return result("No orders yet.", card("orders", {"orders": []}), final="You have no orders yet.")
+        return result("\n".join(order_line(o) for o in orders), card("orders", {"orders": orders}), final="Here are your latest orders:")
 
     async def t_cancel_order(self, a: dict, user_id, turn_id) -> dict:
         order = await self.clients.call("order", self.clients.order.GetOrder, pb.GetOrderRequest(order_id=a["order_id"]), user_id=user_id)
