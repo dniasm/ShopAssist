@@ -1,0 +1,13 @@
+name: "Assistant · AI"
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  tests:
+    uses: ./.github/workflows/_python-tests.yml
+    with:
+      name: "Assistant AI tests"
+      tests: tests/test_agent_*.py tests/test_llm.py tests/test_keypool.py tests/test_embed.py tests/test_eval_scorer.py

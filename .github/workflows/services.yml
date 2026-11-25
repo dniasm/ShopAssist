@@ -1,0 +1,30 @@
+name: "Services · gRPC"
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  service:
+    name: ${{ matrix.service }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: catalog
+            tests: tests/test_catalog.py tests/test_catalog_query.py tests/test_seed_v2.py
+          - service: inventory
+            tests: tests/test_inventory.py
+          - service: customer
+            tests: tests/test_customer.py
+          - service: payment
+            tests: tests/test_payment.py
+          - service: order
+            tests: tests/test_order_events.py tests/test_order_fulfilment.py tests/test_order_recovery.py tests/test_order_saga.py
+          - service: assistant
+            tests: tests/test_assistant*.py
+    uses: ./.github/workflows/_python-tests.yml
+    with:
+      name: ${{ matrix.service }}
+      tests: ${{ matrix.tests }}

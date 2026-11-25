@@ -1,0 +1,13 @@
+name: "Gateway · API"
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  tests:
+    uses: ./.github/workflows/_python-tests.yml
+    with:
+      name: "Gateway tests"
+      tests: tests/test_api*.py tests/test_events_hub.py tests/test_common.py
