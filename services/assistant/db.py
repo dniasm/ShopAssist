@@ -147,10 +147,12 @@ async def apply_facts(pool: AsyncConnectionPool, user_id: str, changes: list[dic
 
 
 async def clear_temporal(pool: AsyncConnectionPool, user_id: str, categories: list[str]) -> int:
-    """Remove the user's temporal facts in these categories (all of them when no category is given); permanent ones stay."""
+    """Remove the user's temporal facts in these categories; permanent ones stay. No category removes nothing."""
+    if not categories:
+        return 0
     async with pool.connection() as conn:
         cur = await conn.execute(
-            "DELETE FROM facts WHERE user_id = %s AND kind = 'temporal' AND (cardinality(%s::text[]) = 0 OR category = ANY(%s::text[]))",
-            (user_id, categories, categories),
+            "DELETE FROM facts WHERE user_id = %s AND kind = 'temporal' AND category = ANY(%s)",
+            (user_id, categories),
         )
         return cur.rowcount

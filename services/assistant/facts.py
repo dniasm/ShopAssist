@@ -9,6 +9,8 @@ SINGLE_KEYS = {"preferred_name", "size_top", "size_bottom", "shoe_size", "height
 ALIASES = {"size": "size_top", "name": "preferred_name"}
 TEMPORAL_DAYS = 30
 _TOKEN = re.compile(r"[a-z0-9]+")
+STOPWORDS = {"i", "me", "my", "am", "is", "are", "the", "a", "an", "what", "which", "do", "you", "of", "for", "to", "in",
+             "and", "or", "it", "how", "your"}
 
 
 def utcnow() -> datetime:
@@ -91,9 +93,9 @@ def _tokens(text: str) -> set[str]:
 
 
 def keyword_score(fact: dict, query_text: str) -> float:
-    """Token Jaccard between the query and the fact's key and value."""
-    a, b = _tokens(query_text), _tokens(fact["key"] + " " + fact["value"])
-    return len(a & b) / len(a | b) if a and b else 0.0
+    """Share of the fact's key and value words that the query also uses (stopwords never count): 0 when none match."""
+    b = _tokens(fact["key"] + " " + fact["value"])
+    return len((_tokens(query_text) - STOPWORDS) & b) / len(b) if b else 0.0
 
 
 def rank(facts: list[dict], query_text: str, query_embedding: list[float] | None, limit: int, min_score: float,
@@ -101,9 +103,11 @@ def rank(facts: list[dict], query_text: str, query_embedding: list[float] | None
     """Best `limit` live facts scoring at least `min_score` (and above zero), best first, each with its `score`.
 
     Cosine when the query and the fact both have an embedding of the same size; otherwise keyword overlap.
+    Without a query embedding (keyword mode) `min_score` is ignored: any fact sharing a non-stopword word qualifies.
     Expired temporal facts are never returned.
     """
     now = now or utcnow()
+    keyword_mode = not query_embedding
     scored = []
     for f in facts:
         if is_expired(f, now):
@@ -113,7 +117,7 @@ def rank(facts: list[dict], query_text: str, query_embedding: list[float] | None
             score = cosine(query_embedding, emb)
         else:
             score = keyword_score(f, query_text)
-        if score > 0 and score >= min_score:
+        if score > 0 and (keyword_mode or score >= min_score):
             scored.append({**f, "score": score})
     scored.sort(key=lambda f: (-f["score"], f["created_at"] if f.get("created_at") else now, f["fact_id"]))
     return scored[:limit]

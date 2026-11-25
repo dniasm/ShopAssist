@@ -158,6 +158,12 @@ def test_clear_temporal_by_category(assistant):
     assert sorted(f.key for f in facts(assistant, "U-01")) == ["liked_brands", "wants_shoes"]
 
 
+def test_clear_temporal_without_categories_removes_nothing(assistant):
+    remember(assistant, "U-01", "wants", "red tee", kind="temporal", category="t-shirts")
+    r = assistant.ClearTemporalFacts(pb.ClearTemporalFactsRequest(), metadata=as_user("U-01"))
+    assert r.removed == 0 and len(facts(assistant, "U-01")) == 1
+
+
 def test_invalid_fact_changes_are_rejected(assistant):
     bad = grpc.StatusCode.INVALID_ARGUMENT
     assert code_of(lambda: remember(assistant, "U-01", "", "x")) == bad
@@ -189,5 +195,6 @@ def test_search_top5_min_score(assistant):
 def test_search_keyword_fallback_without_embeddings(assistant):
     remember(assistant, "U-01", "size_top", "M")
     remember(assistant, "U-01", "liked_brands", "Nike")
-    got = search(assistant, "U-01", text="what size am i", min_score=0.1)
+    got = search(assistant, "U-01", text="what size am i", min_score=0.45)
     assert [f.key for f in got] == ["size_top"]
+    assert list(search(assistant, "U-01", text="what is it", min_score=0.45)) == []
