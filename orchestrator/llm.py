@@ -64,7 +64,7 @@ class LLMClient:
                             max_tokens: int | None = None, model: str | None = None):
         """One strict-JSON completion through the key pool; `parse` validates the decoded object (raise LLMError to reject).
 
-        The agent planner is the only caller. LLM_TIMEOUT is the total budget across all attempts and keys.
+        LLM_TIMEOUT is the total budget across all attempts and keys.
         """
         body = self._body(user, system, schema_name, schema, model)
         if max_tokens:  # a short answer: ask for (and budget for) less, so the key pool can serve more calls per minute

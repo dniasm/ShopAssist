@@ -13,7 +13,6 @@ import re
 
 from orchestrator.agent import rules
 from orchestrator.agent.compact import cart_summary, order_line, product_line
-from orchestrator.agent.legacy_tools import LegacyTools
 from orchestrator.agent.prompt import SYSTEM_PROMPT, TOOLS
 from orchestrator.agent.state import ConversationMemory, ProposalStore
 from orchestrator.agent.tools import CLOSING, AgentTools, product_list
@@ -42,7 +41,6 @@ class AgentLoop:
         self.clients, self.hub, self.memory, self.llm = clients, hub, memory, llm
         self.reader, self.worker = reader, worker
         self.tools = AgentTools(clients, proposals, reader.search if reader else None)
-        self.legacy = LegacyTools(self.tools)
         self._locks: dict[str, asyncio.Lock] = {}
 
     def emit(self, owner: str, type_: str, data: dict) -> None:
@@ -165,19 +163,22 @@ class AgentLoop:
             return action["reply"], action["args"], []
         if action["tool"] not in READ_ONLY:
             return LLM_DOWN, {}, []
-        self.emit(owner, "tool_call", {"turn_id": turn_id, "tool": action["tool"], "args": action["args"]})
-        out = await self.legacy.run(action["tool"], action["args"], user_id, turn_id)
-        self.emit(owner, "tool_result", {"turn_id": turn_id, "tool": action["tool"], "summary": out["summary"]})
+        name, args = rules.to_tool_call(action["tool"], action["args"])
+        self.emit(owner, "tool_call", {"turn_id": turn_id, "tool": name, "args": args})
+        out = await self.tools.run(name, args, user_id, turn_id)
+        summary = out["final"] or out["text"]
+        self.emit(owner, "tool_result", {"turn_id": turn_id, "tool": name, "summary": summary})
         extra = {"needs_sign_in": True} if out.get("needs_sign_in") else {}
-        return rules.compose([out]), extra, [{"text": out["summary"], "final": None, "card": out["card"], "error": False}]
+        return rules.compose([{"summary": summary}]), extra, [{"text": summary, "final": None, "card": out["card"], "error": False}]
 
     # ---------------- what the model is told ----------------
 
-    def model_messages(self, block: dict, context: dict, message: str, key: str) -> list[dict]:
+    @classmethod
+    def model_messages(cls, block: dict, context: dict, message: str, key: str = "") -> list[dict]:
         latest = [{"role": m["role"], "content": m["text"]} for m in block["latest"]]
-        if block["latest"] and block["latest"][-1]["role"] == "assistant" and (shown := self.shown_text(block["latest"][-1].get("cards") or [])):
+        if block["latest"] and block["latest"][-1]["role"] == "assistant" and (shown := cls.shown_text(block["latest"][-1].get("cards") or [])):
             latest[-1]["content"] += f"\n[Shown to the user:\n{shown}]"
-        return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": self.memory_text(block, context)},
+        return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": cls.memory_text(block, context)},
                 *latest, {"role": "user", "content": message}]
 
     @staticmethod

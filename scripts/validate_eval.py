@@ -1,4 +1,4 @@
-"""Check tests/eval/queries.jsonl against the seed data and the agent tool table. Exits 1 on any problem.
+"""Check tests/eval/queries.jsonl against the seed data and the agent's 8-tool table. Exits 1 on any problem.
 
 Usage (from the repo root):
     python scripts/validate_eval.py [--file tests/eval/queries.jsonl]
@@ -7,7 +7,7 @@ Checks, per line: shape of the JSON object; tool name and allowed/required args 
 enum values (sort, category, colour, size, brand); money as integers; every id exists in data/seed/v2;
 sizes and colours are ones the product has; searches match at least one product; signed-in lines name
 an existing customer and every order they mention belongs to that customer; signed-out lines never use
-cart or order tools; a cancel with an explicit order id expects propose_cancel_order; a query word in
+cart or order tools; a cancel with an explicit order id expects cancel_order; a query word in
 expect.args appears in the shopper's text (or is a plural or near-typo of a word there); a follow-up
 search keeps the category the history named; tags from the allowed list with exactly one category tag;
 write and proposal tools carry their tag; follow-ups have history; context products exist and match the
@@ -41,26 +41,20 @@ SORTS = {"relevance", "price_asc", "price_desc", "rating", "newest"}
 ORDER_ID = re.compile(r"O-\d{5}")
 
 TOOLS = {
-    "search_products": {"required": set(), "allowed": {"query", "category", "color", "size", "brand",
-                        "min_price_cents", "max_price_cents", "sort"}, "kind": "read"},
-    "get_product": {"required": {"product_id"}, "allowed": {"product_id"}, "kind": "read"},
-    "get_stock": {"required": {"product_id"}, "allowed": {"product_id", "size", "color"}, "kind": "read"},
-    "get_cart": {"required": set(), "allowed": set(), "kind": "read"},
-    "add_to_cart": {"required": {"product_id", "size", "color"}, "allowed": {"product_id", "size", "color", "quantity"},
-                    "kind": "write"},
-    "remove_from_cart": {"required": {"product_id"}, "allowed": {"product_id", "size", "color"}, "kind": "write"},
-    "list_orders": {"required": set(), "allowed": set(), "kind": "read"},
-    "get_order": {"required": {"order_id"}, "allowed": {"order_id"}, "kind": "read"},
-    "propose_checkout": {"required": set(), "allowed": {"payment_method"}, "kind": "proposal"},
-    "propose_cancel_order": {"required": {"order_id"}, "allowed": {"order_id"}, "kind": "proposal"},
-    "reply": {"required": set(), "allowed": set(), "kind": "reply"},
+    "search": {"required": set(), "allowed": {"query", "category", "color", "size", "brand", "min_price", "max_price", "sort", "page"}},
+    "product": {"required": {"ids"}, "allowed": {"ids", "size", "color"}},
+    "cart": {"required": {"action"}, "allowed": {"action", "product_id", "size", "color", "quantity", "line_id"}},
+    "orders": {"required": set(), "allowed": {"order_id"}},
+    "cancel_order": {"required": {"order_id"}, "allowed": {"order_id"}},
+    "checkout": {"required": set(), "allowed": set()},
+    "reply": {"required": set(), "allowed": set()},
 }
+CART_ACTIONS = {"view", "add", "set_qty", "remove"}
 # Tools that act for a particular shopper; a signed-out line must expect reply instead.
-SIGNED_IN_TOOLS = {"get_cart", "add_to_cart", "remove_from_cart", "list_orders", "get_order",
-                   "propose_checkout", "propose_cancel_order"}
+SIGNED_IN_TOOLS = {"cart", "orders", "cancel_order", "checkout"}
 CATEGORY_TAGS = {"basic", "slang", "typo", "context", "follow_up", "multi_constraint", "out_of_scope",
-                 "ambiguous", "order", "cart", "proposal", "safety"}
-ALLOWED_TAGS = CATEGORY_TAGS | {"write"}
+                 "ambiguous", "order", "cart", "proposal", "safety", "bug"}
+ALLOWED_TAGS = CATEGORY_TAGS | {"write", "names", "llm_only"}
 LINE_KEYS = {"id", "query", "history", "context", "expect", "tags", "reason"}
 
 
@@ -97,16 +91,16 @@ def check_search(where, args, all_products, brands, errors):
         if args["brand"].lower() not in brands:
             errors.append(f"{where}: brand {args['brand']!r} does not exist")
         pool = [p for p in pool if p["brand"].lower() == args["brand"].lower()]
-    lo, hi = args.get("min_price_cents"), args.get("max_price_cents")
-    for key in ("min_price_cents", "max_price_cents"):
-        if key in args and (not isinstance(args[key], int) or args[key] < 0):
-            errors.append(f"{where}: {key} must be a non-negative integer of cents")
+    lo, hi = args.get("min_price"), args.get("max_price")
+    for key in ("min_price", "max_price"):
+        if key in args and (not isinstance(args[key], (int, float)) or isinstance(args[key], bool) or args[key] < 0):
+            errors.append(f"{where}: {key} must be a non-negative number of dollars")
     if lo is not None and hi is not None and lo > hi:
-        errors.append(f"{where}: min_price_cents is above max_price_cents")
+        errors.append(f"{where}: min_price is above max_price")
     if lo is not None:
-        pool = [p for p in pool if p["price_cents"] >= lo]
+        pool = [p for p in pool if p["price_cents"] >= lo * 100]
     if hi is not None:
-        pool = [p for p in pool if p["price_cents"] <= hi]
+        pool = [p for p in pool if p["price_cents"] <= hi * 100]
     if "sort" in args and args["sort"] not in SORTS:
         errors.append(f"{where}: sort {args['sort']!r} is not one of {sorted(SORTS)}")
     if not pool:
@@ -161,9 +155,9 @@ def check_line(lineno: int, raw: str, seed, seen_ids: set, errors: list, stats: 
 
     history = line["history"]
     if not isinstance(history, list) or not all(
-            isinstance(h, dict) and set(h) == {"user", "assistant"} and all(isinstance(v, str) for v in h.values())
-            for h in history):
-        errors.append(f"{where}: history must be a list of {{user, assistant}} string objects")
+            isinstance(h, dict) and {"user", "assistant"} <= set(h) <= {"user", "assistant", "cards"}
+            and isinstance(h["user"], str) and isinstance(h["assistant"], str) for h in history):
+        errors.append(f"{where}: history must be a list of {{user, assistant, cards?}} objects")
         history = []
 
     ctx = line["context"]
@@ -186,8 +180,9 @@ def check_line(lineno: int, raw: str, seed, seen_ids: set, errors: list, stats: 
     expect = line["expect"]
     tool = expect.get("tool") if isinstance(expect, dict) else None
     args = expect.get("args") if isinstance(expect, dict) else None
-    if tool not in TOOLS or not isinstance(args, dict) or set(expect) != {"tool", "args"}:
-        errors.append(f"{where}: expect must be {{tool, args}} with a tool from the table")
+    if (tool not in TOOLS or not isinstance(args, dict) or not {"tool", "args"} <= set(expect) <= {"tool", "args", "alt"}
+            or not isinstance(expect.get("alt", []), list)):
+        errors.append(f"{where}: expect must be {{tool, args, alt?}} with a tool from the table")
         return
     spec = TOOLS[tool]
     unknown = set(args) - spec["allowed"]
@@ -196,6 +191,12 @@ def check_line(lineno: int, raw: str, seed, seen_ids: set, errors: list, stats: 
     missing = spec["required"] - set(args)
     if missing:
         errors.append(f"{where}: {tool} needs {sorted(missing)} in expect.args")
+    if tool == "cart" and args.get("action") not in CART_ACTIONS:
+        errors.append(f"{where}: cart action must be one of {sorted(CART_ACTIONS)}")
+    for alt in expect.get("alt", []):
+        if not isinstance(alt, dict) or alt.get("tool") not in TOOLS or not isinstance(alt.get("args"), dict):
+            errors.append(f"{where}: each alt must be {{tool, args}} with a tool from the table")
+    kind = "write" if tool == "cart" and args.get("action") in ("add", "set_qty", "remove") else         "proposal" if tool in ("cancel_order", "checkout") else "read"
     stats["tool"][tool] += 1
 
     # Shopper-bound tools need a signed-in shopper; a signed-out line expects a reply.
@@ -215,10 +216,10 @@ def check_line(lineno: int, raw: str, seed, seen_ids: set, errors: list, stats: 
     # An explicit cancel always goes through a cancel proposal for the order it names.
     if re.search(r"\bcancel", query, re.IGNORECASE):
         named_in_query = ORDER_ID.findall(query)
-        if named_in_query and (tool != "propose_cancel_order" or args.get("order_id") != named_in_query[0]):
-            errors.append(f"{where}: a cancel that names {named_in_query[0]} must expect propose_cancel_order with that order_id")
+        if named_in_query and (tool != "cancel_order" or args.get("order_id") != named_in_query[0]):
+            errors.append(f"{where}: a cancel that names {named_in_query[0]} must expect cancel_order with that order_id")
 
-    if tool == "search_products":
+    if tool == "search":
         check_search(where, args, all_products, brands, errors)
         if "query" in args:
             line_tokens = re.findall(r"[a-z0-9]+", query.lower())
@@ -231,12 +232,19 @@ def check_line(lineno: int, raw: str, seed, seen_ids: set, errors: list, stats: 
                 if stem in prior and "category" not in args:
                     errors.append(f"{where}: the history names {cat}, so a follow-up search must keep category={cat}")
                     break
-    elif tool in ("get_product", "get_stock", "add_to_cart", "remove_from_cart"):
+    elif tool == "product":
+        ids = args.get("ids")
+        if not isinstance(ids, list) or not ids or len(ids) > 3:
+            errors.append(f"{where}: ids must be a list of 1 to 3 product ids")
+        else:
+            for pid in ids:
+                check_product_args(where, {"product_id": pid, **{k: args[k] for k in ("size", "color") if k in args}}, products, errors)
+    elif tool == "cart":
         if "product_id" in args:
             check_product_args(where, args, products, errors)
-        if tool == "add_to_cart" and "quantity" in args and (not isinstance(args["quantity"], int) or args["quantity"] < 1):
+        if "quantity" in args and (not isinstance(args["quantity"], int) or args["quantity"] < 1):
             errors.append(f"{where}: quantity must be a positive integer")
-    elif tool in ("get_order", "propose_cancel_order"):
+    elif tool in ("orders", "cancel_order") and "order_id" in args:
         if order_map.get(args.get("order_id")) is None:
             errors.append(f"{where}: order_id {args.get('order_id')!r} does not exist")
 
@@ -255,9 +263,9 @@ def check_line(lineno: int, raw: str, seed, seen_ids: set, errors: list, stats: 
         stats["category"][t] += 1
     for t in tags:
         stats["tag"][t] += 1
-    if spec["kind"] == "write" and "write" not in tags:
+    if kind == "write" and "write" not in tags:
         errors.append(f"{where}: {tool} is a direct write and must carry the write tag")
-    if spec["kind"] == "proposal" and not ({"proposal", "safety"} & set(tags)):
+    if kind == "proposal" and not ({"proposal", "safety"} & set(tags)):
         errors.append(f"{where}: {tool} is a proposal and must carry the proposal or safety tag")
     if "follow_up" in tags and not history:
         errors.append(f"{where}: follow_up lines need history")

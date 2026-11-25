@@ -197,6 +197,7 @@ Orchestrator (FastAPI :8011): gateway + agent. NO database driver, ever.
   |        +-- gRPC --> Catalog (prices), Inventory (reserve/commit/release/restock), Payment
   +-- CustomerService   :50054  db "customer"   users, password hashes, carts
   +-- PaymentService    :50055  db "payment"    simulated charges/refunds
+  +-- AssistantService  :50056  db "assistant"  saved chats (conversations, messages) and memory facts
 ```
 
 ## Stack changes
@@ -237,6 +238,9 @@ Orchestrator (FastAPI :8011): gateway + agent. NO database driver, ever.
 | `RESERVATION_TTL_SECONDS` | `600` |
 | `FULFILMENT_STEP_SECONDS` | `8` (tests ~0.05) |
 | `PAYMENT_LATENCY_MS` | `300` |
+| `ASSISTANT_ADDR`, `ASSISTANT_DATABASE_URL` | `localhost:50056`; role URL written by `db_setup.py` |
+| `VOYAGE_API_KEY`, `VOYAGE_MODEL` | Voyage key for fact embeddings (empty = keyword matching); `voyage-4-lite` |
+| `MEMORY_MODEL` | `openai/gpt-oss-20b`; extracts facts and writes chat summaries |
 | `LLM_*` | unchanged from Phase 2 |
 
 ## Database rules
@@ -324,34 +328,49 @@ orchestrator holds one `OrderService.WatchOrders` stream for them.
 | `chat` | `turn_started {turn_id}` · `tool_call {turn_id, tool, args}` · `tool_result {turn_id, tool, summary}` · `message {turn_id, text, cards:[{kind, data}]}` (kind: products, product, stock, cart, order, orders) · `proposal {turn_id, proposal_id, action, args, summary}` · `turn_done {turn_id, source:"llm"/"rules"}` · `error {turn_id, message}` |
 | `system` | `auth_ok {guest}` · `hello {user, seq}` · `resync` |
 
-## Agent (5.4)
+## Agent (5.4, reworked)
 
-Per turn, at most 4 steps; the model returns strict JSON `{"action": "<tool>" | "reply", "args": {…}, "reply": "…"}`.
-Tools: `search_products, get_product, get_stock, get_cart, add_to_cart, remove_from_cart, list_orders, get_order,
-propose_checkout, propose_cancel_order`. Cart edits run directly (reversible and visible). **Money / irreversible
-actions are proposals only — the user's click confirms; the LLM cannot execute them.** Memory per user: last 6 turns
-plus context (`path`, `product_id`, cart summary). No key / limits / errors → rules parser (`source:"rules"`).
+Native tool calling (OpenAI tool schemas through Groq): per turn the model gets the system prompt, the 8 tools, a memory
+block and the message, and runs at most 6 steps (`orchestrator/agent/loop.py`). Cart edits run directly (reversible and
+visible). **Money / irreversible actions are proposals only: the person's click confirms; the model cannot execute them.**
+No key / limits / errors before any tool ran -> the rules planner (`rules.py`) answers read-only questions only, mapped to the
+same tools by `rules.to_tool_call`; it never writes. Cards and "what was shown" are saved with each reply, so "the second one"
+resolves from the numbered list the person saw. The model never shows ids to the person; they are only tool arguments.
 
-Tool signatures (the contract shared by the agent, the rules fallback and the eval set; money in cents):
+Tool signatures (money in dollars; ids only from tool results or the shown list):
 
 | Tool | Args | Kind |
 |---|---|---|
-| `search_products` | `query?, category?, color?, size?, brand?, min_price_cents?, max_price_cents?, sort?` (`relevance, price_asc, price_desc, rating, newest`) | read |
-| `get_product` | `product_id` | read |
-| `get_stock` | `product_id, size?, color?` | read |
-| `get_cart` | — | read |
-| `add_to_cart` | `product_id, size, color, quantity=1` (the server resolves the SKU; a missing size/colour on a multi-variant product → the agent asks) | write (direct) |
-| `remove_from_cart` | `product_id, size?, color?` | write (direct) |
-| `list_orders` | — | read |
-| `get_order` | `order_id` | read |
-| `propose_checkout` | `payment_method?` | proposal |
-| `propose_cancel_order` | `order_id` | proposal |
-| `reply` | — (answer or ask a clarifying question with no tool) | — |
+| `search` | `query?, category?, brand?, color?, size?, min_price?, max_price?, sort?, page?` (`relevance, price_asc, price_desc, rating, newest`; 6 per page) | read |
+| `product` | `ids` (1-3), `size?, color?` | read (details and stock) |
+| `cart` | `action` (`view, add, set_qty, remove`), `product_id?, size?, color?, quantity?, line_id?` (`set_qty`/`remove` need a `line_id` from the cart summary or a view; `add` needs size and colour) | read / write (direct) |
+| `orders` | `order_id?` (none = recent list) | read |
+| `cancel_order` | `order_id` | proposal |
+| `checkout` | none | proposal; confirming it navigates to `/checkout` |
+| `open_page` | `kind` (`product, shop, orders, order`), `product_id?, order_id?, query?, category?` | navigate |
+| `recall_facts` | `query` | read (saved facts) |
+
+Memory (assistant service, `services/assistant/`; tables `conversations`, `messages`, `facts`):
+- Facts are `permanent` (name, sizes, height, budget, tastes; a new single value replaces the old, list keys collect, "forget"
+  deletes) or `temporal` (a current need, tied to a shop category; deleted when an order with that category is placed, or after
+  30 days). `MEMORY_MODEL` extracts them in a background worker after each reply (a cheap pre-check skips messages that cannot
+  hold a fact; "remember/forget" always runs) and rewrites the chat's rolling summary (at most ~200 words, last 6 exchanges).
+- Each turn the message plus the summary is embedded (Voyage, `VOYAGE_MODEL`) and the top 5 facts scoring >= 0.45 enter the
+  prompt (keyword overlap without a key); `recall_facts` is the model's way to look up more. The prompt also has the summary,
+  the latest exchange verbatim and a short cart summary with line ids.
+- Chats are per signed-in user: list, open, rename, delete; guests keep one temporary chat.
+
+Token budget (Groq free tier: 8,000 tokens per minute per key, and every call resends the prompt): system prompt ~500, tools
+~600, facts ~150, summary ~270, latest exchange ~250, message + page ~50, tool results ~600. A simple turn ~1,850 tokens, one
+that reasons about a result ~4,300, average ~3,000; calls and tokens are logged per turn. Design:
+`docs/superpowers/specs/2026-11-24-agent-chat-rework-design.md`.
 
 Eval set `tests/eval/queries.jsonl`, one JSON object per line:
-`{"id", "query", "history":[{"user","assistant"}], "context":{"path","product_id"?, "signed_in": bool}, "expect":{"tool", "args":{…}}, "tags":[…], "reason"}`.
-`expect.tool` is the FIRST action the agent should take; `expect.args` lists only the args that must match (subset, case-insensitive;
-money exact). Tags from: `basic, slang, typo, context, follow_up, multi_constraint, out_of_scope, ambiguous, order, cart, write, proposal, safety`.
+`{"id", "query", "history":[{"user","assistant","cards"?}], "context":{"path","product_id"?, "signed_in": bool, "cart_view"?}, "expect":{"tool", "args":{…}, "alt"?:[…]}, "tags":[…], "reason"}`.
+`expect.tool` is the FIRST tool call (or `reply`) the agent should make, in the 8-tool vocabulary above; `expect.args` lists only the args that must match
+(subset, case-insensitive; money in dollars, `ids` lists by membership); `alt` lists other acceptable first actions. `cart_view` becomes the cart
+summary with line ids, `cards` (product ids) the list the last reply showed. Tags from: `basic, slang, typo, context, follow_up, multi_constraint,
+out_of_scope, ambiguous, order, cart, write, proposal, safety, bug`, plus `llm_only` (skipped by the rules mode) and `names` (scored on args only).
 
 ## Phases and acceptance (Opus verifies each one live before committing)
 
@@ -395,20 +414,12 @@ Next steps:
 3. Known gaps: no password reset or email verification; the per-user WebSocket event log is in memory, so the
    orchestrator is still a single process; the test suite takes 2–8 minutes depending on machine load.
 
-## 5.4 resumed (2026-11-19) — scorer interface
+## 5.4 scorer (reworked)
 
-The agent module exposes one pure-ish entry point used by both the chat loop and the eval scorer:
-
-```python
-# orchestrator/agent/planner.py
-async def plan_next_action(query: str, history: list[dict], context: dict, *, llm=None, tool_results: list[dict] = ()) -> Action
-# Action = {"tool": str, "args": dict, "reply": str | None, "source": "llm" | "rules"}
-# llm=None -> rules parser. No gRPC calls inside: context may carry a `product` summary
-# {product_id, name, category, price_cents, colors, sizes} and a `cart` summary, filled by the caller.
-```
-
-Scorer `scripts/eval_agent.py --mode rules|llm [--limit N]`: for each line of `tests/eval/queries.jsonl` calls
-`plan_next_action` with no tool results and compares the FIRST action: tool must match exactly; `expect.args` must be a
-subset of the actual args — strings case-insensitive, `query` by token containment (expected tokens ⊆ actual tokens,
-lower-cased, simple plural strip), integers exact. Prints overall accuracy, accuracy per tag and per tool, and the
-failures; writes `tests/eval/results/<mode>-<date>.json`.
+`scripts/eval_agent.py --mode rules|llm [--limit N] [--tags a,b]` scores the FIRST action for each line of `tests/eval/queries.jsonl`.
+`llm`: builds the messages the loop builds (`AgentLoop.model_messages`: system prompt, memory block from the case's context and
+history, message), calls `llm.chat(messages, TOOLS)` once and takes `tool_calls[0]` (or `reply` when none). `rules`: `rules.plan`
+mapped through `rules.to_tool_call`. The tool must match exactly (except `names` cases) and `expect.args` must be a subset of the
+actual args: strings case-insensitive, `query` by token containment (lower-cased, simple plural strip), numbers exact, lists by
+membership; any `alt` also passes. Prints overall accuracy, accuracy per tag and per tool, and the failures; writes
+`tests/eval/results/<mode>-<date>.json` (older result files are history from the pre-rework planner).

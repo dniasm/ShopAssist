@@ -1,4 +1,4 @@
-"""Unit tests for the eval scorer's matching rules (scripts/eval_agent.py). No planner, no LLM, no network."""
+"""Unit tests for the eval scorer's matching rules (scripts/eval_agent.py). No LLM, no network."""
 
 import importlib.util
 import sys
@@ -214,8 +214,38 @@ def test_enrich_context_adds_product_summary_only_when_known():
     assert "product" not in ev.enrich_context({"path": "/shop", "signed_in": False}, products)
 
 
-# ---- planner missing
-def test_missing_planner_fails_with_a_clear_message():
-    with pytest.raises(SystemExit) as exc:
-        ev.load_planner("orchestrator.agent.no_such_planner_xyz")
-    assert "planner" in str(exc.value) and "not built yet" in str(exc.value)
+# ---- the 8-tool vocabulary, alternatives, names-only and list args
+def test_an_alt_action_also_passes():
+    expected = {"tool": "reply", "args": {}, "alt": [{"tool": "cart", "args": {"action": "view"}}]}
+    assert ev.action_matches(expected, act("cart", action="view"))[0]
+    assert ev.action_matches(expected, act("reply"))[0]
+    assert not ev.action_matches(expected, act("cart", action="remove", line_id="SKU-1"))[0]
+
+
+def test_names_cases_score_args_only():
+    expected = exp("cart", action="add", product_id="P-1324")
+    assert ev.action_matches(expected, act("product", action="add", product_id="P-1324"), args_only=True)[0]
+    assert not ev.action_matches(expected, act("product", action="add", product_id="P-1324"))[0]
+    assert not ev.action_matches(expected, act("cart", action="add", product_id="P-1253"), args_only=True)[0]
+
+
+def test_list_args_need_every_expected_item():
+    assert ev.action_matches(exp("product", ids=["P-1324"]), act("product", ids=["p-1253", "P-1324"]))[0]
+    assert not ev.action_matches(exp("product", ids=["P-1324"]), act("product", ids=["P-1253"]))[0]
+    assert not ev.action_matches(exp("product", ids=["P-1324"]), act("product", ids="P-1324"))[0]
+
+
+def test_enrich_context_turns_a_cart_view_into_the_memory_cart_text_with_line_ids():
+    view = {"lines": [{"sku_id": "SKU-1", "name": "Hoodie", "product_id": "P-1", "size": "M", "color": "navy", "quantity": 1,
+                       "line_total_cents": 6900}], "total_cents": 6900}
+    ctx = ev.enrich_context({"path": "/shop", "signed_in": True, "cart_view": view}, {})
+    assert "cart_view" not in ctx and "[SKU-1] Hoodie [P-1] M navy" in ctx["cart_text"]
+
+
+def test_model_input_is_what_the_loop_sends_with_the_shown_list():
+    products = {"P-1": {"product_id": "P-1", "name": "Hoodie", "price_cents": 6900, "colors": ["navy"], "sizes": ["M"], "description": ""}}
+    line = {"query": "the second one", "context": {"path": "/shop", "signed_in": False},
+            "history": [{"user": "hoodies", "assistant": "Here.", "cards": [{"kind": "products", "ids": ["P-1"]}]}]}
+    messages = ev.model_input(line, products)
+    assert [m["role"] for m in messages] == ["system", "system", "user", "assistant", "user"]
+    assert "1. Hoodie [P-1]" in messages[3]["content"] and messages[-1]["content"] == "the second one"

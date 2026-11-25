@@ -1,20 +1,25 @@
 """The rule-based planner (no LLM, no network): what it decides for representative shop questions, and how well it does
 on the whole labelled eval set (tests/eval/queries.jsonl)."""
-import asyncio
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
-from orchestrator.agent.planner import plan_next_action
+from orchestrator.agent import rules
 
 EVAL = Path(__file__).parent / "eval" / "queries.jsonl"
+_spec = importlib.util.spec_from_file_location("eval_agent", Path(__file__).resolve().parents[1] / "scripts" / "eval_agent.py")
+ev = importlib.util.module_from_spec(_spec)
+sys.modules["eval_agent"] = ev
+_spec.loader.exec_module(ev)
 SHOP = {"path": "/shop", "signed_in": False}
 IN = {"path": "/shop", "signed_in": True, "user_id": "U-01"}
 
 
 def plan(query, history=(), context=None, tool_results=()):
-    return asyncio.run(plan_next_action(query, list(history), context or SHOP, llm=None, tool_results=list(tool_results)))
+    return rules.plan(query, list(history), context or SHOP, list(tool_results))
 
 
 CASES = [
@@ -100,31 +105,21 @@ def test_follow_up_cancel_resolves_the_first_order_from_the_conversation():
 
 
 def test_rules_score_well_on_the_whole_eval_set():
-    """Same comparison the scorer uses: tool exact, args as a subset (strings case-insensitive, query by token containment)."""
-    def ok(expected, actual):
-        for key, want in expected.items():
-            got = actual.get(key)
-            if key == "query":
-                strip = lambda t: {w.rstrip("s") for w in str(t).lower().replace("-", " ").split()}  # noqa: E731
-                if not strip(want) <= strip(got or ""):
-                    return False
-            elif isinstance(want, str):
-                if str(got).lower() != want.lower():
-                    return False
-            elif got != want:
-                return False
-        return True
+    """The scorer's own comparison, on the rules' actions mapped to the 8 tools (lines that need the model are skipped)."""
+    products = ev.load_products()
+    rows = [r for r in ev.load_lines(EVAL) if "llm_only" not in r["tags"]]
+    failed = [r["id"] for r in rows if not ev.action_matches(r["expect"], ev.rules_action(r, products), "names" in r["tags"])[0]]
+    print(f"\nRULES EVAL: {len(rows) - len(failed)}/{len(rows)}; failed: {failed}")
+    assert (len(rows) - len(failed)) / len(rows) >= 0.85
 
-    rows = [json.loads(line) for line in EVAL.read_text(encoding="utf-8").splitlines() if line.strip()]
-    passed, failed = 0, []
-    for q in rows:
-        action = plan(q["query"], q["history"], q["context"])
-        if action["tool"] == q["expect"]["tool"] and ok(q["expect"]["args"], action["args"]):
-            passed += 1
-        else:
-            failed.append(q["id"])
-    print(f"\nRULES EVAL: {passed}/{len(rows)} = {passed / len(rows):.0%}; failed: {failed}")
-    assert passed / len(rows) >= 0.85
+
+def test_rules_actions_map_to_the_eight_tools():
+    assert rules.to_tool_call("search_products", {"category": "hoodies", "max_price_cents": 5050, "min_price_cents": 2000}) ==         ("search", {"category": "hoodies", "min_price": 20, "max_price": 50.5})
+    assert rules.to_tool_call("get_stock", {"product_id": "P-1", "size": "M"}) == ("product", {"ids": ["P-1"], "size": "M"})
+    assert rules.to_tool_call("get_cart", {}) == ("cart", {"action": "view"})
+    assert rules.to_tool_call("get_order", {"order_id": "O-1"}) == ("orders", {"order_id": "O-1"})
+    assert rules.to_tool_call("propose_cancel_order", {"order_id": "O-1"}) == ("cancel_order", {"order_id": "O-1"})
+    assert rules.to_tool_call("propose_checkout", {}) == ("checkout", {})
 
 
 # ---- the live-drawer bugs: old conversation vs the page the person is on ----
