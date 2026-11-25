@@ -3,7 +3,7 @@ frontend generates its TypeScript types from that, so no response shape is writt
 Money is integer cents (`*_cents`); timestamps are ISO-8601 UTC strings."""
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ErrorBody(BaseModel):
@@ -238,3 +238,25 @@ class OrderOut(BaseModel):
 class OrdersOut(BaseModel):
     orders: list[OrderSummary]
     next_page_token: str
+
+
+class ConversationOut(BaseModel):
+    conversation_id: str
+    title: str
+    updated_at: str
+
+
+class ChatMessageOut(BaseModel):
+    role: str = Field(description="user | assistant")
+    text: str
+    cards: list[dict] = Field(description="The cards shown with this message ([] when none).")
+    created_at: str
+
+
+class RenameIn(BaseModel):
+    title: str = Field(min_length=1, max_length=80, description="Trimmed first; 1-80 characters after that.")
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
