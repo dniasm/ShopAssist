@@ -54,9 +54,10 @@ def test_health(client):
 
 def test_services_health_uses_grpc_health_for_each_service(client, settings):
     body = client.get("/api/health/services").json()
-    assert body["all_up"] is True and body["checked_at"]
-    assert [s["name"] for s in body["services"]] == ["catalog", "inventory", "order", "customer", "payment"]
-    for s in body["services"]:
+    # No assistant fixture exists yet (the service arrives later), so it is the one service reported down.
+    assert body["all_up"] is False and body["checked_at"]
+    assert [s["name"] for s in body["services"]] == ["catalog", "inventory", "order", "customer", "payment", "assistant"]
+    for s in (s for s in body["services"] if s["name"] != "assistant"):
         assert s["status"] == "up" and s["error"] is None and s["latency_ms"] >= 0
         assert s["service"].startswith("shopassist.v2.") and ":" in s["address"]
 
@@ -69,7 +70,7 @@ def test_services_health_reports_a_dead_service_without_failing(settings):
     body = r.json()
     assert body["all_up"] is False
     assert {s["name"]: s["status"] for s in body["services"]} == {
-        "catalog": "up", "inventory": "down", "order": "up", "customer": "up", "payment": "up"}
+        "catalog": "up", "inventory": "down", "order": "up", "customer": "up", "payment": "up", "assistant": "down"}
     assert next(s for s in body["services"] if s["name"] == "inventory")["error"]
 
 

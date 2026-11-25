@@ -593,3 +593,183 @@ class WatchOrdersRequest(_message.Message):
     order_id: str
     after_event_id: int
     def __init__(self, order_id: _Optional[str] = ..., after_event_id: _Optional[int] = ...) -> None: ...
+
+class Conversation(_message.Message):
+    __slots__ = ("conversation_id", "title", "summary", "created_at", "updated_at")
+    CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+    TITLE_FIELD_NUMBER: _ClassVar[int]
+    SUMMARY_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    conversation_id: str
+    title: str
+    summary: str
+    created_at: str
+    updated_at: str
+    def __init__(self, conversation_id: _Optional[str] = ..., title: _Optional[str] = ..., summary: _Optional[str] = ..., created_at: _Optional[str] = ..., updated_at: _Optional[str] = ...) -> None: ...
+
+class ChatMessage(_message.Message):
+    __slots__ = ("message_id", "conversation_id", "role", "text", "cards_json", "created_at")
+    MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
+    CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    CARDS_JSON_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    message_id: int
+    conversation_id: str
+    role: str
+    text: str
+    cards_json: str
+    created_at: str
+    def __init__(self, message_id: _Optional[int] = ..., conversation_id: _Optional[str] = ..., role: _Optional[str] = ..., text: _Optional[str] = ..., cards_json: _Optional[str] = ..., created_at: _Optional[str] = ...) -> None: ...
+
+class Fact(_message.Message):
+    __slots__ = ("fact_id", "kind", "key", "value", "category", "expires_at", "score")
+    FACT_ID_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    CATEGORY_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    SCORE_FIELD_NUMBER: _ClassVar[int]
+    fact_id: str
+    kind: str
+    key: str
+    value: str
+    category: str
+    expires_at: str
+    score: float
+    def __init__(self, fact_id: _Optional[str] = ..., kind: _Optional[str] = ..., key: _Optional[str] = ..., value: _Optional[str] = ..., category: _Optional[str] = ..., expires_at: _Optional[str] = ..., score: _Optional[float] = ...) -> None: ...
+
+class FactChange(_message.Message):
+    __slots__ = ("op", "kind", "key", "value", "category", "embedding")
+    OP_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    CATEGORY_FIELD_NUMBER: _ClassVar[int]
+    EMBEDDING_FIELD_NUMBER: _ClassVar[int]
+    op: str
+    kind: str
+    key: str
+    value: str
+    category: str
+    embedding: _containers.RepeatedScalarFieldContainer[float]
+    def __init__(self, op: _Optional[str] = ..., kind: _Optional[str] = ..., key: _Optional[str] = ..., value: _Optional[str] = ..., category: _Optional[str] = ..., embedding: _Optional[_Iterable[float]] = ...) -> None: ...
+
+class CreateConversationRequest(_message.Message):
+    __slots__ = ("title",)
+    TITLE_FIELD_NUMBER: _ClassVar[int]
+    title: str
+    def __init__(self, title: _Optional[str] = ...) -> None: ...
+
+class ListConversationsRequest(_message.Message):
+    __slots__ = ("page_size",)
+    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
+    page_size: int
+    def __init__(self, page_size: _Optional[int] = ...) -> None: ...
+
+class ListConversationsResponse(_message.Message):
+    __slots__ = ("conversations",)
+    CONVERSATIONS_FIELD_NUMBER: _ClassVar[int]
+    conversations: _containers.RepeatedCompositeFieldContainer[Conversation]
+    def __init__(self, conversations: _Optional[_Iterable[_Union[Conversation, _Mapping]]] = ...) -> None: ...
+
+class GetConversationRequest(_message.Message):
+    __slots__ = ("conversation_id",)
+    CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+    conversation_id: str
+    def __init__(self, conversation_id: _Optional[str] = ...) -> None: ...
+
+class RenameConversationRequest(_message.Message):
+    __slots__ = ("conversation_id", "title")
+    CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+    TITLE_FIELD_NUMBER: _ClassVar[int]
+    conversation_id: str
+    title: str
+    def __init__(self, conversation_id: _Optional[str] = ..., title: _Optional[str] = ...) -> None: ...
+
+class DeleteConversationRequest(_message.Message):
+    __slots__ = ("conversation_id",)
+    CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+    conversation_id: str
+    def __init__(self, conversation_id: _Optional[str] = ...) -> None: ...
+
+class DeleteConversationResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class AppendMessageRequest(_message.Message):
+    __slots__ = ("conversation_id", "role", "text", "cards_json")
+    CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    CARDS_JSON_FIELD_NUMBER: _ClassVar[int]
+    conversation_id: str
+    role: str
+    text: str
+    cards_json: str
+    def __init__(self, conversation_id: _Optional[str] = ..., role: _Optional[str] = ..., text: _Optional[str] = ..., cards_json: _Optional[str] = ...) -> None: ...
+
+class ListMessagesRequest(_message.Message):
+    __slots__ = ("conversation_id", "limit")
+    CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    conversation_id: str
+    limit: int
+    def __init__(self, conversation_id: _Optional[str] = ..., limit: _Optional[int] = ...) -> None: ...
+
+class ListMessagesResponse(_message.Message):
+    __slots__ = ("messages",)
+    MESSAGES_FIELD_NUMBER: _ClassVar[int]
+    messages: _containers.RepeatedCompositeFieldContainer[ChatMessage]
+    def __init__(self, messages: _Optional[_Iterable[_Union[ChatMessage, _Mapping]]] = ...) -> None: ...
+
+class SetSummaryRequest(_message.Message):
+    __slots__ = ("conversation_id", "summary")
+    CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+    SUMMARY_FIELD_NUMBER: _ClassVar[int]
+    conversation_id: str
+    summary: str
+    def __init__(self, conversation_id: _Optional[str] = ..., summary: _Optional[str] = ...) -> None: ...
+
+class ApplyFactsRequest(_message.Message):
+    __slots__ = ("changes",)
+    CHANGES_FIELD_NUMBER: _ClassVar[int]
+    changes: _containers.RepeatedCompositeFieldContainer[FactChange]
+    def __init__(self, changes: _Optional[_Iterable[_Union[FactChange, _Mapping]]] = ...) -> None: ...
+
+class SearchFactsRequest(_message.Message):
+    __slots__ = ("query_text", "query_embedding", "limit", "min_score")
+    QUERY_TEXT_FIELD_NUMBER: _ClassVar[int]
+    QUERY_EMBEDDING_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    MIN_SCORE_FIELD_NUMBER: _ClassVar[int]
+    query_text: str
+    query_embedding: _containers.RepeatedScalarFieldContainer[float]
+    limit: int
+    min_score: float
+    def __init__(self, query_text: _Optional[str] = ..., query_embedding: _Optional[_Iterable[float]] = ..., limit: _Optional[int] = ..., min_score: _Optional[float] = ...) -> None: ...
+
+class ListFactsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListFactsResponse(_message.Message):
+    __slots__ = ("facts",)
+    FACTS_FIELD_NUMBER: _ClassVar[int]
+    facts: _containers.RepeatedCompositeFieldContainer[Fact]
+    def __init__(self, facts: _Optional[_Iterable[_Union[Fact, _Mapping]]] = ...) -> None: ...
+
+class ClearTemporalFactsRequest(_message.Message):
+    __slots__ = ("categories",)
+    CATEGORIES_FIELD_NUMBER: _ClassVar[int]
+    categories: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, categories: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class ClearTemporalFactsResponse(_message.Message):
+    __slots__ = ("removed",)
+    REMOVED_FIELD_NUMBER: _ClassVar[int]
+    removed: int
+    def __init__(self, removed: _Optional[int] = ...) -> None: ...

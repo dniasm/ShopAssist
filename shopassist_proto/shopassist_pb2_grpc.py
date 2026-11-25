@@ -1207,3 +1207,549 @@ class OrderService:
             timeout,
             metadata,
             _registered_method=True)
+
+
+class AssistantServiceStub:
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.CreateConversation = channel.unary_unary(
+                '/shopassist.v2.AssistantService/CreateConversation',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.CreateConversationRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.Conversation.FromString,
+                _registered_method=True)
+        self.ListConversations = channel.unary_unary(
+                '/shopassist.v2.AssistantService/ListConversations',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ListConversationsRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ListConversationsResponse.FromString,
+                _registered_method=True)
+        self.GetConversation = channel.unary_unary(
+                '/shopassist.v2.AssistantService/GetConversation',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.GetConversationRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.Conversation.FromString,
+                _registered_method=True)
+        self.RenameConversation = channel.unary_unary(
+                '/shopassist.v2.AssistantService/RenameConversation',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.RenameConversationRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.Conversation.FromString,
+                _registered_method=True)
+        self.DeleteConversation = channel.unary_unary(
+                '/shopassist.v2.AssistantService/DeleteConversation',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.DeleteConversationRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.DeleteConversationResponse.FromString,
+                _registered_method=True)
+        self.AppendMessage = channel.unary_unary(
+                '/shopassist.v2.AssistantService/AppendMessage',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.AppendMessageRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ChatMessage.FromString,
+                _registered_method=True)
+        self.ListMessages = channel.unary_unary(
+                '/shopassist.v2.AssistantService/ListMessages',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ListMessagesRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ListMessagesResponse.FromString,
+                _registered_method=True)
+        self.SetSummary = channel.unary_unary(
+                '/shopassist.v2.AssistantService/SetSummary',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.SetSummaryRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.Conversation.FromString,
+                _registered_method=True)
+        self.ApplyFacts = channel.unary_unary(
+                '/shopassist.v2.AssistantService/ApplyFacts',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ApplyFactsRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ListFactsResponse.FromString,
+                _registered_method=True)
+        self.SearchFacts = channel.unary_unary(
+                '/shopassist.v2.AssistantService/SearchFacts',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.SearchFactsRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ListFactsResponse.FromString,
+                _registered_method=True)
+        self.ListFacts = channel.unary_unary(
+                '/shopassist.v2.AssistantService/ListFacts',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ListFactsRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ListFactsResponse.FromString,
+                _registered_method=True)
+        self.ClearTemporalFacts = channel.unary_unary(
+                '/shopassist.v2.AssistantService/ClearTemporalFacts',
+                request_serializer=shopassist__proto_dot_shopassist__pb2.ClearTemporalFactsRequest.SerializeToString,
+                response_deserializer=shopassist__proto_dot_shopassist__pb2.ClearTemporalFactsResponse.FromString,
+                _registered_method=True)
+
+
+class AssistantServiceServicer:
+    """Missing associated documentation comment in .proto file."""
+
+    def CreateConversation(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListConversations(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetConversation(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RenameConversation(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteConversation(self, request, context):
+        """also deletes its messages
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AppendMessage(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListMessages(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetSummary(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ApplyFacts(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SearchFacts(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListFacts(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ClearTemporalFacts(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_AssistantServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'CreateConversation': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateConversation,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.CreateConversationRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.Conversation.SerializeToString,
+            ),
+            'ListConversations': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListConversations,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ListConversationsRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ListConversationsResponse.SerializeToString,
+            ),
+            'GetConversation': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetConversation,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.GetConversationRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.Conversation.SerializeToString,
+            ),
+            'RenameConversation': grpc.unary_unary_rpc_method_handler(
+                    servicer.RenameConversation,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.RenameConversationRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.Conversation.SerializeToString,
+            ),
+            'DeleteConversation': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteConversation,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.DeleteConversationRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.DeleteConversationResponse.SerializeToString,
+            ),
+            'AppendMessage': grpc.unary_unary_rpc_method_handler(
+                    servicer.AppendMessage,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.AppendMessageRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ChatMessage.SerializeToString,
+            ),
+            'ListMessages': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListMessages,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ListMessagesRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ListMessagesResponse.SerializeToString,
+            ),
+            'SetSummary': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetSummary,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.SetSummaryRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.Conversation.SerializeToString,
+            ),
+            'ApplyFacts': grpc.unary_unary_rpc_method_handler(
+                    servicer.ApplyFacts,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ApplyFactsRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ListFactsResponse.SerializeToString,
+            ),
+            'SearchFacts': grpc.unary_unary_rpc_method_handler(
+                    servicer.SearchFacts,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.SearchFactsRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ListFactsResponse.SerializeToString,
+            ),
+            'ListFacts': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListFacts,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ListFactsRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ListFactsResponse.SerializeToString,
+            ),
+            'ClearTemporalFacts': grpc.unary_unary_rpc_method_handler(
+                    servicer.ClearTemporalFacts,
+                    request_deserializer=shopassist__proto_dot_shopassist__pb2.ClearTemporalFactsRequest.FromString,
+                    response_serializer=shopassist__proto_dot_shopassist__pb2.ClearTemporalFactsResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'shopassist.v2.AssistantService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('shopassist.v2.AssistantService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class AssistantService:
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def CreateConversation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/CreateConversation',
+            shopassist__proto_dot_shopassist__pb2.CreateConversationRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.Conversation.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListConversations(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/ListConversations',
+            shopassist__proto_dot_shopassist__pb2.ListConversationsRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ListConversationsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetConversation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/GetConversation',
+            shopassist__proto_dot_shopassist__pb2.GetConversationRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.Conversation.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RenameConversation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/RenameConversation',
+            shopassist__proto_dot_shopassist__pb2.RenameConversationRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.Conversation.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteConversation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/DeleteConversation',
+            shopassist__proto_dot_shopassist__pb2.DeleteConversationRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.DeleteConversationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AppendMessage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/AppendMessage',
+            shopassist__proto_dot_shopassist__pb2.AppendMessageRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ChatMessage.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListMessages(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/ListMessages',
+            shopassist__proto_dot_shopassist__pb2.ListMessagesRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ListMessagesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetSummary(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/SetSummary',
+            shopassist__proto_dot_shopassist__pb2.SetSummaryRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.Conversation.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ApplyFacts(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/ApplyFacts',
+            shopassist__proto_dot_shopassist__pb2.ApplyFactsRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ListFactsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SearchFacts(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/SearchFacts',
+            shopassist__proto_dot_shopassist__pb2.SearchFactsRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ListFactsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListFacts(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/ListFacts',
+            shopassist__proto_dot_shopassist__pb2.ListFactsRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ListFactsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ClearTemporalFacts(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/shopassist.v2.AssistantService/ClearTemporalFacts',
+            shopassist__proto_dot_shopassist__pb2.ClearTemporalFactsRequest.SerializeToString,
+            shopassist__proto_dot_shopassist__pb2.ClearTemporalFactsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)

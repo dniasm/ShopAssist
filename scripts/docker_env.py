@@ -15,7 +15,7 @@ from pathlib import Path
 OUT = Path(__file__).resolve().parent.parent / ".docker-env"
 DBS = [("catalog", "svc_catalog", "CATALOG"), ("inventory", "svc_inventory", "INVENTORY"),
        ("orders", "svc_orders", "ORDER"), ("customer", "svc_customer", "CUSTOMER"),
-       ("payment", "svc_payment", "PAYMENT")]
+       ("payment", "svc_payment", "PAYMENT"), ("assistant", "svc_assistant", "ASSISTANT")]
 
 
 def token(n: int = 24) -> str:

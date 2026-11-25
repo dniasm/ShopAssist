@@ -38,6 +38,7 @@ SERVICES = [
     ("orders", "svc_orders", "ORDER_DATABASE_URL"),
     ("customer", "svc_customer", "CUSTOMER_DATABASE_URL"),
     ("payment", "svc_payment", "PAYMENT_DATABASE_URL"),
+    ("assistant", "svc_assistant", "ASSISTANT_DATABASE_URL"),
 ]
 SESSION_VAR = "SESSION_SECRET"
 SERVICE_KEY_VARS = ("SVC_KEY_ORCHESTRATOR", "SVC_KEY_ORDER")  # one secret per gRPC caller identity

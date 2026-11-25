@@ -13,6 +13,7 @@ x-app: &app
     ORDER_ADDR: order:50053
     CUSTOMER_ADDR: customer:50054
     PAYMENT_ADDR: payment:50055
+    ASSISTANT_ADDR: assistant:50056
 
 x-service: &service
   <<: *app
@@ -97,6 +98,17 @@ services:
       retries: 30
       start_period: 10s
 
+  assistant:
+    <<: *service
+    env_file: .docker-env/assistant.env
+    command: ["python", "-m", "services.assistant.server"]
+    healthcheck:
+      test: ["CMD", "python", "scripts/grpc_healthcheck.py", "50056"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
   orchestrator:
     <<: *app
     env_file: .docker-env/orchestrator.env
@@ -112,6 +124,8 @@ services:
       customer:
         condition: service_healthy
       payment:
+        condition: service_healthy
+      assistant:
         condition: service_healthy
 
 volumes:

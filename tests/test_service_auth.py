@@ -113,3 +113,8 @@ def test_a_missing_key_stops_the_service_from_starting_and_never_names_a_value()
     with pytest.raises(RuntimeError, match="SVC_KEY_ORCHESTRATOR is not set") as e:
         svcauth.AuthInterceptor.for_service("catalog", {"SVC_KEY_ORDER": "secret-value"})
     assert "secret-value" not in str(e.value)
+
+
+def test_only_the_orchestrator_may_call_the_assistant_service():
+    assert "assistant" in svcauth.CALLERS["orchestrator"]
+    assert "assistant" not in svcauth.CALLERS["order"]

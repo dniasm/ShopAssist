@@ -44,10 +44,16 @@ def test_build_plan_skips_missing_optional_modules(tmp_path, monkeypatch):
 
 def test_build_plan_includes_optional_when_present_and_web_when_asked():
     plan, skipped = ra.build_plan({}, lambda m: True, include_web=True, web_available=True)
-    assert [p.name for p in plan] == ["catalog", "inventory", "order", "customer", "payment", "orchestrator", "web"]
+    assert [p.name for p in plan] == ["catalog", "inventory", "order", "customer", "payment", "assistant", "orchestrator", "web"]
     assert skipped == []
     plan, skipped = ra.build_plan({}, lambda m: True, include_web=True, web_available=False)
     assert "web" not in [p.name for p in plan] and "web/package.json" in skipped[0]
+
+
+def test_assistant_proc_is_on_50056_and_optional_until_its_module_exists():
+    proc = next(p for p in ra.PROCESSES if p.name == "assistant")
+    assert (proc.module, proc.addr_env, proc.default, proc.kind) == ("services.assistant.server", "ASSISTANT_ADDR", "localhost:50056", "grpc")
+    assert ra.port_of(proc.default) == 50056 and proc.optional
 
 
 def test_module_exists_real_tree():
