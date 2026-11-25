@@ -110,11 +110,21 @@ def test_permanent_single_key_replaced(assistant):
     assert got[0].fact_id.startswith("F-")
 
 
-def test_key_aliases_and_favorite_prefix_are_single_valued(assistant):
+def test_key_aliases_and_colours_are_a_list(assistant):
     remember(assistant, "U-01", "Size", "M")
     remember(assistant, "U-01", "favourite_colour", "red")
-    remember(assistant, "U-01", "favorite_colour", "blue")
-    assert sorted((f.key, f.value) for f in facts(assistant, "U-01")) == [("favorite_colour", "blue"), ("size_top", "M")]
+    remember(assistant, "U-01", "liked_colors", "blue")
+    assert sorted((f.key, f.value) for f in facts(assistant, "U-01")) == [("liked_colors", "blue"), ("liked_colors", "red"), ("size_top", "M")]
+
+
+def test_fit_per_category_and_temporal_want_through_the_service(assistant):
+    remember(assistant, "U-01", "fit", "tight", category="t-shirts")
+    remember(assistant, "U-01", "fit", "loose", category="hoodies")
+    remember(assistant, "U-01", "want", "loose t-shirt", category="t-shirts")
+    remember(assistant, "U-01", "fit", "loose", category="t-shirts")
+    got = sorted((f.key, f.value, f.category, f.kind) for f in facts(assistant, "U-01"))
+    assert got == [("fit", "loose", "hoodies", "permanent"), ("fit", "loose", "t-shirts", "permanent"),
+                   ("want", "loose t-shirt", "t-shirts", "temporal")]
 
 
 def test_list_key_collects_without_duplicates(assistant):

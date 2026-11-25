@@ -12,10 +12,15 @@ from shopassist_proto import shopassist_pb2 as pb
 log = logging.getLogger(__name__)
 
 CATEGORIES = ("headphones", "hoodies", "backpacks", "watches", "sunglasses", "t-shirts", "jeans", "jackets", "shoes", "accessories")
-FACT_LIMIT, MIN_SCORE, SUMMARY_WORDS = 5, 0.45, 200
+FACT_LIMIT, SUMMARY_WORDS = 5, 200
+STOPWORDS = {"i", "me", "my", "am", "is", "are", "the", "a", "an", "what", "which", "do", "you", "of", "for", "to", "in",
+             "and", "or", "it", "how", "your", "s"}
 QUEUE_MAX, CLOSE_WAIT_SECONDS = 100, 10.0
 SUMMARY_MESSAGES, MESSAGE_CHARS = 12, 600  # the last 6 exchanges, each message cut short
 
+TEMPORAL_KEYS = {"need", "want"}
+PERMANENT_KEYS = {"preferred_name", "height", "weight", "budget", "size_top", "size_bottom", "shoe_size", "liked_colors",
+                  "disliked_colors", "liked_brands", "styles", "fit"}
 _EXPLICIT = re.compile(r"\b(remember|forget|call me|from now on)\b", re.I)
 _PERSONAL = re.compile(r"\b(i|i'm|im|i've|i'd|i'll|my|mine|looking for)\b", re.I)
 _QUESTION_START = re.compile(
@@ -23,11 +28,16 @@ _QUESTION_START = re.compile(
 
 FACTS_SYSTEM = (
     "You maintain a shopper's long-term memory. From the user's message decide which facts to remember or forget. "
-    "Permanent facts (kind=permanent) are lasting traits; temporal facts (kind=temporal) are a current need or short-lived plan. "
-    "Suggested keys: preferred_name, size_top, size_bottom, shoe_size, height, weight, budget, favorite_color, liked_brands, "
-    "disliked, style, need (temporal). op is remember or forget; for forget, value is the exact value to drop or \"*\" to forget the whole key. category is the shop category the fact concerns: "
-    + ", ".join(CATEGORIES) + ", or \"\" when general. Only store what the user said about themselves; never invent. "
-    "Return {\"changes\": []} when there is nothing to store."
+    "op is remember or forget; for forget, value is the exact value to drop or \"*\" to forget the whole key. "
+    "category is the shop category the fact concerns: " + ", ".join(CATEGORIES) + ", or \"\" when general.\n"
+    "Permanent (kind=permanent), lasting traits. One value each, a new one replaces the old: preferred_name, height, weight, budget, "
+    "size_top (t-shirts, hoodies, jackets), size_bottom (jeans), shoe_size. Several values, one row per value: liked_colors, "
+    "disliked_colors, liked_brands, styles; \"I like navy and olive\" is two liked_colors rows. fit (tight, regular or loose) "
+    "holds one value per category: \"I like my shirts tight\" is fit=tight, category t-shirts; category \"\" when it is for everything.\n"
+    "Temporal (kind=temporal), a current need or one-off wish: need, want, with the category when one fits. "
+    "\"I feel like a loose t-shirt\", \"I need a loose fitting tee\", \"my shirt tore, I need a new one\" are temporal want/need "
+    "and NEVER change the saved fit or sizes. Only lasting statements (\"from now on I wear loose hoodies\", \"I'm an L\") are permanent.\n"
+    "Only store what the user said about themselves; never invent. Return {\"changes\": []} when there is nothing to store."
 )
 SUMMARY_SYSTEM = (
     f"Summarise these recent exchanges of a shopping chat in at most {SUMMARY_WORDS} words: what the user wants, "
@@ -73,6 +83,10 @@ def _parse_changes(data) -> list[dict]:
             continue
         if category not in (*CATEGORIES, "") or (op == "remember" and not value):
             continue
+        if key.lower().replace(" ", "_") in TEMPORAL_KEYS:
+            kind = "temporal"
+        elif kind == "temporal" and key.lower().replace(" ", "_") in PERMANENT_KEYS:
+            kind = "permanent"  # a one-off wish never rewrites what is saved about the person
         if op == "forget" and not value:
             value = "*"  # the service rejects an empty forget value; "*" means the whole key
         out.append({"op": op, "kind": kind, "key": key, "value": value, "category": category})
@@ -85,13 +99,46 @@ def _parse_summary(data) -> str:
     return " ".join(data["summary"].split()[:SUMMARY_WORDS])
 
 
-def fact_line(fact) -> str:
-    return f"{fact.key}: {fact.value}"
+def fact_line(fact: dict) -> str:
+    return f"{fact['key']}{' (' + fact['category'] + ')' if fact['category'] else ''}: {fact['value']}"
+
+
+def fact_names(facts: list[dict]) -> str:
+    """Distinct key (category) pairs in first-seen order, without values."""
+    names = dict.fromkeys(f"{f['key']} ({f['category']})" if f["category"] else f["key"] for f in facts)
+    return ", ".join(names)
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def keyword_facts(facts: list[dict], query: str, limit: int = FACT_LIMIT) -> list[dict]:
+    """The best `limit` facts whose key or value shares a meaningful word with the query (share of the fact's words), best first."""
+    wanted = _words(query) - STOPWORDS
+    scored = []
+    for f in facts:
+        words = _words(f["key"] + " " + f["value"])
+        if words and (score := len(wanted & words) / len(words)):
+            scored.append((-score, len(scored), f))
+    return [f for _, _, f in sorted(scored, key=lambda t: t[:2])[:limit]]
+
+
+def recall_lines(facts: list[dict], keys: list[str], query: str = "") -> str:
+    """`key (category): value` lines for the asked keys (and the keyword matches of `query`), from the turn's loaded facts."""
+    wanted = [str(k).strip().lower().replace(" ", "_") for k in keys if str(k).strip()]
+    found = [f for f in facts if f["key"] in wanted]
+    lines = [fact_line(f) for f in found]
+    lines += [fact_line(f) for f in keyword_facts(facts, query) if f not in found] if query else []
+    missing = [k for k in wanted if k not in {f["key"] for f in facts}]
+    if missing:
+        lines.append("No saved fact: " + ", ".join(missing))
+    return "\n".join(lines) if lines else "No saved facts match."
 
 
 class MemoryReader:
-    def __init__(self, clients, embedder):
-        self._clients, self._embedder = clients, embedder
+    def __init__(self, clients):
+        self._clients = clients
 
     async def _call(self, rpc_name: str, request, user_id: str):
         try:
@@ -102,19 +149,16 @@ class MemoryReader:
             return None
 
     async def context(self, user_id: str, conversation_id: str, message: str) -> dict:
-        conv, recent = await asyncio.gather(
+        """One ListFacts per turn. `all` is the person's facts for the whole turn (the recall tool and sizing read it),
+        `names` the line for the prompt (no values), `facts` the keyword matches of the message, with values."""
+        conv, recent, listed = await asyncio.gather(
             self._call("GetConversation", pb.GetConversationRequest(conversation_id=conversation_id), user_id),
-            self._call("ListMessages", pb.ListMessagesRequest(conversation_id=conversation_id, limit=2), user_id))
-        summary = conv.summary if conv else ""
-        facts = await self.search(user_id, f"{message} {summary[:300]}".strip())
+            self._call("ListMessages", pb.ListMessagesRequest(conversation_id=conversation_id, limit=2), user_id),
+            self._call("ListFacts", pb.ListFactsRequest(), user_id))
+        everything = [{"key": f.key, "value": f.value, "category": f.category, "kind": f.kind} for f in listed.facts] if listed else []
         latest = [{"role": m.role, "text": m.text, "cards": parse_cards(m.cards_json)} for m in recent.messages] if recent else []
-        return {"facts": facts, "summary": summary, "latest": latest}
-
-    async def search(self, user_id: str, query: str) -> list[str]:
-        vectors = await self._embedder.embed([query], "query")
-        request = pb.SearchFactsRequest(query_text=query, query_embedding=vectors[0] if vectors else [], limit=FACT_LIMIT, min_score=MIN_SCORE)
-        reply = await self._call("SearchFacts", request, user_id)
-        return [fact_line(f) for f in reply.facts] if reply else []
+        return {"facts": [fact_line(f) for f in keyword_facts(everything, message)], "names": fact_names(everything),
+                "all": everything, "summary": conv.summary if conv else "", "latest": latest}
 
 
 def parse_cards(cards_json: str) -> list[dict]:

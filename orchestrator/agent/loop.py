@@ -45,7 +45,7 @@ class AgentLoop:
                  reader=None, worker=None):
         self.clients, self.hub, self.memory, self.llm = clients, hub, memory, llm
         self.reader, self.worker = reader, worker
-        self.tools = AgentTools(clients, proposals, reader.search if reader else None)
+        self.tools = AgentTools(clients, proposals)
         self._locks: dict[str, asyncio.Lock] = {}
         self._waiting: dict[str, int] = {}  # turns running or queued per owner
 
@@ -82,7 +82,7 @@ class AgentLoop:
         saved = {} if saved is None else saved
         key = f"{owner}|{conversation_id}"  # per conversation, not per person: a new chat starts clean
         context = await self.fill_context(user_id, page)
-        block = {"facts": [], "summary": "", "latest": []}
+        block = {"facts": [], "names": "", "all": [], "summary": "", "latest": []}
         if user_id and self.reader:  # before the new message is saved, so `latest` is the previous exchange
             block = await self.reader.context(user_id, conversation_id, message)
         elif not user_id:
@@ -102,7 +102,8 @@ class AgentLoop:
         if self.llm is not None:
             messages = self.model_messages(block, context, message, key)
             try:
-                text, final_reply, calls, tokens = await self.converse(owner, user_id, turn_id, messages, results, context.get("product"))
+                text, final_reply, calls, tokens = await self.converse(
+                    owner, user_id, turn_id, messages, results, context.get("product"), block["all"] if self.reader and user_id else None)
                 llm_ok = True
             except LLMError as e:
                 log.warning("agent: LLM failed (%s)", e)
@@ -130,7 +131,7 @@ class AgentLoop:
         return "llm" if llm_ok else "rules"
 
     async def converse(self, owner: str, user_id: str | None, turn_id: str, messages: list[dict], results: list[dict],
-                       page_product: dict | None) -> tuple[str, bool, int, int]:
+                       page_product: dict | None, facts: list[dict] | None = None) -> tuple[str, bool, int, int]:
         """The model/tool loop. Returns (text, text is a tool's own `final`, model calls, tokens). Raises LLMError."""
         seen: set[str] = set()
         calls = tokens = 0
@@ -154,7 +155,7 @@ class AgentLoop:
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": "Already done this turn."})
                     continue
                 seen.add(signature)
-                out = await self.run_tool(owner, user_id, turn_id, c["name"], c["args"], page_product)
+                out = await self.run_tool(owner, user_id, turn_id, c["name"], c["args"], page_product, facts)
                 results.append(out)
                 messages.append({"role": "tool", "tool_call_id": c["id"], "content": out["text"]})
             if repeated:
@@ -164,9 +165,10 @@ class AgentLoop:
                 return results[-1]["final"], True, calls, tokens
         return self.said(results), False, calls, tokens
 
-    async def run_tool(self, owner: str, user_id: str | None, turn_id: str, name: str, args: dict, page_product: dict | None) -> dict:
+    async def run_tool(self, owner: str, user_id: str | None, turn_id: str, name: str, args: dict, page_product: dict | None,
+                       facts: list[dict] | None = None) -> dict:
         self.emit(owner, "tool_call", {"turn_id": turn_id, "tool": name, "args": args})
-        out = await self.tools.run(name, args, user_id, turn_id, page_product)
+        out = await self.tools.run(name, args, user_id, turn_id, page_product, facts)
         self.emit(owner, "tool_result", {"turn_id": turn_id, "tool": name, "summary": out["final"] or out["text"]})
         if proposal := out.get("proposal"):
             self.emit(owner, "proposal", {"turn_id": turn_id, "proposal_id": proposal.proposal_id, "action": proposal.action,
@@ -231,8 +233,10 @@ class AgentLoop:
     @staticmethod
     def memory_text(block: dict, context: dict) -> str:
         lines = ["Memory"]
+        if block.get("names"):
+            lines.append(f"Facts you can recall: {block['names']}")
         if block["facts"]:
-            lines += ["What you know about this person:", *(f"- {f}" for f in block["facts"])]
+            lines += ["Facts that match this message:", *(f"- {f}" for f in block["facts"])]
         if block["summary"]:
             lines.append(f"Conversation so far: {block['summary']}")
         if context.get("cart_text"):

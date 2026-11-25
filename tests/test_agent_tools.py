@@ -31,13 +31,13 @@ def hoodie_pair():
 
 
 class Env:
-    def __init__(self, shop, recall=None):
+    def __init__(self, shop):
         self.shop = shop
         self.headers, self.token = shop.login(USER)
-        self.tools = AgentTools(shop.client.app.state.clients, shop.client.app.state.proposals, recall)
+        self.tools = AgentTools(shop.client.app.state.clients, shop.client.app.state.proposals)
 
-    def run(self, name, args=None, user=USER):
-        return self.shop.client.portal.call(self.tools.run, name, args or {}, user, "turn-1")
+    def run(self, name, args=None, user=USER, facts=None):
+        return self.shop.client.portal.call(self.tools.run, name, args or {}, user, "turn-1", None, facts)
 
     def put(self, sku, qty):
         assert self.shop.put(self.headers, sku["sku_id"], qty).status_code == 200
@@ -214,16 +214,44 @@ def test_account_tools_need_a_user(env):
         assert out["card"]["kind"] == "signin" and out["needs_sign_in"] is True and out["proposal"] is None
 
 
-def test_recall_facts_uses_the_injected_reader(make_shop):
-    calls = []
+def fact(key, value, category="", kind="permanent"):
+    return {"key": key, "value": value, "category": category, "kind": kind}
 
-    async def recall(user_id, query):
-        calls.append((user_id, query))
-        return ["likes navy", "wears size M"]
 
-    env = Env(make_shop(), recall)
-    assert env.run("recall_facts", {"query": "colour"})["text"] == "- likes navy\n- wears size M" and calls == [(USER, "colour")]
-    assert "unavailable" in Env(make_shop()).run("recall_facts", {"query": "x"})["text"]
+def test_recall_facts_reads_the_turns_loaded_facts_by_key(make_shop):
+    facts = [fact("size_top", "L"), fact("fit", "tight", "t-shirts"), fact("liked_colors", "navy"), fact("liked_colors", "olive")]
+    env = Env(make_shop())
+    text = env.run("recall_facts", {"keys": ["size_top", "fit", "budget"]}, facts=facts)["text"]
+    assert text == "size_top: L\nfit (t-shirts): tight\nNo saved fact: budget"
+    assert env.run("recall_facts", {"keys": ["liked_colors"]}, facts=facts)["text"] == "liked_colors: navy\nliked_colors: olive"
+    assert "navy" in env.run("recall_facts", {"query": "navy"}, facts=facts)["text"]
+    assert "unavailable" in env.run("recall_facts", {"keys": ["size_top"]})["text"]
+
+
+def test_search_with_fit_uses_two_sizes_and_says_so(make_shop):
+    env = Env(make_shop())
+    sent = []
+    clients = env.shop.client.app.state.clients
+    real = clients.catalog.ListProducts
+
+    async def spy(request, **kw):
+        sent.append(list(request.sizes))
+        return await real(request, **kw)
+    clients.catalog.ListProducts = spy
+    try:
+        facts = [fact("size_top", "L")]
+        out = env.run("search", {"category": "t-shirts", "fit": "tight"}, facts=facts)
+        assert sent[-1] == ["L", "M"] and "tight fit on size L" in out["text"]
+        env.run("search", {"category": "t-shirts", "fit": "loose", "fit_steps": 2}, facts=facts)
+        assert sent[-1] == ["L", "XL", "XXL"]
+        env.run("search", {"category": "t-shirts", "fit": "loose", "size": "S"}, facts=facts)
+        assert sent[-1] == ["S"]  # an explicit size wins
+        env.run("search", {"category": "t-shirts", "fit": "loose"}, facts=[])
+        assert sent[-1] == []  # no base size: nothing to suggest
+        env.run("search", {"category": "t-shirts"}, facts=facts + [fact("fit", "tight", "t-shirts")])
+        assert sent[-1] == ["L", "M"]  # a saved fit applies without the model asking
+    finally:
+        clients.catalog.ListProducts = real
 
 
 def test_unknown_tool_and_bad_args_are_errors_not_crashes(env):
