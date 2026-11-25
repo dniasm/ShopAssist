@@ -5,8 +5,11 @@ import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
-SINGLE_KEYS = {"preferred_name", "size_top", "size_bottom", "shoe_size", "height", "weight", "budget", "favorite_color", "gender_fit"}
-ALIASES = {"size": "size_top", "name": "preferred_name"}
+SINGLE_KEYS = {"preferred_name", "size_top", "size_bottom", "shoe_size", "height", "weight", "budget"}
+PER_CATEGORY_SINGLE = {"fit"}  # one value per category ("" = all categories); a new one replaces the old for that category
+TEMPORAL_KEYS = {"need", "want"}  # always short-lived, whatever kind the caller says
+ALIASES = {"size": "size_top", "name": "preferred_name", "favorite_color": "liked_colors", "favorite_colors": "liked_colors",
+           "liked_color": "liked_colors", "disliked_color": "disliked_colors"}
 TEMPORAL_DAYS = 30
 _TOKEN = re.compile(r"[a-z0-9]+")
 STOPWORDS = {"i", "me", "my", "am", "is", "are", "the", "a", "an", "what", "which", "do", "you", "of", "for", "to", "in",
@@ -18,15 +21,16 @@ def utcnow() -> datetime:
 
 
 def normalise_key(key: str) -> str:
-    """snake_case, 'favourite' spelled 'favorite', and the short aliases ('size', 'name') mapped to their full key."""
+    """snake_case, 'favourite'/'colour' spelled 'favorite'/'color', and the aliases ('size', 'favorite_color') mapped to their key."""
     key = "_".join(_TOKEN.findall(key.lower()))
-    key = "_".join("favorite" if part == "favourite" else part for part in key.split("_"))
+    spelling = {"favourite": "favorite", "colour": "color", "colours": "colors"}
+    key = "_".join(spelling.get(part, part) for part in key.split("_"))
     return ALIASES.get(key, key)
 
 
 def is_single(key: str) -> bool:
     """A key that holds one value (a new one replaces it); every other key collects values."""
-    return key in SINGLE_KEYS or key.startswith(("favorite_", "preferred_"))
+    return key in SINGLE_KEYS
 
 
 def new_fact_id() -> str:
@@ -63,14 +67,17 @@ def plan_changes(existing: list[dict], changes: list[dict], now: datetime | None
         if change["op"] == "forget":
             remove(lambda f: f["key"] == key and (value == "*" or _same(f["value"], value)))
             continue
+        category = change.get("category", "").strip().lower()
         if is_single(key):
             remove(lambda f: f["key"] == key)
+        elif key in PER_CATEGORY_SINGLE:
+            remove(lambda f: f["key"] == key and f.get("category", "") == category)
         elif any(f["key"] == key and _same(f["value"], value) for f in working):
             continue
-        temporal = change.get("kind") == "temporal"
+        temporal = change.get("kind") == "temporal" or key in TEMPORAL_KEYS
         row = {
             "fact_id": new_fact_id(), "kind": "temporal" if temporal else "permanent", "key": key, "value": value,
-            "category": change.get("category", "").strip().lower(), "embedding": list(change.get("embedding") or []) or None,
+            "category": category, "embedding": list(change.get("embedding") or []) or None,
             "expires_at": now + timedelta(days=TEMPORAL_DAYS) if temporal else None,
         }
         working.append(row)

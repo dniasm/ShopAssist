@@ -8,7 +8,7 @@ from orchestrator.errors import ApiError
 from orchestrator.events import EventHub
 from shopassist_proto import shopassist_pb2 as pb
 
-_RESP = {"ListMessages": pb.ListMessagesResponse, "SearchFacts": pb.ListFactsResponse, "ApplyFacts": pb.ListFactsResponse,
+_RESP = {"ListMessages": pb.ListMessagesResponse, "ListFacts": pb.ListFactsResponse, "ApplyFacts": pb.ListFactsResponse,
          "GetConversation": pb.Conversation, "SetSummary": pb.Conversation, "ClearTemporalFacts": pb.ClearTemporalFactsResponse}
 
 
@@ -163,37 +163,61 @@ def test_worker_without_llm_or_with_failures_does_not_crash():
     assert len(llm.calls) == 2  # the second job ran after the first failed
 
 
-def fact_rows(n):
-    return pb.ListFactsResponse(facts=[pb.Fact(key=f"k{i}", value=f"v{i}") for i in range(n)])
+def facts_reply(*facts):
+    return pb.ListFactsResponse(facts=[pb.Fact(key=k, value=v, category=c, kind="permanent") for k, v, c in facts])
 
 
-def test_context_top5_only():
-    stub = Stub({"SearchFacts": fact_rows(5), "GetConversation": pb.Conversation(summary="likes red"),
+STORED = facts_reply(("budget", "150", ""), ("size_top", "L", ""), ("fit", "tight", "t-shirts"), ("fit", "loose", "hoodies"),
+                     ("liked_colors", "navy", ""), ("liked_colors", "olive", ""))
+
+
+def test_context_lists_names_without_values_with_one_list_facts_call():
+    stub = Stub({"ListFacts": STORED, "GetConversation": pb.Conversation(summary="likes red"),
                  "ListMessages": pb.ListMessagesResponse(messages=[pb.ChatMessage(role="user", text="hi"),
                                                                    pb.ChatMessage(role="assistant", text="hey")])})
-    emb = FakeEmbedder()
-    block = asyncio.run(MemoryReader(FakeClients(stub), emb).context("u1", "c1", "any hoodies"))
-    search = stub.sent("SearchFacts")[0]
-    assert (search.limit, search.min_score) == (5, 0.45) and list(search.query_embedding) == [0.5, 0.25]
-    assert block["facts"] == [f"k{i}: v{i}" for i in range(5)]
+    block = asyncio.run(MemoryReader(FakeClients(stub)).context("u1", "c1", "any hoodies"))
+    assert block["names"] == "budget, size_top, fit (t-shirts), fit (hoodies), liked_colors"
+    assert "150" not in block["names"] and "navy" not in block["names"]
+    assert len(stub.sent("ListFacts")) == 1 and not stub.sent("SearchFacts")
+    assert len(block["all"]) == 6 and block["facts"] == []  # no word of the message names a fact
     assert block["summary"] == "likes red"
     assert block["latest"] == [{"role": "user", "text": "hi", "cards": []}, {"role": "assistant", "text": "hey", "cards": []}]
-    assert emb.seen == [(["any hoodies likes red"], "query")]
     assert stub.sent("ListMessages")[0].limit == 2
 
 
-def test_context_without_voyage_uses_keywords():
-    stub = Stub({"SearchFacts": fact_rows(1)})
-    block = asyncio.run(MemoryReader(FakeClients(stub), FakeEmbedder(vectors=False)).context("u1", "c1", "size"))
-    search = stub.sent("SearchFacts")[0]
-    assert list(search.query_embedding) == [] and search.query_text.startswith("size")
-    assert block["facts"] == ["k0: v0"]
+def test_keyword_pass_adds_matching_facts_with_values():
+    stub = Stub({"ListFacts": STORED})
+    block = asyncio.run(MemoryReader(FakeClients(stub)).context("u1", "c1", "what's my budget"))
+    assert block["facts"] == ["budget: 150"]
+    block = asyncio.run(MemoryReader(FakeClients(stub)).context("u1", "c1", "navy"))
+    assert block["facts"] == ["liked_colors: navy"]
+
+
+def test_keyword_pass_is_capped_at_five():
+    stub = Stub({"ListFacts": facts_reply(*[(f"k{i}", "word", "") for i in range(8)])})
+    block = asyncio.run(MemoryReader(FakeClients(stub)).context("u1", "c1", "word"))
+    assert len(block["facts"]) == 5
 
 
 def test_context_survives_service_failure():
-    stub = Stub(fail={"SearchFacts", "GetConversation", "ListMessages"})
-    block = asyncio.run(MemoryReader(FakeClients(stub), FakeEmbedder()).context("u1", "c1", "hi"))
-    assert block == {"facts": [], "summary": "", "latest": []}
+    stub = Stub(fail={"ListFacts", "GetConversation", "ListMessages"})
+    block = asyncio.run(MemoryReader(FakeClients(stub)).context("u1", "c1", "hi"))
+    assert block == {"facts": [], "names": "", "all": [], "summary": "", "latest": []}
+
+
+def test_parse_keeps_one_off_wishes_temporal_and_lasting_things_permanent():
+    from orchestrator.agent.memory import _parse_changes
+    got = _parse_changes({"changes": [
+        {"op": "remember", "kind": "permanent", "key": "want", "value": "loose t-shirt", "category": "t-shirts"},
+        {"op": "remember", "kind": "temporal", "key": "fit", "value": "loose", "category": "t-shirts"},
+        {"op": "remember", "kind": "temporal", "key": "budget", "value": "150", "category": ""}]})
+    assert [(c["key"], c["kind"]) for c in got] == [("want", "temporal"), ("fit", "permanent"), ("budget", "permanent")]
+
+
+def test_extraction_prompt_teaches_lasting_versus_one_off_and_colour_lists():
+    from orchestrator.agent.memory import FACTS_SYSTEM
+    for must in ("liked_colors", "two liked_colors rows", "NEVER change the saved fit", "temporal", "per category"):
+        assert must in FACTS_SYSTEM
 
 
 def confirmed_event():

@@ -11,11 +11,12 @@ search, product, cart (view/add/set_qty/remove), orders, cancel_order, checkout,
 Nothing here acts irreversibly: cancel_order only stores a proposal and checkout only proposes sending the person to the
 checkout page (it never calls the Order service). Account tools without a signed-in user return a sign-in card.
 """
-from collections.abc import Awaitable, Callable
 from urllib.parse import urlencode
 
 from orchestrator import serialize
 from orchestrator.agent.compact import cart_summary, money, order_line, product_line
+from orchestrator.agent.memory import recall_lines
+from orchestrator.agent.sizing import MAX_STEPS, base_size, resolve_fit, suggest_sizes
 from orchestrator.agent.state import Proposal, ProposalStore
 from orchestrator.cart import priced_cart
 from orchestrator.clients import Clients
@@ -30,7 +31,6 @@ SIGN_IN_TEXT = "Please sign in first (pick a profile at the top right) so I can 
 PAGE_SIZE = 6
 MAX_QTY = 10
 CLOSING = "Do any of them pique your interest?"
-Recall = Callable[[str, str], Awaitable[list[str]]]
 
 
 def result(text: str, card: dict | None = None, *, final: str | None = None, proposal: Proposal | None = None,
@@ -63,18 +63,22 @@ def product_list(c: dict, viewing: dict | None) -> tuple[str, str, dict]:
 
 
 class AgentTools:
-    def __init__(self, clients: Clients, proposals: ProposalStore, recall: Recall | None = None):
-        self.clients, self.proposals, self.recall = clients, proposals, recall
+    def __init__(self, clients: Clients, proposals: ProposalStore):
+        self.clients, self.proposals = clients, proposals
 
-    async def run(self, name: str, args: dict, user_id: str | None, turn_id: str, page_product: dict | None = None) -> dict:
-        """`page_product` ({"product_id","name","category"}) is the product on the page, so a same-category search reads "similar to"."""
+    async def run(self, name: str, args: dict, user_id: str | None, turn_id: str, page_product: dict | None = None,
+                  facts: list[dict] | None = None) -> dict:
+        """`page_product` ({"product_id","name","category"}) is the product on the page, so a same-category search reads "similar to".
+        `facts` are the person's saved facts, loaded once for the turn (None: no memory); recall_facts and sized searches read them."""
         if name not in TOOL_NAMES:
             return result(f"Unknown tool {name}.", error=True)
         if name in ACCOUNT_TOOLS and not user_id:
             return result(SIGN_IN_TEXT, card("signin", {"message": SIGN_IN_TEXT}), final=SIGN_IN_TEXT, needs_sign_in=True)
         try:
             if name == "search":
-                return await self.t_search(args or {}, page_product)
+                return await self.t_search(args or {}, page_product, facts)
+            if name == "recall_facts":
+                return self.t_recall_facts(args or {}, facts if user_id else None)
             return await getattr(self, f"t_{name}")(args or {}, user_id, turn_id)
         except ApiError as e:
             if e.code == "not_found":
@@ -85,12 +89,15 @@ class AgentTools:
 
     # ---------------- products ----------------
 
-    async def t_search(self, a: dict, page_product: dict | None = None) -> dict:
+    async def t_search(self, a: dict, page_product: dict | None = None, facts: list[dict] | None = None) -> dict:
         page = max(1, int(a.get("page") or 1))
+        sizes, fit_note = [str(a["size"])] if a.get("size") else [], ""
+        if not sizes and facts and a.get("category"):
+            sizes, fit_note = self._fit_sizes(a, facts)
         request = pb.ListProductsRequest(
             query=a.get("query") or "", categories=[a["category"]] if a.get("category") else [],
             brands=[a["brand"]] if a.get("brand") else [], colors=[a["color"].lower()] if a.get("color") else [],
-            sizes=[str(a["size"])] if a.get("size") else [], min_price_cents=int(float(a.get("min_price") or 0) * 100),
+            sizes=sizes, min_price_cents=int(float(a.get("min_price") or 0) * 100),
             max_price_cents=int(float(a.get("max_price") or 0) * 100),
             sort=SORTS.get(a.get("sort") or "relevance", pb.SORT_RELEVANCE), page_size=PAGE_SIZE)
         reply = await self.clients.call("catalog", self.clients.catalog.ListProducts, request)
@@ -102,9 +109,9 @@ class AgentTools:
         stock = await stock_by_product(self.clients, [p.product_id for p in reply.products])
         cards = [{**serialize.product(p), "in_stock": stock.get(p.product_id, 0) > 0} for p in reply.products]
         if not cards:
-            return result("No results.", card("products", {"products": [], "total": 0}))
+            return result(f"No results{fit_note}.", card("products", {"products": [], "total": 0}))
         intro, _, shown = product_list(card("products", {"products": cards, "total": reply.total}), page_product)
-        head = f"{reply.total} results" + (", closest matches" if reply.fuzzy else "") + f" (page {page})"
+        head = f"{reply.total} results" + (", closest matches" if reply.fuzzy else "") + f" (page {page})" + fit_note
         more = f"\nMore on page {page + 1}." if reply.next_page_token else ""
         return result(head + "\n" + "\n".join(product_line(i, c) for i, c in enumerate(cards, 1)) + more, shown, final=intro)
 
@@ -275,12 +282,21 @@ class AgentTools:
     def _go(path: str, text: str) -> dict:
         return result(text, final=text, navigate={"path": path})
 
-    async def t_recall_facts(self, a: dict, user_id, turn_id) -> dict:
-        if self.recall is None or not user_id:
+    @staticmethod
+    def _fit_sizes(a: dict, facts: list[dict]) -> tuple[list[str], str]:
+        """The size filter for a fit: the model's `fit`, else a saved or wished-for one. ([], "") when there is no base size or no fit."""
+        category = a["category"]
+        base = base_size(facts, category)
+        fit = str(a.get("fit") or "").lower() or resolve_fit("", facts, category)
+        if not base or fit not in ("tight", "regular", "loose"):
+            return [], ""
+        steps = max(1, min(MAX_STEPS, int(a.get("fit_steps") or 1)))
+        sizes = suggest_sizes(base, fit, category, None, steps)
+        return sizes, f"; sizes {', '.join(sizes)} ({fit} fit on size {base.upper()})"
+
+    @staticmethod
+    def t_recall_facts(a: dict, facts: list[dict] | None) -> dict:
+        if facts is None:
             return result("Memory is unavailable.")
-        query = a["query"]
-        try:
-            facts = await self.recall(user_id, query)
-        except Exception:
-            return result("Memory is unavailable.")
-        return result("\n".join(f"- {f}" for f in facts) if facts else "No saved facts match.")
+        keys = a.get("keys") or []
+        return result(recall_lines(facts, [keys] if isinstance(keys, str) else keys, str(a.get("query") or "")))

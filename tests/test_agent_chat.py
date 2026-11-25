@@ -552,3 +552,36 @@ def test_the_memory_worker_has_its_own_llm_client_and_key_pool(make_shop):
     state = shop.client.app.state
     worker_llm = state.memory_worker._llm
     assert state.llm is not None and worker_llm is not state.llm and worker_llm.pool is not state.llm.pool
+
+
+def test_a_loose_wish_searches_neighbouring_sizes_and_leaves_the_saved_fit_alone(make_shop):
+    shop, llm = llm_shop(
+        make_shop,
+        uses(("recall_facts", {"keys": ["size_top", "fit"]}), ("search", {"category": "t-shirts", "fit": "loose"})),
+        says("Here are loose tees in your size L and one up."))
+    clients = shop.client.app.state.clients
+    sent, real = [], clients.catalog.ListProducts
+
+    async def spy(request, **kw):
+        sent.append(list(request.sizes))
+        return await real(request, **kw)
+
+    async def seed():
+        await clients.call("assistant", clients.assistant.ApplyFacts, pb.ApplyFactsRequest(changes=[
+            pb.FactChange(op="remember", kind="permanent", key="size_top", value="L"),
+            pb.FactChange(op="remember", kind="permanent", key="fit", value="tight", category="t-shirts")]), user_id="U-03")
+        reply = await clients.call("assistant", clients.assistant.ListFacts, pb.ListFactsRequest(), user_id="U-03")
+        return sorted((f.key, f.value, f.category) for f in reply.facts)
+
+    shop.client.portal.call(seed)
+    clients.catalog.ListProducts = spy
+    headers, ws = open_chat(shop)
+    say(shop, headers, "I want a loose fitting t-shirt")
+    turn(ws)
+    clients.catalog.ListProducts = real
+    assert sent[0] == ["L", "XL"]
+    memory = llm.requests[0][1]["content"]
+    assert "Facts you can recall: size_top, fit (t-shirts)" in memory and "tight" not in memory
+    recalled = next(m for m in llm.requests[1] if m["role"] == "tool")["content"]
+    assert recalled == "size_top: L\nfit (t-shirts): tight"
+    assert shop.client.portal.call(seed) == [("fit", "tight", "t-shirts"), ("size_top", "L", "")]

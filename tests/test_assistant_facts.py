@@ -11,15 +11,55 @@ def row(fact_id, key, value, kind="permanent", embedding=None, expires_at=None):
 
 
 def test_normalise_key():
-    assert facts.normalise_key(" Favourite Colour ") == "favorite_colour"
+    assert facts.normalise_key(" Favourite Colour ") == "liked_colors"
+    assert facts.normalise_key("favorite_colors") == "liked_colors"
+    assert facts.normalise_key("Liked Colour") == "liked_colors"
     assert facts.normalise_key("size") == "size_top"
     assert facts.normalise_key("Name") == "preferred_name"
     assert facts.normalise_key("Liked-Brands") == "liked_brands"
 
 
 def test_is_single():
-    assert facts.is_single("size_top") and facts.is_single("favorite_team") and facts.is_single("preferred_store")
-    assert not facts.is_single("liked_brands")
+    for key in ("preferred_name", "height", "weight", "budget", "size_top", "size_bottom", "shoe_size"):
+        assert facts.is_single(key)
+    for key in ("liked_colors", "disliked_colors", "liked_brands", "styles", "need", "want", "fit", "favorite_team", "preferred_store"):
+        assert not facts.is_single(key)
+
+
+def remember(key, value, category="", kind="permanent"):
+    return {"op": "remember", "kind": kind, "key": key, "value": value, "category": category}
+
+
+def plan(existing, *changes):
+    inserted, deleted = facts.plan_changes(existing, list(changes), now=NOW)
+    return sorted((r["key"], r["value"], r["category"], r["kind"]) for r in inserted), sorted(deleted)
+
+
+def test_colours_are_collected_not_replaced():
+    inserted, deleted = plan([], remember("liked_colors", "navy"), remember("liked_colors", "olive"), remember("liked_colors", "NAVY"))
+    assert [(k, v) for k, v, *_ in inserted] == [("liked_colors", "navy"), ("liked_colors", "olive")] and deleted == []
+
+
+def test_fit_is_single_per_category():
+    inserted, _ = plan([], remember("fit", "tight", "t-shirts"), remember("fit", "loose", "hoodies"))
+    assert [(v, c) for _, v, c, _ in inserted] == [("loose", "hoodies"), ("tight", "t-shirts")]  # both kept
+    inserted, deleted = plan([row("F-1", "fit", "tight") | {"category": "t-shirts"}, row("F-2", "fit", "loose") | {"category": "hoodies"}],
+                             remember("fit", "loose", "t-shirts"))
+    assert deleted == ["F-1"] and [(v, c) for _, v, c, _ in inserted] == [("loose", "t-shirts")]  # replaced only for that category
+    _, deleted = plan([row("F-3", "fit", "regular")], remember("fit", "tight"))
+    assert deleted == ["F-3"]  # category "" replaces category ""
+
+
+def test_a_temporal_want_leaves_the_permanent_fit_alone_and_expires():
+    existing = [row("F-1", "fit", "tight") | {"category": "t-shirts"}]
+    inserted, deleted = facts.plan_changes(existing, [remember("want", "loose t-shirt", "t-shirts", kind="permanent")], now=NOW)
+    assert deleted == [] and inserted[0]["kind"] == "temporal" and inserted[0]["expires_at"] == NOW + timedelta(days=30)
+
+
+def test_no_wildcard_single_keys():
+    existing = [row("F-1", "favorite_team", "a")]
+    _, deleted = plan(existing, remember("favorite_team", "b"))
+    assert deleted == []
 
 
 def test_plan_changes_replace_add_and_forget():
