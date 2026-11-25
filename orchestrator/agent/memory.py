@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)
 
 CATEGORIES = ("headphones", "hoodies", "backpacks", "watches", "sunglasses", "t-shirts", "jeans", "jackets", "shoes", "accessories")
 FACT_LIMIT, MIN_SCORE, SUMMARY_WORDS = 5, 0.45, 200
+SUMMARY_MESSAGES, MESSAGE_CHARS = 12, 600  # the last 6 exchanges, each message cut short
 
 _EXPLICIT = re.compile(r"\b(remember|forget|call me|from now on)\b", re.I)
 _PERSONAL = re.compile(r"\b(i|i'm|im|i've|i'd|i'll|my|mine|looking for)\b", re.I)
@@ -27,8 +28,8 @@ FACTS_SYSTEM = (
     "Return {\"changes\": []} when there is nothing to store."
 )
 SUMMARY_SYSTEM = (
-    f"You keep a running summary of a shopping chat in at most {SUMMARY_WORDS} words: what the user wants, "
-    "decisions made, and open questions. Rewrite the old summary to include the new exchange. Return {\"summary\": \"...\"}."
+    f"Summarise these recent exchanges of a shopping chat in at most {SUMMARY_WORDS} words: what the user wants, "
+    "products/variants discussed by name, decisions made, and open questions. Return {\"summary\": \"...\"}."
 )
 FACTS_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["changes"],
@@ -170,9 +171,9 @@ class MemoryWorker:
         await self._call("ApplyFacts", pb.ApplyFactsRequest(
             changes=[pb.FactChange(**c, embedding=embedding.get(id(c), [])) for c in changes]), user_id)
 
-    async def _summary(self, user_id: str, conversation_id: str, user_text: str, assistant_text: str) -> None:
-        conv = await self._call("GetConversation", pb.GetConversationRequest(conversation_id=conversation_id), user_id)
-        prompt = f"Old summary:\n{conv.summary or '(none)'}\n\nNew exchange:\nUser: {user_text}\nAssistant: {assistant_text}"
+    async def _summary(self, user_id: str, conversation_id: str, _user_text: str, _assistant_text: str) -> None:
+        reply = await self._call("ListMessages", pb.ListMessagesRequest(conversation_id=conversation_id, limit=SUMMARY_MESSAGES), user_id)
+        prompt = "\n".join(f"{'User' if m.role == 'user' else 'Assistant'}: {m.text[:MESSAGE_CHARS]}" for m in reply.messages)
         summary = await self._llm.complete_json(
             SUMMARY_SYSTEM, prompt, "summary", SUMMARY_SCHEMA, _parse_summary, max_tokens=500, model=self._settings.memory_model)
         await self._call("SetSummary", pb.SetSummaryRequest(conversation_id=conversation_id, summary=summary), user_id)

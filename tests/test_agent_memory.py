@@ -110,7 +110,7 @@ def test_worker_skips_fact_extraction_for_questions_but_still_summarises():
     llm = FakeLLM()
     run_worker(FakeClients(stub), llm, FakeEmbedder(), [("u1", "c1", "do you have hoodies?", "yes")])
     assert [c[0] for c in llm.calls] == ["summary"]
-    assert [n for n, _ in stub.calls] == ["GetConversation", "SetSummary"]
+    assert [n for n, _ in stub.calls] == ["ListMessages", "SetSummary"]
 
 
 def test_summary_capped_200_words():
@@ -119,8 +119,43 @@ def test_summary_capped_200_words():
     assert len(stub.sent("SetSummary")[0].summary.split()) == 200
 
 
+def exchanges(n):
+    msgs = []
+    for i in range(n):
+        msgs += [pb.ChatMessage(role="user", text=f"q{i}"), pb.ChatMessage(role="assistant", text=f"a{i} " + "x" * 700)]
+    return pb.ListMessagesResponse(messages=msgs)
+
+
+def test_summary_uses_recent_exchanges_only():
+    # the service returns the latest `limit` messages; emulate it over 7 exchanges
+    full = exchanges(7)
+    class Recent(Stub):
+        def __getattr__(self, name):
+            inner = super().__getattr__(name)
+            async def rpc(request, **kw):
+                reply = await inner(request, **kw)
+                if name == "ListMessages":
+                    return pb.ListMessagesResponse(messages=full.messages[-request.limit:])
+                return reply
+            return rpc
+    stub = Recent({"GetConversation": pb.Conversation(summary="OLD SUMMARY")})
+    llm = FakeLLM()
+    run_worker(FakeClients(stub), llm, FakeEmbedder(), [("u1", "c1", "hello", "hi")])
+    assert stub.sent("ListMessages")[0].limit == 12
+    prompt = llm.calls[-1][2]
+    assert "User: q1" in prompt and "User: q6" in prompt and "q0" not in prompt and "OLD SUMMARY" not in prompt
+    assert "x" * 601 not in prompt and "Assistant: a6 " in prompt
+
+
+def test_summary_with_a_single_exchange():
+    stub = Stub({"ListMessages": exchanges(1)})
+    llm = FakeLLM(summary="short")
+    run_worker(FakeClients(stub), llm, FakeEmbedder(), [("u1", "c1", "hello", "hi")])
+    assert stub.sent("SetSummary")[0].summary == "short" and "User: q0" in llm.calls[-1][2]
+
+
 def test_worker_without_llm_or_with_failures_does_not_crash():
-    stub = Stub(fail={"ApplyFacts", "GetConversation"})
+    stub = Stub(fail={"ApplyFacts", "ListMessages"})
     run_worker(FakeClients(stub), None, FakeEmbedder(), [("u1", "c1", "I need shoes", "ok")])
     llm = FakeLLM(facts=[{"op": "remember", "kind": "permanent", "key": "k", "value": "v", "category": ""}])
     run_worker(FakeClients(stub), llm, FakeEmbedder(), [("u1", "c1", "I need shoes", "ok"), ("u1", "c1", "I want more", "ok")])
