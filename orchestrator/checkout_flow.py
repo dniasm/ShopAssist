@@ -57,6 +57,7 @@ async def forward(
                 raise ConnectionError("stream ended before the final event")
         if event.state == pb.STEP_SUCCEEDED and fresh:
             await clear_cart(clients, user_id, cart_version)
+            await clear_temporal_facts(clients, user_id, event.order)
         hub.publish(user_id, "checkout", *final_message(event))
     except (grpc.aio.AioRpcError, ConnectionError) as e:
         log.warning("checkout %s: event stream failed: %s", first.order_id, e)
@@ -76,6 +77,18 @@ async def clear_cart(clients: Clients, user_id: str, cart_version: int) -> None:
             log.info("cart of %s changed during checkout; left as it is", user_id)
         else:
             log.warning("could not clear the cart of %s after checkout: %s", user_id, e.message)
+
+
+async def clear_temporal_facts(clients: Clients, user_id: str, order: pb.Order) -> None:
+    """A bought item settles the user's current need for its category: forget those temporal facts. Never breaks checkout."""
+    categories = sorted({line.category for line in order.lines if line.category})
+    if not categories:
+        return
+    try:
+        await clients.call("assistant", clients.assistant.ClearTemporalFacts,
+                           pb.ClearTemporalFactsRequest(categories=categories), user_id=user_id)
+    except Exception as e:  # noqa: BLE001 - memory housekeeping must not affect the order
+        log.warning("could not clear temporal facts of %s after order %s: %s", user_id, order.order_id, type(e).__name__)
 
 
 def spawn(app_state, user_id: str, call, first: pb.CheckoutEvent, cart_version: int) -> bool:

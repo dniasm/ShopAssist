@@ -10,8 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from orchestrator import errors, routes_auth, routes_cart, routes_chat, routes_checkout, routes_health, routes_orders, routes_products, routes_ws
 from orchestrator.agent.loop import AgentLoop
+from orchestrator.agent.memory import MemoryReader, MemoryWorker
 from orchestrator.agent.state import ConversationMemory, ProposalStore
 from orchestrator.clients import Clients
+from orchestrator.embed import Embedder
 from orchestrator.events import EventHub
 from orchestrator.order_watch import OrderWatchers
 from orchestrator.llm import LLMClient
@@ -40,7 +42,12 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, w
         app.state.agent = AgentLoop(app.state.clients, app.state.hub, app.state.proposals, app.state.memory, app.state.llm)
         app.state.watchers = OrderWatchers(
             app.state.clients, app.state.hub, settings.order_watch_stop_seconds, settings.order_watch_retry_seconds)
+        embedder = Embedder(settings)
+        app.state.memory_reader = MemoryReader(app.state.clients, embedder)
+        app.state.memory_worker = MemoryWorker(app.state.clients, app.state.llm, embedder, settings)
+        app.state.memory_worker.start()
         yield
+        await app.state.memory_worker.close()
         await app.state.watchers.close()
         for task in list(app.state.tasks):  # checkout forwarders still relaying events
             task.cancel()
