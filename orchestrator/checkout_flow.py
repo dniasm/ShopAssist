@@ -18,6 +18,9 @@ INTERRUPTED = (
 )
 
 
+_background: set = set()  # keeps fire-and-forget tasks alive until they finish
+
+
 def step_data(event: pb.CheckoutEvent) -> dict:
     data = {
         "order_id": event.order_id, "step": pb.CheckoutStep.Name(event.step),
@@ -57,8 +60,11 @@ async def forward(
                 raise ConnectionError("stream ended before the final event")
         if event.state == pb.STEP_SUCCEEDED and fresh:
             await clear_cart(clients, user_id, cart_version)
-            await clear_temporal_facts(clients, user_id, event.order)
         hub.publish(user_id, "checkout", *final_message(event))
+        if event.state == pb.STEP_SUCCEEDED and fresh:  # after `done`: a slow assistant service must not delay the shopper
+            background = asyncio.create_task(clear_temporal_facts(clients, user_id, event.order))
+            _background.add(background)
+            background.add_done_callback(_background.discard)
     except (grpc.aio.AioRpcError, ConnectionError) as e:
         log.warning("checkout %s: event stream failed: %s", first.order_id, e)
         # The outcome is UNKNOWN (recovery may still confirm the order), so this is never reported as `failed`.

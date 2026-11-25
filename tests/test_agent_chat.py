@@ -484,3 +484,71 @@ def test_remove_the_second_one_request_contains_the_cart_line_ids(make_shop):
     turn(ws)
     shown = llm.requests[-1][3]["content"]
     assert f"[{first}]" in shown and f"[{second}]" in shown
+
+
+# ---------------- review fixes ----------------
+
+def run_memory(shop, user, jobs, facts):
+    """Run a MemoryWorker (real clients, real assistant service, scripted extraction) over (user text) jobs, one batch each."""
+    from orchestrator.agent.memory import MemoryWorker
+
+    class Extract:
+        def __init__(self):
+            self.batches = list(facts)
+
+        async def complete_json(self, system, prompt, name, schema, parse, **kw):
+            return parse({"changes": self.batches.pop(0)} if name == "facts" else {"summary": "s"})
+
+    class NoEmbed:
+        async def embed(self, texts, kind):
+            return None
+
+    settings = shop.client.app.state.settings
+
+    async def go():
+        worker = MemoryWorker(shop.client.app.state.clients, Extract(), NoEmbed(), settings)
+        worker.start()
+        for text in jobs:
+            worker.submit(user, "c-none", text, "ok")
+        await worker.close()
+        clients = shop.client.app.state.clients
+        reply = await clients.call("assistant", clients.assistant.ListFacts, pb.ListFactsRequest(), user_id=user)
+        return sorted((f.key, f.value) for f in reply.facts)
+
+    return shop.client.portal.call(go)
+
+
+def change(op, key, value="", kind="permanent", category=""):
+    return {"op": op, "kind": kind, "key": key, "value": value, "category": category}
+
+
+def test_memory_worker_forget_and_replace_work_against_the_real_service(make_shop):
+    shop = make_shop()
+    facts = run_memory(shop, "U-03", ["remember I wear M", "forget my size, I'm an L now"], [
+        [change("remember", "size_top", "M")],
+        [change("forget", "size_top"), change("remember", "size_top", "L")],
+    ])
+    assert facts == [("size_top", "L")]
+    shop2 = make_shop()
+    facts = run_memory(shop2, "U-04", ["my budget is 50", "forget my budget"], [
+        [change("remember", "budget", "50")], [change("forget", "budget")]])
+    assert facts == []
+
+
+def test_a_crash_mid_turn_saves_an_apology_and_unused_locks_are_dropped(make_shop):
+    shop, llm = llm_shop(make_shop, RuntimeError("boom"))
+    headers, ws = open_chat(shop)
+    say(shop, headers, "hello there")
+    msgs = turn(ws)
+    assert "error" in types(msgs)
+    cid = next(m for m in msgs if m["type"] == "conversation")["data"]["conversation_id"]
+    got = saved(shop, "U-03", cid)
+    assert [r for r, _, _ in got] == ["user", "assistant"] and got[1][1].startswith("Sorry, something went wrong")
+    assert shop.client.app.state.agent._locks == {}
+
+
+def test_the_memory_worker_has_its_own_llm_client_and_key_pool(make_shop):
+    shop = make_shop(llm_api_keys=("key-one", "key-two"))
+    state = shop.client.app.state
+    worker_llm = state.memory_worker._llm
+    assert state.llm is not None and worker_llm is not state.llm and worker_llm.pool is not state.llm.pool

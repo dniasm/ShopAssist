@@ -164,7 +164,7 @@ class ChatNavigateData(ChatTurnData):
 
 class ChatProposalData(ChatTurnData):
     proposal_id: str
-    action: Literal["checkout", "checkout_redirect", "cancel_order"]
+    action: Literal["checkout_redirect", "cancel_order"]
     args: dict
     summary: str
 

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 import grpc
 import grpc.aio
 
+from orchestrator.checkout_flow import clear_temporal_facts
 from orchestrator.clients import USER_HEADER, Clients
 from orchestrator.events import EventHub
 from shopassist_proto import shopassist_pb2 as pb
@@ -37,6 +38,7 @@ class _Watch:
     ready: asyncio.Event = field(default_factory=asyncio.Event)  # set once the Order service says the stream is registered
     stop_timer: asyncio.TimerHandle | None = None
     stopping: bool = field(default=False)
+    cleared: set = field(default_factory=set)  # orders whose temporal facts were already cleared
 
 
     def resume_after(self) -> int:
@@ -108,6 +110,17 @@ class OrderWatchers:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    async def _order_confirmed(self, user_id: str, watch: _Watch, order_id: str) -> None:
+        """Once per order: a bought item settles the user's current need, however the order got confirmed."""
+        if order_id in watch.cleared:
+            return
+        watch.cleared.add(order_id)
+        try:
+            order = await self._clients.call("order", self._clients.order.GetOrder, pb.GetOrderRequest(order_id=order_id), user_id=user_id)
+            await clear_temporal_facts(self._clients, user_id, order)
+        except Exception as e:  # noqa: BLE001 - housekeeping must never break the order stream
+            log.warning("could not clear temporal facts of %s after order %s: %s", user_id, order_id, type(e).__name__)
+
     async def _run(self, user_id: str, watch: _Watch) -> None:
         """Stream, forward, and on any failure wait a moment and resume from the last event id."""
         delay = self._retry_after
@@ -127,6 +140,8 @@ class OrderWatchers:
                     watch.last_event_id = max(watch.last_event_id, event.event_id)
                     if not watch.first_time(event.event_id):
                         continue  # re-read because of the resume overlap; the client already has it
+                    if event.status == pb.CONFIRMED:
+                        await self._order_confirmed(user_id, watch, event.order_id)
                     self._hub.publish(user_id, "order", "status", {
                         "order_id": event.order_id, "status": pb.OrderStatus.Name(event.status),
                         "message": event.message, "event_id": event.event_id,

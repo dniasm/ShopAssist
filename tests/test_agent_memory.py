@@ -100,7 +100,8 @@ def test_worker_saves_permanent_and_temporal():
     assert len(got) == 3  # the invalid category is dropped
     assert got[0] == ("remember", "permanent", "shoe_size", "shoes", [0.5, 0.25])
     assert got[1][:4] == ("remember", "temporal", "need", "jackets")
-    assert got[2][:3] == ("forget", "permanent", "budget") and got[2][4] == []
+    assert got[2][:3] == ("forget", "permanent", "budget") and got[2][4] == []  # (empty forget value becomes "*", see below)
+    assert stub.sent("ApplyFacts")[0].changes[2].value == "*"
     assert emb.seen[0] == (["shoe_size: 43", "need: rain jacket"], "document")
     assert llm.calls[0][:2] == ("facts", "mem-model")
 
@@ -214,7 +215,10 @@ class FakeCall:
 def run_forward(clients, event, fresh_hub=None):
     hub = fresh_hub or EventHub(10, 10)
     first = pb.CheckoutEvent(order_id="O-1", step=pb.CHARGING, state=pb.STEP_STARTED)
-    asyncio.run(checkout_flow.forward(hub, clients, set(), "u1", FakeCall(event), first, 1))
+    async def go():
+        await checkout_flow.forward(hub, clients, set(), "u1", FakeCall(event), first, 1)
+        await asyncio.gather(*checkout_flow._background)  # the facts are cleared after `done`, in the background
+    asyncio.run(go())
     return hub
 
 
@@ -238,3 +242,111 @@ def test_clear_failure_does_not_break_checkout():
     hub = run_forward(FakeClients(Stub(fail={"ClearTemporalFacts"})), confirmed_event())
     events, _ = hub.replay("u1", 0)
     assert [e["type"] for e in events][-1] == "done"
+
+
+def test_done_is_published_before_the_facts_are_cleared():
+    order_seen = []
+
+    class SlowStub(Stub):
+        def __getattr__(self, name):
+            async def rpc(request, **_):
+                order_seen.append(("rpc", name))
+                return _RESP[name]()
+            return rpc
+
+    class Hub(EventHub):
+        def publish(self, user_id, channel, type_, data):
+            order_seen.append(("event", type_))
+            return super().publish(user_id, channel, type_, data)
+
+    run_forward(FakeClients(SlowStub()), confirmed_event(), fresh_hub=Hub(10, 10))
+    assert order_seen.index(("event", "done")) < order_seen.index(("rpc", "ClearTemporalFacts"))
+
+
+class WatchCall:
+    def __init__(self, events):
+        self.events = events
+
+    def __aiter__(self):
+        return self._gen()
+
+    async def _gen(self):
+        for e in self.events:
+            yield e
+        await asyncio.sleep(3600)
+
+    def cancel(self):
+        pass
+
+
+class WatchClients(FakeClients):
+    def __init__(self, stub, events):
+        super().__init__(stub)
+        self.order = self
+        self.events, self.gets = events, []
+
+    def WatchOrders(self, request, **_):
+        return WatchCall(self.events)
+
+    async def GetOrder(self, request, **_):
+        self.gets.append(request.order_id)
+        return pb.Order(order_id=request.order_id, lines=[pb.OrderLine(category="shoes")])
+
+
+def test_order_watcher_clears_temporal_facts_once_when_an_order_is_confirmed():
+    from orchestrator.order_watch import OrderWatchers
+    stub = Stub()
+    events = [pb.OrderEvent(event_id=1, order_id="", status=0), pb.OrderEvent(event_id=2, order_id="O-1", status=pb.PENDING),
+              pb.OrderEvent(event_id=3, order_id="O-1", status=pb.CONFIRMED),
+              pb.OrderEvent(event_id=3, order_id="O-1", status=pb.CONFIRMED),  # a replay of the same order
+              pb.OrderEvent(event_id=4, order_id="O-1", status=pb.PACKED)]
+    clients = WatchClients(stub, events)
+
+    async def go():
+        watchers = OrderWatchers(clients, EventHub(10, 10), 30, 0.1)
+        watchers.socket_opened("u1")
+        await asyncio.sleep(0.3)
+        await watchers.close()
+    asyncio.run(go())
+    sent = stub.sent("ClearTemporalFacts")
+    assert len(sent) == 1 and list(sent[0].categories) == ["shoes"] and clients.gets == ["O-1"]
+
+
+def test_order_watcher_survives_a_failing_clear():
+    from orchestrator.order_watch import OrderWatchers
+    events = [pb.OrderEvent(event_id=1, order_id="O-1", status=pb.CONFIRMED)]
+    hub = EventHub(10, 10)
+
+    async def go():
+        watchers = OrderWatchers(WatchClients(Stub(fail={"ClearTemporalFacts"}), events), hub, 30, 0.1)
+        watchers.socket_opened("u1")
+        await asyncio.sleep(0.3)
+        await watchers.close()
+    asyncio.run(go())
+    assert [e["data"]["status"] for e in hub.replay("u1", 0)[0]] == ["CONFIRMED"]
+
+
+def test_worker_queue_is_bounded_and_close_does_not_wait_forever(monkeypatch):
+    from orchestrator.agent import memory
+
+    class Stuck(FakeLLM):
+        async def complete_json(self, *a, **kw):
+            await asyncio.sleep(3600)
+
+    monkeypatch.setattr(memory, "QUEUE_MAX", 2)
+    monkeypatch.setattr(memory, "CLOSE_WAIT_SECONDS", 0.2)
+
+    async def go():
+        w = MemoryWorker(FakeClients(), Stuck(), FakeEmbedder(), Settings())
+        w.start()
+        for i in range(6):
+            w.submit("u1", "c1", "my size is M", "ok")
+        await asyncio.wait_for(w.close(), 5)
+        return w.dropped
+    assert asyncio.run(go()) >= 3
+
+
+def test_forget_without_a_value_is_sent_as_the_whole_key():
+    from orchestrator.agent.memory import _parse_changes
+    got = _parse_changes({"changes": [{"op": "forget", "kind": "permanent", "key": "budget", "value": "", "category": ""}]})
+    assert got[0]["value"] == "*"

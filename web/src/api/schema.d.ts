@@ -706,7 +706,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "checkout" | "checkout_redirect" | "cancel_order";
+            action: "checkout_redirect" | "cancel_order";
             /** Args */
             args: {
                 [key: string]: unknown;

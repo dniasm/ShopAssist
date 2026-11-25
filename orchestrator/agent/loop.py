@@ -37,6 +37,9 @@ PRODUCT_ID = re.compile(r"P-\d+")
 BRACKETED_ID = re.compile(r"\s*[(\[]\s*(P-\d+)\s*[)\]]")
 
 
+SORRY = "Sorry, something went wrong on our side. Please try again."
+
+
 class AgentLoop:
     def __init__(self, clients: Clients, hub: EventHub, proposals: ProposalStore, memory: ConversationMemory, llm=None,
                  reader=None, worker=None):
@@ -44,25 +47,39 @@ class AgentLoop:
         self.reader, self.worker = reader, worker
         self.tools = AgentTools(clients, proposals, reader.search if reader else None)
         self._locks: dict[str, asyncio.Lock] = {}
+        self._waiting: dict[str, int] = {}  # turns running or queued per owner
 
     def emit(self, owner: str, type_: str, data: dict) -> None:
         self.hub.publish(owner, "chat", type_, data)
 
     async def run_turn(self, owner: str, user_id: str | None, turn_id: str, message: str, page: dict, conversation_id: str = "default") -> None:
         """One user message, start to finish. Turns of one person run one after the other, so their memory stays in order."""
-        async with self._locks.setdefault(owner, asyncio.Lock()):
-            self.emit(owner, "turn_started", {"turn_id": turn_id})
-            source = "rules"
-            try:
-                source = await self._turn(owner, user_id, turn_id, message, page, conversation_id)
-            except Exception:
-                log.exception("chat turn %s failed", turn_id)
-                self.emit(owner, "error", {"turn_id": turn_id, "message": "Sorry, something went wrong on our side. Please try again."})
-            self.emit(owner, "turn_done", {"turn_id": turn_id, "source": source})
+        lock = self._locks.setdefault(owner, asyncio.Lock())
+        self._waiting[owner] = self._waiting.get(owner, 0) + 1
+        try:
+            async with lock:
+                self.emit(owner, "turn_started", {"turn_id": turn_id})
+                source = "rules"
+                saved = {}  # set by _turn once the user message is saved: (conversation id)
+                try:
+                    source = await self._turn(owner, user_id, turn_id, message, page, conversation_id, saved)
+                except Exception:
+                    log.exception("chat turn %s failed", turn_id)
+                    if "conversation_id" in saved and "answered" not in saved:
+                        await self.save(owner, user_id, turn_id, saved["conversation_id"], "assistant", SORRY, "")
+                    self.emit(owner, "error", {"turn_id": turn_id, "message": SORRY})
+                self.emit(owner, "turn_done", {"turn_id": turn_id, "source": source})
+        finally:
+            self._waiting[owner] -= 1
+            if not self._waiting[owner]:  # nobody else waits: forget the lock (a guest id would otherwise stay forever)
+                del self._waiting[owner]
+                self._locks.pop(owner, None)
 
     # ---------------- one turn ----------------
 
-    async def _turn(self, owner: str, user_id: str | None, turn_id: str, message: str, page: dict, conversation_id: str) -> str:
+    async def _turn(self, owner: str, user_id: str | None, turn_id: str, message: str, page: dict, conversation_id: str,
+                    saved: dict | None = None) -> str:
+        saved = {} if saved is None else saved
         key = f"{owner}|{conversation_id}"  # per conversation, not per person: a new chat starts clean
         context = await self.fill_context(user_id, page)
         block = {"facts": [], "summary": "", "latest": []}
@@ -76,6 +93,8 @@ class AgentLoop:
         if saving:
             conversation_id, saving = await self.save(owner, user_id, turn_id, conversation_id, "user", message, "", title=message)
             key = f"{owner}|{conversation_id}"  # the server's id, which the next message will carry
+            if saving:
+                saved["conversation_id"] = conversation_id
 
         results: list[dict] = []
         calls = tokens = 0
@@ -103,6 +122,7 @@ class AgentLoop:
         self.emit(owner, "message", {"turn_id": turn_id, "text": text, "cards": cards, "closing": closing})
         self.remember(key, message, text, results, cards)
         if saving:
+            saved["answered"] = True
             await self.save(owner, user_id, turn_id, conversation_id, "assistant", text, json.dumps(cards))
             if self.worker:
                 self.worker.submit(user_id, conversation_id, message, text)

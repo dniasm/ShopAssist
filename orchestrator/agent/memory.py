@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 
 CATEGORIES = ("headphones", "hoodies", "backpacks", "watches", "sunglasses", "t-shirts", "jeans", "jackets", "shoes", "accessories")
 FACT_LIMIT, MIN_SCORE, SUMMARY_WORDS = 5, 0.45, 200
+QUEUE_MAX, CLOSE_WAIT_SECONDS = 100, 10.0
 SUMMARY_MESSAGES, MESSAGE_CHARS = 12, 600  # the last 6 exchanges, each message cut short
 
 _EXPLICIT = re.compile(r"\b(remember|forget|call me|from now on)\b", re.I)
@@ -24,7 +25,7 @@ FACTS_SYSTEM = (
     "You maintain a shopper's long-term memory. From the user's message decide which facts to remember or forget. "
     "Permanent facts (kind=permanent) are lasting traits; temporal facts (kind=temporal) are a current need or short-lived plan. "
     "Suggested keys: preferred_name, size_top, size_bottom, shoe_size, height, weight, budget, favorite_color, liked_brands, "
-    "disliked, style, need (temporal). op is remember or forget. category is the shop category the fact concerns: "
+    "disliked, style, need (temporal). op is remember or forget; for forget, value is the exact value to drop or \"*\" to forget the whole key. category is the shop category the fact concerns: "
     + ", ".join(CATEGORIES) + ", or \"\" when general. Only store what the user said about themselves; never invent. "
     "Return {\"changes\": []} when there is nothing to store."
 )
@@ -72,6 +73,8 @@ def _parse_changes(data) -> list[dict]:
             continue
         if category not in (*CATEGORIES, "") or (op == "remember" and not value):
             continue
+        if op == "forget" and not value:
+            value = "*"  # the service rejects an empty forget value; "*" means the whole key
         out.append({"op": op, "kind": kind, "key": key, "value": value, "category": category})
     return out
 
@@ -94,7 +97,8 @@ class MemoryReader:
         try:
             return await self._clients.call("assistant", getattr(self._clients.assistant, rpc_name), request, user_id=user_id)
         except ApiError as e:
-            log.warning("memory %s failed: %s", rpc_name, e.code)
+            # a chat that is not saved yet (a new chat's client-made id) is expected, not a problem
+            (log.debug if e.code == "not_found" else log.warning)("memory %s failed: %s", rpc_name, e.code)
             return None
 
     async def context(self, user_id: str, conversation_id: str, message: str) -> dict:
@@ -129,19 +133,28 @@ class MemoryWorker:
         self._clients, self._llm, self._embedder, self._settings = clients, llm, embedder, settings
         self._queue: asyncio.Queue | None = None
         self._task: asyncio.Task | None = None
+        self.dropped = 0
 
     def start(self) -> None:
-        self._queue = asyncio.Queue()
+        self._queue = asyncio.Queue(maxsize=QUEUE_MAX)
         self._task = asyncio.create_task(self._consume())
 
     def submit(self, user_id: str, conversation_id: str, user_text: str, assistant_text: str) -> None:
-        if self._queue is not None:
+        if self._queue is None:
+            return
+        try:
             self._queue.put_nowait((user_id, conversation_id, user_text, assistant_text))
+        except asyncio.QueueFull:
+            self.dropped += 1
+            log.warning("memory queue full; job dropped (%d dropped so far)", self.dropped)
 
     async def close(self) -> None:
         if self._queue is None:
             return
-        await self._queue.join()
+        try:
+            await asyncio.wait_for(self._queue.join(), CLOSE_WAIT_SECONDS)
+        except asyncio.TimeoutError:
+            log.warning("memory worker closing with %d jobs unfinished", self._queue.qsize())
         self._task.cancel()
         await asyncio.gather(self._task, return_exceptions=True)
         self._queue = self._task = None
