@@ -1,5 +1,5 @@
 /* The chat transcript as a pure reducer over what the shopper does (send, confirm, dismiss) and what the socket delivers (the `chat`
- * channel, plus `checkout` and `order` events for proposals that were confirmed). No React, no sockets: the provider feeds actions in.
+ * channel, plus `order` events for a confirmed cancellation). No React, no sockets: the provider feeds actions in.
  *
  * Rules (each has a test):
  *  - every socket event carries a seq and is applied once: a replay after a reconnect or a refresh never duplicates anything
@@ -7,12 +7,11 @@
  *  - events may arrive in any order: a tool_result before its tool_call, a message before turn_started, any of them before the POST that
  *    started the turn has returned. The turn is created by whichever comes first and the rest fill it in
  *  - the shopper's own words are not on the socket, so they are remembered by turn_id (the provider persists `texts` for the tab)
- *  - a proposal can be decided once: Confirm (then follow the result on the checkout / order events) or Dismiss; a server "already done"
+ *  - a proposal can be decided once: Confirm (a cancellation then follows the order events) or Dismiss; a server "already done"
  *    answer is shown as such, never as a second action */
 
 import type { ChatCard, ChatContext, ChatWsMessage, OrderStatus, OrderStatusData } from "../../api/types";
-import { initialSaga, reduceSaga, type SagaState } from "../checkout/saga";
-import { checkoutOrderId, type CheckoutEvent } from "../session/events";
+import { parseChatCards } from "../session/events";
 import { advanceStatus, asOrderStatus } from "../orders/timeline";
 
 export type ChatSource = "llm" | "rules";
@@ -27,9 +26,8 @@ export interface ToolStep {
 
 export type ProposalState = "pending" | "confirming" | "confirmed" | "dismissed" | "handled";
 
-export type FollowUp =
-  | { kind: "checkout"; orderId: string | null; saga: SagaState | null }
-  | { kind: "order"; orderId: string; status: OrderStatus | null; message: string };
+/** What a confirmed proposal turns into on screen. Only a cancellation has one (checkout_redirect just navigates). */
+export type FollowUp = { kind: "order"; orderId: string; status: OrderStatus | null; message: string };
 
 export interface ChatProposal {
   id: string;
@@ -39,7 +37,7 @@ export interface ChatProposal {
   state: ProposalState;
   /** A line under the buttons: a failed attempt, or "already handled". */
   note: string | null;
-  /** The highest seq seen when it was confirmed: only later checkout / order events can be its result. */
+  /** The highest seq seen when it was confirmed: only later order events can be its result. */
   confirmedAfterSeq: number | null;
   follow: FollowUp | null;
 }
@@ -92,13 +90,13 @@ export type ChatAction =
   | { type: "accepted"; localId: string; turnId: string }
   | { type: "send_failed"; localId: string; message: string }
   | { type: "chat"; message: ChatWsMessage }
-  | { type: "checkout"; seq: number; event: CheckoutEvent }
   | { type: "order_status"; seq: number; data: OrderStatusData }
   | { type: "proposal_confirming"; id: string }
   | { type: "proposal_confirmed"; id: string }
   | { type: "proposal_dismissed"; id: string }
   | { type: "proposal_handled"; id: string; note: string }
   | { type: "proposal_failed"; id: string; note: string }
+  | { type: "loaded"; turns: ChatTurn[] }
   | { type: "reset" };
 
 const MAX_TURNS = 100;
@@ -151,6 +149,7 @@ function park(state: ChatState, m: ChatWsMessage): ChatState {
 }
 
 function applyChat(state: ChatState, m: ChatWsMessage): ChatState {
+  if (m.type === "conversation" || m.type === "navigate") return state;   // acted on by the provider, nothing to show
   const { state: s0, index } = ensureTurn(state, m.data.turn_id);
   switch (m.type) {
     case "turn_started":
@@ -182,7 +181,7 @@ function applyChat(state: ChatState, m: ChatWsMessage): ChatState {
         state: decided ? decided.state : "pending",
         note: null,
         confirmedAfterSeq: decided?.afterSeq ?? null,
-        follow: decided?.state === "confirmed" ? followFor(action, args, decided.orderId) : null,
+        follow: decided?.state === "confirmed" ? followFor(action, args) : null,
       };
       return updateTurn(s0, index, (t) => ({ ...t, proposals: [...t.proposals, proposal] }));
     }
@@ -193,27 +192,9 @@ function applyChat(state: ChatState, m: ChatWsMessage): ChatState {
   }
 }
 
-function followFor(action: string, args: Record<string, unknown>, orderId: string | null): FollowUp | null {
-  if (action === "checkout") return { kind: "checkout", orderId, saga: orderId ? initialSaga(orderId) : null };
+function followFor(action: string, args: Record<string, unknown>): FollowUp | null {
   if (action === "cancel_order" && typeof args.order_id === "string") return { kind: "order", orderId: args.order_id, status: null, message: "" };
   return null;
-}
-
-function applyCheckout(state: ChatState, seq: number, event: CheckoutEvent): ChatState {
-  const orderId = checkoutOrderId(event);
-  const all = state.turns.flatMap((t) => t.proposals);
-  const bound = all.find((p) => p.follow?.kind === "checkout" && p.follow.orderId === orderId);
-  // the first checkout of an order that started after the click is the result of the oldest confirmed checkout proposal still waiting
-  const waiting = bound ? undefined : all.find((p) => p.follow?.kind === "checkout" && p.follow.orderId === null && p.state === "confirmed" && p.confirmedAfterSeq !== null && seq > p.confirmedAfterSeq);
-  const target = bound ?? waiting;
-  if (!target) return state;
-  let next = withProposal(state, target.id, (p) => {
-    const saga = reduceSaga(p.follow?.kind === "checkout" && p.follow.saga ? p.follow.saga : initialSaga(orderId), event);
-    return { ...p, follow: { kind: "checkout", orderId, saga } };
-  });
-  const decided = next.decided[target.id];
-  if (decided && decided.orderId !== orderId) next = { ...next, decided: { ...next.decided, [target.id]: { ...decided, orderId } } };
-  return next;
 }
 
 function applyOrderStatus(state: ChatState, seq: number, data: OrderStatusData): ChatState {
@@ -231,6 +212,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "reset":
       return initialChat();
+    case "loaded":
+      return { ...initialChat(), turns: action.turns };
 
     case "user_sent": {
       const turn: ChatTurn = { ...blankTurn(action.localId, null), request: { text: action.text, context: action.context }, sending: true };
@@ -262,11 +245,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "chat": {
       const seen = markSeen(state, action.message.seq);
       if (!seen) return state;
+      if (action.message.type === "conversation" || action.message.type === "navigate") return seen;
       return isOwned(seen, action.message.data.turn_id) ? applyChat(seen, action.message) : park(seen, action.message);
-    }
-    case "checkout": {
-      const seen = markSeen(state, action.seq);
-      return seen ? applyCheckout(seen, action.seq, action.event) : state;
     }
     case "order_status": {
       const seen = markSeen(state, action.seq);
@@ -280,7 +260,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const next = withProposal(state, action.id, (p) => {
         if (p.state !== "confirming" && p.state !== "pending") return p;
         confirmedAt = state.maxSeq;
-        return { ...p, state: "confirmed", note: null, confirmedAfterSeq: confirmedAt, follow: followFor(p.action, p.args, null) };
+        return { ...p, state: "confirmed", note: null, confirmedAfterSeq: confirmedAt, follow: followFor(p.action, p.args) };
       });
       return { ...next, decided: { ...next.decided, [action.id]: { state: "confirmed", afterSeq: confirmedAt, orderId: null } } };
     }
@@ -298,4 +278,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 /** Is the turn still waiting for the assistant (nothing final yet)? */
 export function isWorking(turn: ChatTurn): boolean {
   return !turn.done && !turn.error;
+}
+
+/** What the server saved of a conversation (GET /chat/conversations/{id}/messages) as finished turns: each question starts a turn, the
+ *  answers after it (text + cards) belong to it. Proposals are not saved, so none come back. */
+export function fromHistory(messages: readonly { role: string; text: string; cards: unknown }[]): ChatTurn[] {
+  const turns: ChatTurn[] = [];
+  const start = (request: ChatTurn["request"]): ChatTurn => {
+    const turn: ChatTurn = { ...blankTurn(`saved-${turns.length}`, null), request, done: true };
+    turns.push(turn);
+    return turn;
+  };
+  for (const m of messages) {
+    if (m.role === "user") start({ text: m.text, context: { path: "" } });
+    else if (m.role === "assistant") (turns[turns.length - 1] ?? start(null)).messages.push({ text: m.text, cards: parseChatCards(m.cards), closing: "" });
+  }
+  return turns;
 }

@@ -64,5 +64,7 @@ export type ChatCardKind = ChatCard["kind"];
 export type ChatContext = Schemas["ChatContextIn"];
 export type ChatRequest = Schemas["ChatIn"];
 export type ChatAccepted = Schemas["TurnOut"];
+export type Conversation = Schemas["ConversationOut"];
+export type SavedMessage = Schemas["ChatMessageOut"];
 export type ProposalAck = Schemas["OkOut"];
 export type ProposalAction = Extract<ChatWsMessage, { type: "proposal" }>["data"]["action"];

@@ -109,12 +109,19 @@ export function parseSocketMessage(raw: string): SocketMessage | null {
 
 const CARD_KINDS = ["products", "product", "stock", "cart", "order", "orders", "signin"] as const satisfies readonly ChatCardKind[];
 
-function parseCards(v: unknown): ChatCard[] {
+export function parseChatCards(v: unknown): ChatCard[] {
   if (!Array.isArray(v)) return [];
   return v.flatMap((c): ChatCard[] => {
     const kind = isRec(c) ? CARD_KINDS.find((k) => k === c.kind) : undefined;
     return isRec(c) && kind ? [{ kind, data: isRec(c.data) ? c.data : {} }] : [];
   });
+}
+
+/** A path the app may navigate to: relative, one leading "/" (so not "//host" or "https://..."), no backslashes or control characters. */
+export function safePath(v: unknown): string | null {
+  if (typeof v !== "string" || !v.startsWith("/") || v.startsWith("//")) return null;
+  if (/[\\\u0000-\u001f]/.test(v)) return null;
+  return v;
 }
 
 /** The `chat` channel. Anything that does not fit the contract is dropped. */
@@ -129,10 +136,17 @@ function parseChat(seq: number, ts: string, key: string, d: Rec): ChatWsMessage 
     case "chat/tool_result":
       if (typeof d.tool !== "string") return null;
       return { seq, ts, channel: "chat", type: "tool_result", data: { turn_id, tool: d.tool, summary: str(d.summary) } };
-    case "chat/message": return { seq, ts, channel: "chat", type: "message", data: { turn_id, text: str(d.text), cards: parseCards(d.cards), closing: str(d.closing) } };
+    case "chat/message": return { seq, ts, channel: "chat", type: "message", data: { turn_id, text: str(d.text), cards: parseChatCards(d.cards), closing: str(d.closing) } };
+    case "chat/conversation":
+      if (typeof d.conversation_id !== "string" || !d.conversation_id) return null;
+      return { seq, ts, channel: "chat", type: "conversation", data: { turn_id, conversation_id: d.conversation_id } };
+    case "chat/navigate": {
+      const path = safePath(d.path);
+      return path ? { seq, ts, channel: "chat", type: "navigate", data: { turn_id, path } } : null;
+    }
     case "chat/proposal":
       if (typeof d.proposal_id !== "string") return null;
-      if (d.action !== "checkout" && d.action !== "cancel_order") return null;
+      if (d.action !== "checkout_redirect" && d.action !== "cancel_order") return null;
       return { seq, ts, channel: "chat", type: "proposal", data: { turn_id, proposal_id: d.proposal_id, action: d.action, args: isRec(d.args) ? d.args : {}, summary: str(d.summary) } };
     case "chat/turn_done": return { seq, ts, channel: "chat", type: "turn_done", data: { turn_id, source: d.source === "llm" ? "llm" : "rules" } };
     case "chat/error": return { seq, ts, channel: "chat", type: "error", data: { turn_id, message: str(d.message) } };
@@ -163,6 +177,11 @@ export function toCheckoutEvent(message: SocketMessage): CheckoutEvent | null {
 /** A `chat` channel message, or null. */
 export function toChatMessage(message: SocketMessage): ChatWsMessage | null {
   return message.channel === "chat" ? message : null;
+}
+
+/** Where a `navigate` chat message sends the app, or null for any other message (or an unsafe path). */
+export function toNavigate(message: SocketMessage): string | null {
+  return message.channel === "chat" && message.type === "navigate" ? safePath(message.data.path) : null;
 }
 
 /** An `order` channel status change, or null. */

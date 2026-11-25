@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseStored, pickConversation, trimStored } from "./chatStorage";
+import { parseStored, persistable, pickConversation, trimStored } from "./chatStorage";
 
 describe("stored chat", () => {
   it("reads what it wrote", () => {
@@ -31,5 +31,15 @@ describe("which conversation a tab is in", () => {
   });
   it("starts a new one when nothing usable is remembered", () => {
     for (const raw of [null, "", "nope", "[]", JSON.stringify({ identity: "U-03" }), JSON.stringify({ identity: "U-03", id: "" })]) expect(pickConversation(raw, "U-03", () => "new")).toBe("new");
+  });
+});
+
+describe("what is stored per identity", () => {
+  const chat = { texts: { T1: "hello" }, decided: {} };
+  it("keeps the transcript for a guest", () => {
+    expect(persistable("anon", chat)).toEqual(chat);
+  });
+  it("stores nothing but the conversation id for a signed-in user: the server holds the transcript", () => {
+    expect(persistable("U-03", chat)).toBeNull();
   });
 });

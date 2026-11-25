@@ -4,5 +4,4 @@
 .details { margin: 0; padding-left: 18px; display: grid; gap: 2px; color: var(--muted); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .note { color: var(--pill-warning-ink); background: var(--pill-warning-bg); border: 1px solid var(--notice-border); border-radius: var(--radius-control); padding: 6px 10px; font-size: var(--fs-small); line-height: 16px; }
-.saga { display: grid; gap: 10px; }
 .result { font-size: var(--fs-body); }

@@ -52,16 +52,18 @@ export function argsSummary(args: Record<string, unknown> | null): string {
 
 /** What a proposal is about, one line each, for the confirmation card. */
 export function proposalDetails(action: string, args: Record<string, unknown>): string[] {
-  if (action === "checkout") {
-    return [typeof args.payment_method === "string" ? `Pay with: ${paymentLabel(args.payment_method)}` : "Pay with: the default demo card"];
-  }
   if (action === "cancel_order" && typeof args.order_id === "string") return [`Order ${args.order_id}`];
   return [];
 }
 
 /** The button label for confirming a proposal, in the action's own words. */
 export function confirmLabel(action: string): string {
-  if (action === "checkout") return "Place order";
+  if (action === "checkout_redirect") return "Yes, check out";
   if (action === "cancel_order") return "Cancel order";
   return "Confirm";
+}
+
+/** The button label for declining it. */
+export function dismissLabel(action: string): string {
+  return action === "checkout_redirect" ? "Not now" : "Dismiss";
 }

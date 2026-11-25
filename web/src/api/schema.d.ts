@@ -338,6 +338,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Conversations
+         * @description Saved chats, most recently updated first.
+         */
+        get: operations["list_conversations_api_chat_conversations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/conversations/{conversation_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Messages
+         * @description One chat's messages, oldest first (the last 200).
+         */
+        get: operations["list_messages_api_chat_conversations__conversation_id__messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Conversation */
+        delete: operations["delete_conversation_api_chat_conversations__conversation_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Conversation */
+        patch: operations["rename_conversation_api_chat_conversations__conversation_id__patch"];
+        trace?: never;
+    };
     "/api/ws/schema": {
         parameters: {
             query?: never;
@@ -445,6 +503,40 @@ export interface components {
             /** Product Id */
             product_id?: string | null;
         };
+        /**
+         * ChatConversation
+         * @description A signed-in person's first message of a new chat: sent before `message`; the web app switches to this id.
+         */
+        ChatConversation: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "chat";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "conversation";
+            data: components["schemas"]["ChatConversationData"];
+        };
+        /** ChatConversationData */
+        ChatConversationData: {
+            /** Turn Id */
+            turn_id: string;
+            /**
+             * Conversation Id
+             * @description The server-made id of the conversation this turn was saved to; use it for the next messages.
+             */
+            conversation_id: string;
+        };
         /** ChatError */
         ChatError: {
             /**
@@ -530,6 +622,56 @@ export interface components {
              */
             closing: string;
         };
+        /** ChatMessageOut */
+        ChatMessageOut: {
+            /**
+             * Role
+             * @description user | assistant
+             */
+            role: string;
+            /** Text */
+            text: string;
+            /**
+             * Cards
+             * @description The cards shown with this message ([] when none).
+             */
+            cards: {
+                [key: string]: unknown;
+            }[];
+            /** Created At */
+            created_at: string;
+        };
+        /** ChatNavigate */
+        ChatNavigate: {
+            /**
+             * Seq
+             * @description Per-user, strictly increasing. 0 for system messages, which are not in the replay log.
+             */
+            seq: number;
+            /** Ts */
+            ts: string;
+            /**
+             * Channel
+             * @constant
+             */
+            channel: "chat";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "navigate";
+            data: components["schemas"]["ChatNavigateData"];
+        };
+        /** ChatNavigateData */
+        ChatNavigateData: {
+            /** Turn Id */
+            turn_id: string;
+            /**
+             * Path
+             * @description A shop page the web app should open, e.g. /cart or /p/P-1017.
+             */
+            path: string;
+        };
         /**
          * ChatProposal
          * @description Something the person must confirm: POST /api/chat/proposals/{proposal_id}/confirm (or /dismiss).
@@ -564,7 +706,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "checkout" | "cancel_order";
+            action: "checkout" | "checkout_redirect" | "cancel_order";
             /** Args */
             args: {
                 [key: string]: unknown;
@@ -834,6 +976,15 @@ export interface components {
             message: string;
             /** Shortages */
             shortages?: components["schemas"]["Shortage"][] | null;
+        };
+        /** ConversationOut */
+        ConversationOut: {
+            /** Conversation Id */
+            conversation_id: string;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string;
         };
         /** EmptyData */
         EmptyData: Record<string, never>;
@@ -1151,6 +1302,14 @@ export interface components {
             price_max_cents: number;
             /** Fuzzy */
             fuzzy: boolean;
+        };
+        /** RenameIn */
+        RenameIn: {
+            /**
+             * Title
+             * @description Trimmed first; 1-80 characters after that.
+             */
+            title: string;
         };
         /** ServiceHealth */
         ServiceHealth: {
@@ -2463,6 +2622,240 @@ export interface operations {
             };
         };
     };
+    list_conversations_api_chat_conversations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationOut"][];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_messages_api_chat_conversations__conversation_id__messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessageOut"][];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_conversation_api_chat_conversations__conversation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rename_conversation_api_chat_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationOut"];
+                };
+            };
+            /** @description Error envelope */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     ws_schema_api_ws_schema_get: {
         parameters: {
             query?: never;
@@ -2478,7 +2871,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SystemAuthOk"] | components["schemas"]["SystemHello"] | components["schemas"]["SystemResync"] | components["schemas"]["CheckoutStep"] | components["schemas"]["CheckoutDone"] | components["schemas"]["CheckoutFailed"] | components["schemas"]["CheckoutInterrupted"] | components["schemas"]["OrderStatus"] | components["schemas"]["ChatTurnStarted"] | components["schemas"]["ChatToolCall"] | components["schemas"]["ChatToolResult"] | components["schemas"]["ChatMessage"] | components["schemas"]["ChatProposal"] | components["schemas"]["ChatTurnDone"] | components["schemas"]["ChatError"];
+                    "application/json": components["schemas"]["SystemAuthOk"] | components["schemas"]["SystemHello"] | components["schemas"]["SystemResync"] | components["schemas"]["CheckoutStep"] | components["schemas"]["CheckoutDone"] | components["schemas"]["CheckoutFailed"] | components["schemas"]["CheckoutInterrupted"] | components["schemas"]["OrderStatus"] | components["schemas"]["ChatTurnStarted"] | components["schemas"]["ChatConversation"] | components["schemas"]["ChatToolCall"] | components["schemas"]["ChatToolResult"] | components["schemas"]["ChatNavigate"] | components["schemas"]["ChatMessage"] | components["schemas"]["ChatProposal"] | components["schemas"]["ChatTurnDone"] | components["schemas"]["ChatError"];
                 };
             };
             /** @description Successful Response */

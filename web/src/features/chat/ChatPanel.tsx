@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useChat } from "./ChatContext";
+import { ChatList } from "./ChatList";
 import { TurnView } from "./TurnView";
 import styles from "./ChatPanel.module.css";
 
@@ -9,8 +10,9 @@ const PRODUCT_QUESTIONS = ["Is it in stock?", "Which sizes are left?", "Show me 
 
 /** The assistant: a transcript that follows the conversation as it streams in, and a composer that always knows which page you are on. */
 export function ChatPanel() {
-  const { turns, signedIn, send, newChat, pageProduct, focusTick } = useChat();
+  const { turns, signedIn, send, newChat, pageProduct, focusTick, conversationId, historyLoading, historyError, openConversation, conversationDeleted } = useChat();
   const [draft, setDraft] = useState("");
+  const [listing, setListing] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -43,8 +45,17 @@ export function ChatPanel() {
   return (
     <div className={styles.panel}>
       <div className={styles.bar}>
-        <button type="button" className="btn text" onClick={() => { stick.current = true; newChat(); input.current?.focus(); }} disabled={turns.length === 0}>New chat</button>
+        {signedIn && <button type="button" className="btn text" aria-pressed={listing} onClick={() => setListing((v) => !v)}>{listing ? "Back to chat" : "Chats"}</button>}
+        <button type="button" className="btn text" onClick={() => { stick.current = true; setListing(false); newChat(); input.current?.focus(); }} disabled={turns.length === 0}>New chat</button>
       </div>
+      {signedIn && listing ? (
+        <ChatList
+          currentId={conversationId}
+          onOpen={(id) => { stick.current = true; setListing(false); openConversation(id); }}
+          onNew={() => { setListing(false); newChat(); }}
+          onDeleted={conversationDeleted}
+        />
+      ) : (<>
       <div
         ref={log}
         className={styles.log}
@@ -53,7 +64,10 @@ export function ChatPanel() {
         aria-live="polite"
         onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}
       >
-        {turns.length === 0 ? (
+        {historyError && <p className={styles.notice} role="alert">{historyError}</p>}
+        {turns.length === 0 && historyLoading ? (
+          <p className="muted" role="status">Loading this chat{"…"}</p>
+        ) : turns.length === 0 ? (
           <div className={styles.empty}>
             <p className={styles.emptyTitle}>Ask about products, stock, your cart or your orders</p>
             <p className="muted">
@@ -96,6 +110,7 @@ export function ChatPanel() {
           <button type="submit" className="btn primary" aria-disabled={!draft.trim()}>Send</button>
         </div>
       </form>
+      </>)}
     </div>
   );
 }

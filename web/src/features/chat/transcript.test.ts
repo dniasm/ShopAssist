@@ -1,21 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { ChatCard, ChatWsMessage, OrderStatusData } from "../../api/types";
-import type { CheckoutEvent } from "../session/events";
-import { chatReducer, initialChat, isWorking, type ChatAction, type ChatState } from "./transcript";
+import { chatReducer, fromHistory, initialChat, isWorking, type ChatAction, type ChatState } from "./transcript";
 
 const TS = "2026-01-01T00:00:00Z";
 const started = (seq: number, turn: string): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "turn_started", data: { turn_id: turn } });
 const call = (seq: number, turn: string, tool: string, args: Record<string, unknown> = {}): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "tool_call", data: { turn_id: turn, tool, args } });
 const result = (seq: number, turn: string, tool: string, summary = "ok"): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "tool_result", data: { turn_id: turn, tool, summary } });
 const say = (seq: number, turn: string, text: string, cards: ChatCard[] = []): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "message", data: { turn_id: turn, text, cards, closing: "" } });
-const propose = (seq: number, turn: string, id: string, action: "checkout" | "cancel_order", args: Record<string, unknown> = {}): ChatWsMessage =>
+const propose = (seq: number, turn: string, id: string, action: "checkout_redirect" | "cancel_order", args: Record<string, unknown> = {}): ChatWsMessage =>
   ({ seq, ts: TS, channel: "chat", type: "proposal", data: { turn_id: turn, proposal_id: id, action, args, summary: `Do ${action}` } });
 const done = (seq: number, turn: string, source: "llm" | "rules" = "llm"): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "turn_done", data: { turn_id: turn, source } });
 const oops = (seq: number, turn: string, message = "boom"): ChatWsMessage => ({ seq, ts: TS, channel: "chat", type: "error", data: { turn_id: turn, message } });
 const chat = (message: ChatWsMessage): ChatAction => ({ type: "chat", message });
 
-const step = (order: string, name: "VALIDATING" | "RESERVING" | "CHARGING" | "CONFIRMING", state: "STARTED" | "SUCCEEDED"): CheckoutEvent => ({ kind: "step", data: { order_id: order, step: name, state, message: "" } });
-const checkout = (seq: number, event: CheckoutEvent): ChatAction => ({ type: "checkout", seq, event });
 const status = (seq: number, order: string, s: string): ChatAction => ({ type: "order_status", seq, data: { order_id: order, status: s, message: s.toLowerCase(), event_id: seq } satisfies OrderStatusData });
 
 /** Turns the tests talk about belong to the conversation (their questions were remembered); `fresh` is a conversation that owns none. */
@@ -116,16 +113,16 @@ describe("reconnect and refresh replay", () => {
 });
 
 describe("proposals", () => {
-  const withProposal = (action: "checkout" | "cancel_order" = "checkout", args: Record<string, unknown> = { payment_method: "card_ok" }) =>
+  const withProposal = (action: "checkout_redirect" | "cancel_order" = "checkout_redirect", args: Record<string, unknown> = {}) =>
     run([chat(started(1, "T1")), chat(propose(2, "T1", "PR-1", action, args)), chat(done(3, "T1"))]);
   const proposal = (s: ChatState) => s.turns[0]?.proposals[0];
 
   it("arrives pending, once, even if the event is replayed", () => {
-    const s = run([chat(propose(2, "T1", "PR-1", "checkout"))]);
+    const s = run([chat(propose(2, "T1", "PR-1", "checkout_redirect"))]);
     expect(s.turns[0]?.proposals).toHaveLength(1);
     expect(proposal(s)).toMatchObject({ id: "PR-1", state: "pending", follow: null });
-    expect(run([chat(propose(2, "T1", "PR-1", "checkout"))], s).turns[0]?.proposals).toHaveLength(1);
-    expect(run([chat(propose(9, "T1", "PR-1", "checkout"))], s).turns[0]?.proposals).toHaveLength(1);   // same id, new seq: still one
+    expect(run([chat(propose(2, "T1", "PR-1", "checkout_redirect"))], s).turns[0]?.proposals).toHaveLength(1);
+    expect(run([chat(propose(9, "T1", "PR-1", "checkout_redirect"))], s).turns[0]?.proposals).toHaveLength(1);   // same id, new seq: still one
   });
 
   it("can be decided once: confirm, then no second confirm, no dismiss", () => {
@@ -152,41 +149,16 @@ describe("proposals", () => {
     expect(proposal(s)).toMatchObject({ state: "pending", note: "Can't reach the shop" });
   });
 
-  it("confirmed checkout: its result is the next checkout the server runs, shown as steps, then the outcome", () => {
-    let s = withProposal();
-    s = run([chat(say(4, "T1", "x"))], s);                   // maxSeq = 4 at the click
-    s = run([{ type: "proposal_confirming", id: "PR-1" }, { type: "proposal_confirmed", id: "PR-1" }], s);
-    expect(proposal(s)).toMatchObject({ state: "confirmed", confirmedAfterSeq: 4, follow: { kind: "checkout", orderId: null } });
-    s = run([
-      checkout(5, step("O-77", "VALIDATING", "STARTED")), checkout(6, step("O-77", "VALIDATING", "SUCCEEDED")), checkout(7, step("O-77", "RESERVING", "STARTED")),
-    ], s);
-    const f = proposal(s)?.follow;
-    expect(f && f.kind === "checkout" ? f.orderId : null).toBe("O-77");
-    expect(f && f.kind === "checkout" ? f.saga?.steps.RESERVING.status : null).toBe("active");
-    s = run([checkout(8, step("O-77", "RESERVING", "SUCCEEDED")), checkout(9, step("O-77", "CHARGING", "STARTED"))], s);
-    const g = proposal(s)?.follow;
-    expect(g && g.kind === "checkout" ? g.saga?.steps.CHARGING.status : null).toBe("active");
-    expect(s.decided["PR-1"]).toMatchObject({ state: "confirmed", orderId: "O-77" });
+  it("a confirmed checkout_redirect has nothing to follow: the server navigates and says so in a message", () => {
+    const s = run([{ type: "proposal_confirming", id: "PR-1" }, { type: "proposal_confirmed", id: "PR-1" }], withProposal());
+    expect(proposal(s)).toMatchObject({ action: "checkout_redirect", state: "confirmed", follow: null });
+    expect(run([chat(say(5, "T1", "Taking you to checkout."))], s).turns[0]?.messages.map((m) => m.text)).toEqual(["Taking you to checkout."]);
   });
 
-  it("a checkout from before the click, or of another order, is not its result", () => {
-    let s = run([chat(say(4, "T1", "x"))], withProposal());
-    s = run([{ type: "proposal_confirming", id: "PR-1" }, { type: "proposal_confirmed", id: "PR-1" }], s);
-    s = run([checkout(3, step("O-OLD", "CHARGING", "STARTED"))], s);            // seq 3 <= 4: older than the click (a replay)
-    expect(proposal(s)?.follow).toMatchObject({ kind: "checkout", orderId: null });
-    s = run([checkout(5, step("O-77", "VALIDATING", "STARTED")), checkout(6, step("O-88", "VALIDATING", "STARTED"))], s);
-    const f = proposal(s)?.follow;
-    expect(f && f.kind === "checkout" ? f.orderId : null).toBe("O-77");        // O-88 does not steal it
-  });
-
-  it("a refresh after confirming: the persisted decision keeps it confirmed and the replay rebuilds the same outcome", () => {
-    let live = run([chat(say(4, "T1", "x"))], withProposal());
-    live = run([{ type: "proposal_confirming", id: "PR-1" }, { type: "proposal_confirmed", id: "PR-1" }, checkout(5, step("O-77", "CHARGING", "STARTED"))], live);
-    const wire: ChatAction[] = [chat(started(1, "T1")), chat(propose(2, "T1", "PR-1", "checkout", { payment_method: "card_ok" })), chat(done(3, "T1")), chat(say(4, "T1", "x")), checkout(5, step("O-77", "CHARGING", "STARTED")), checkout(6, step("O-77", "CHARGING", "SUCCEEDED"))];
-    const rebuilt = run(wire, initialChat({ texts: { T1: "checkout please" }, decided: live.decided }));
-    expect(proposal(rebuilt)?.state).toBe("confirmed");
-    const f = proposal(rebuilt)?.follow;
-    expect(f && f.kind === "checkout" ? f.saga?.steps.CHARGING.status : null).toBe("done");
+  it("a refresh keeps a decided proposal decided", () => {
+    const live = run([{ type: "proposal_confirming", id: "PR-1" }, { type: "proposal_confirmed", id: "PR-1" }], withProposal());
+    const wire: ChatAction[] = [chat(started(1, "T1")), chat(propose(2, "T1", "PR-1", "checkout_redirect")), chat(done(3, "T1"))];
+    expect(proposal(run(wire, initialChat({ texts: { T1: "checkout please" }, decided: live.decided })))?.state).toBe("confirmed");
   });
 
   it("confirmed cancel: follows that order's status events after the click, forward only", () => {
@@ -229,5 +201,45 @@ describe("conversations", () => {
   });
   it("reset clears everything", () => {
     expect(run([chat(started(1, "T1")), { type: "reset" }]).turns).toHaveLength(0);
+  });
+});
+
+describe("saved conversations", () => {
+  const history = [
+    { role: "user", text: "any hoodies?", cards: [], created_at: "t1" },
+    { role: "assistant", text: "Here you go", cards: [{ kind: "products", data: { products: [] } }, { kind: "bogus", data: {} }], created_at: "t2" },
+    { role: "user", text: "and in red?", cards: [], created_at: "t3" },
+    { role: "assistant", text: "None in red.", cards: [], created_at: "t4" },
+  ];
+  it("fromHistory builds one finished turn per question, with the answer and its cards", () => {
+    const turns = fromHistory(history);
+    expect(turns).toHaveLength(2);
+    expect(turns[0]?.request?.text).toBe("any hoodies?");
+    expect(turns[0]?.messages).toEqual([{ text: "Here you go", cards: [{ kind: "products", data: { products: [] } }], closing: "" }]);
+    expect(turns[0]).toMatchObject({ done: true, sending: false, error: null, proposals: [] });
+    expect(turns[1]?.messages[0]?.text).toBe("None in red.");
+    expect(new Set(turns.map((t) => t.key)).size).toBe(2);
+  });
+  it("keeps an answer that has no question before it, and skips unknown roles", () => {
+    const odd = [{ role: "assistant", text: "Welcome", cards: [], created_at: "t" }, { role: "system", text: "x", cards: [], created_at: "t" }];
+    const turns = fromHistory(odd);
+    expect(turns).toHaveLength(1);
+    expect(turns[0]).toMatchObject({ request: null });
+    expect(turns[0]?.messages[0]?.text).toBe("Welcome");
+  });
+  it("a loaded conversation replaces the transcript, and a live turn can follow it", () => {
+    let s = run([{ type: "user_sent", localId: "L0", text: "old", context: { path: "/" } }], fresh());
+    s = chatReducer(s, { type: "loaded", turns: fromHistory(history) });
+    expect(s.turns.map((t) => t.request?.text)).toEqual(["any hoodies?", "and in red?"]);
+    s = chatReducer(s, { type: "user_sent", localId: "L1", text: "thanks", context: { path: "/" } });
+    expect(s.turns).toHaveLength(3);
+  });
+  it("conversation and navigate events change nothing in the transcript (the provider acts on them)", () => {
+    const conv: ChatWsMessage = { seq: 2, ts: TS, channel: "chat", type: "conversation", data: { turn_id: "T1", conversation_id: "C-1" } };
+    const nav: ChatWsMessage = { seq: 3, ts: TS, channel: "chat", type: "navigate", data: { turn_id: "T1", path: "/checkout" } };
+    const s = run([chat(started(1, "T1"))]);
+    const after = run([chat(conv), chat(nav)], s);
+    expect(strip(after)).toBe(strip(s));
+    expect(run([chat(conv), chat(nav)], fresh()).turns).toEqual([]);
   });
 });
