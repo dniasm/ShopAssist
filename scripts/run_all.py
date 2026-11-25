@@ -87,7 +87,7 @@ PROCESSES: list[Proc] = [
     Proc("order", "services.order.server", "ORDER_ADDR", "localhost:50053", "grpc", optional=True),
     Proc("customer", "services.customer.server", "CUSTOMER_ADDR", "localhost:50054", "grpc"),
     Proc("payment", "services.payment.server", "PAYMENT_ADDR", "localhost:50055", "grpc", optional=True),
-    Proc("assistant", "services.assistant.server", "ASSISTANT_ADDR", "localhost:50056", "grpc", optional=True),  # module arrives with the assistant service
+    Proc("assistant", "services.assistant.server", "ASSISTANT_ADDR", "localhost:50056", "grpc"),
     Proc("orchestrator", "orchestrator.main", "ORCHESTRATOR_PORT", "8011", "http", ready_path="/api/health"),
 ]
 WEB = Proc("web", "", None, "5173", "http", ready_path="/", ready_host="localhost")  # `npm run dev` in web/, only with --web

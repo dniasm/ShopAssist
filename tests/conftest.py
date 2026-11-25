@@ -232,6 +232,50 @@ def payment_ro_running(loop_thread, session_dbs, seed_dir):
 
 
 @pytest.fixture(scope="session")
+def assistant_ro_running(loop_thread, session_dbs):
+    """Session-wide assistant service for read-only API tests (health, wiring); its own tests use `assistant_running`."""
+    from services.assistant.server import create_service
+    r = start(loop_thread, session_dbs, "assistant", create_service)
+    yield r
+    stop(loop_thread, session_dbs, r)
+
+
+class FakeClock:
+    """The assistant service's clock in tests: starts at a fixed instant and only moves when told to."""
+
+    def __init__(self):
+        from datetime import datetime, timezone
+        self._now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+    def now(self):
+        return self._now
+
+    def advance(self, **kwargs):
+        from datetime import timedelta
+        self._now += timedelta(**kwargs)
+
+
+@pytest.fixture
+def assistant_clock():
+    return FakeClock()
+
+
+@pytest.fixture
+def assistant_running(loop_thread, temp_dbs, assistant_clock):
+    """A fresh assistant service per test, on a clock the test controls."""
+    from services.assistant.server import create_service
+    r = start(loop_thread, temp_dbs, "assistant", create_service, clock=assistant_clock.now)
+    yield r
+    stop(loop_thread, temp_dbs, r)
+
+
+@pytest.fixture
+def assistant(assistant_running):
+    with authchan.channel(assistant_running.addr) as ch:
+        yield pb_grpc.AssistantServiceStub(ch)
+
+
+@pytest.fixture(scope="session")
 def order_ro_running(loop_thread, session_dbs, seed_dir, catalog_running, inventory_ro_running, payment_ro_running):
     from services.order.server import create_service
     r = start(
