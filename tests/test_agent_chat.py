@@ -123,9 +123,9 @@ def count_calls(shop, name):
     return calls
 
 
-# Invariant: a proposal never acts by itself. Until the person confirms, the Order service has not seen a Checkout or a
-# CancelOrder call and no order exists. After one confirm there is exactly one checkout, however often confirm is hit.
-def test_checkout_is_only_a_proposal_until_confirmed_and_confirms_once(make_shop):
+# Invariant: checkout never orders. The assistant only proposes going to the checkout page; the Order service sees no call.
+# (Confirming a checkout_redirect proposal is reworked in the routes task; the old "confirm places the order" test is gone.)
+def test_checkout_is_only_a_redirect_proposal_and_never_orders(make_shop):
     shop = make_shop()
     headers, ws = open_chat(shop)
     checkouts = count_calls(shop, "Checkout")
@@ -134,19 +134,11 @@ def test_checkout_is_only_a_proposal_until_confirmed_and_confirms_once(make_shop
     say(shop, headers, "ok I'm ready to pay, place the order")
     msgs = turn(ws)
     proposal = next(m for m in msgs if m["type"] == "proposal")["data"]
-    assert proposal["action"] == "checkout" and proposal["proposal_id"].startswith("PR-")
+    assert proposal["action"] == "checkout_redirect" and proposal["proposal_id"].startswith("PR-")
     assert types(msgs).index("proposal") < types(msgs).index("message")
-    assert "until you confirm" in next(m for m in msgs if m["type"] == "message")["data"]["text"]
+    assert "Are you sure you'd like to check out?" in next(m for m in msgs if m["type"] == "message")["data"]["text"]
     assert checkouts == [] and rows(shop.stack.order.url, "SELECT count(*) FROM orders WHERE order_id > 'O-2'") == [(0,)]
     assert len(shop.client.get("/api/cart", headers=headers).json()["lines"]) == 1  # still in the cart
-
-    url = f"/api/chat/proposals/{proposal['proposal_id']}/confirm"
-    assert shop.client.post(url, headers=headers).status_code == 202
-    assert shop.client.post(url, headers=headers).status_code == 409  # a double click is refused, not repeated
-    done = ws.until("done")[-1]["data"]["order"]  # the normal checkout channel carries the result
-    assert done["status"] == "CONFIRMED" and len(checkouts) == 1
-    assert rows(shop.stack.order.url, "SELECT count(*) FROM orders WHERE order_id > 'O-2'") == [(1,)]
-    assert checkouts[0].idempotency_key == proposal["proposal_id"]  # the key is the proposal: it can never order twice
 
 
 def test_another_users_proposal_is_not_found_and_a_dismissed_one_cannot_be_confirmed(make_shop):

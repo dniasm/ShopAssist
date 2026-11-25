@@ -8,7 +8,7 @@ import logging
 import re
 
 from orchestrator.agent import rules
-from orchestrator.agent.prompt import REQUIRED, SCHEMA, SCHEMA_NAME, SYSTEM_PROMPT, TOOL_ARGS, build_user_prompt
+from orchestrator.agent.prompt import REQUIRED, SCHEMA, SCHEMA_NAME, LEGACY_SYSTEM_PROMPT, TOOL_ARGS, build_user_prompt
 from orchestrator.llm import LLMError
 
 log = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ async def plan_next_action(query: str, history: list[dict], context: dict, *, ll
         known = known_ids(query, history, context, tool_results)
         try:
             return await llm.complete_json(
-                SYSTEM_PROMPT, build_user_prompt(query, history, context, tool_results), SCHEMA_NAME, SCHEMA,
+                LEGACY_SYSTEM_PROMPT, build_user_prompt(query, history, context, tool_results), SCHEMA_NAME, SCHEMA,
                 lambda data: parse_action(data, known), max_tokens=AGENT_MAX_TOKENS,
             )
         except LLMError as e:

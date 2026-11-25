@@ -11,7 +11,8 @@ import re
 from orchestrator.agent import rules
 from orchestrator.agent.planner import plan_next_action
 from orchestrator.agent.state import ConversationMemory, ProposalStore
-from orchestrator.agent.tools import AgentTools
+from orchestrator.agent.legacy_tools import LegacyTools
+from orchestrator.agent.tools import AgentTools, product_list
 from orchestrator.cart import priced_cart
 from orchestrator.clients import Clients
 from orchestrator.errors import ApiError
@@ -27,7 +28,7 @@ ID = re.compile(r"\b[PO]-\d+\b")
 class AgentLoop:
     def __init__(self, clients: Clients, hub: EventHub, proposals: ProposalStore, memory: ConversationMemory, llm=None):
         self.clients, self.hub, self.memory, self.llm = clients, hub, memory, llm
-        self.tools = AgentTools(clients, proposals)
+        self.tools = LegacyTools(AgentTools(clients, proposals))
         self._locks: dict[str, asyncio.Lock] = {}
 
     def emit(self, owner: str, type_: str, data: dict) -> None:
@@ -114,17 +115,7 @@ class AgentLoop:
     def product_list(card: dict, viewing: dict | None) -> tuple[str, str, dict]:
         """A product list is answered by its cards (each one links to its page), not by repeating names and prices in words.
         On a product page, a list of that product's category is "similar to" it, and the product itself is left out of it."""
-        products, total = card["data"]["products"], card["data"]["total"]
-        if viewing and any(p.get("category") != viewing.get("category") for p in products):
-            viewing = None  # e.g. "show me hoodies" while looking at a watch: not similar, just a search
-        if viewing and any(p["product_id"] == viewing["product_id"] for p in products):
-            products = [p for p in products if p["product_id"] != viewing["product_id"]]
-            total -= 1
-        if viewing:
-            intro = f"There are {total} similar products to {viewing['name']}:"
-        else:
-            intro = f"I found {total} product{'' if total == 1 else 's'} for you:"
-        return intro, "Do any of them pique your interest?", {**card, "data": {**card["data"], "products": products, "total": total}}
+        return product_list(card, viewing)
 
     @staticmethod
     def entities(results: list[dict]) -> dict:
