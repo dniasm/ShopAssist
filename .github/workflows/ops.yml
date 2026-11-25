@@ -1,4 +1,5 @@
 name: "Ops · Tooling"
+run-name: "Ops · Tooling · ${{ github.event.pull_request.title || github.ref_name }}"
 
 on:
   push:
