@@ -1,0 +1,18 @@
+name: "Assistant · AI"
+run-name: "Assistant · AI · ${{ github.event.pull_request.title || github.ref_name }}"
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.head_ref || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    uses: ./.github/workflows/_python-tests.yml
+    with:
+      name: "Assistant AI tests"
+      tests: tests/test_agent_*.py tests/test_llm.py tests/test_keypool.py tests/test_embed.py tests/test_eval_scorer.py

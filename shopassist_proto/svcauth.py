@@ -28,7 +28,7 @@ HEALTH_CHECK_METHOD = "/grpc.health.v1.Health/Check"
 
 # caller -> services it may call. The Order saga reads prices from the catalog, so `order` may reach it.
 CALLERS: dict[str, tuple[str, ...]] = {
-    "orchestrator": ("catalog", "inventory", "order", "customer", "payment"),
+    "orchestrator": ("catalog", "inventory", "order", "customer", "payment", "assistant"),
     "order": ("catalog", "inventory", "payment"),
 }
 KEY_VARS = {caller: f"SVC_KEY_{caller.upper()}" for caller in CALLERS}

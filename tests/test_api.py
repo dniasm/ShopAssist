@@ -13,10 +13,11 @@ from tests.fixtures import DEMO_PASSWORD, EMAIL_OF, INVENTORY, PRODUCTS, SKUS, U
 
 
 @pytest.fixture(scope="module")
-def settings(catalog_running, inventory_ro_running, customer_running, order_ro_running, payment_ro_running):
+def settings(catalog_running, inventory_ro_running, customer_running, order_ro_running, payment_ro_running, assistant_ro_running):
     return Settings(
         catalog_addr=catalog_running.addr, inventory_addr=inventory_ro_running.addr, customer_addr=customer_running.addr,
-        order_addr=order_ro_running.addr, payment_addr=payment_ro_running.addr, session_secret="test-secret", llm_api_keys=(),
+        order_addr=order_ro_running.addr, payment_addr=payment_ro_running.addr, assistant_addr=assistant_ro_running.addr,
+        session_secret="test-secret", llm_api_keys=(),
     )
 
 
@@ -55,7 +56,7 @@ def test_health(client):
 def test_services_health_uses_grpc_health_for_each_service(client, settings):
     body = client.get("/api/health/services").json()
     assert body["all_up"] is True and body["checked_at"]
-    assert [s["name"] for s in body["services"]] == ["catalog", "inventory", "order", "customer", "payment"]
+    assert [s["name"] for s in body["services"]] == ["catalog", "inventory", "order", "customer", "payment", "assistant"]
     for s in body["services"]:
         assert s["status"] == "up" and s["error"] is None and s["latency_ms"] >= 0
         assert s["service"].startswith("shopassist.v2.") and ":" in s["address"]
@@ -69,7 +70,7 @@ def test_services_health_reports_a_dead_service_without_failing(settings):
     body = r.json()
     assert body["all_up"] is False
     assert {s["name"]: s["status"] for s in body["services"]} == {
-        "catalog": "up", "inventory": "down", "order": "up", "customer": "up", "payment": "up"}
+        "catalog": "up", "inventory": "down", "order": "up", "customer": "up", "payment": "up", "assistant": "up"}
     assert next(s for s in body["services"] if s["name"] == "inventory")["error"]
 
 

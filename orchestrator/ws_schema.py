@@ -154,9 +154,17 @@ class ChatMessageData(ChatTurnData):
     closing: str = Field("", description="Shown after the cards, e.g. a follow-up question under a product list.")
 
 
+class ChatConversationData(ChatTurnData):
+    conversation_id: str = Field(description="The server-made id of the conversation this turn was saved to; use it for the next messages.")
+
+
+class ChatNavigateData(ChatTurnData):
+    path: str = Field(description="A shop page the web app should open, e.g. /cart or /p/P-1017.")
+
+
 class ChatProposalData(ChatTurnData):
     proposal_id: str
-    action: Literal["checkout", "cancel_order"]
+    action: Literal["checkout_redirect", "cancel_order"]
     args: dict
     summary: str
 
@@ -193,6 +201,18 @@ class ChatMessage(_Chat):
     data: ChatMessageData
 
 
+class ChatConversation(_Chat):
+    """A signed-in person's first message of a new chat: sent before `message`; the web app switches to this id."""
+
+    type: Literal["conversation"]
+    data: ChatConversationData
+
+
+class ChatNavigate(_Chat):
+    type: Literal["navigate"]
+    data: ChatNavigateData
+
+
 class ChatProposal(_Chat):
     """Something the person must confirm: POST /api/chat/proposals/{proposal_id}/confirm (or /dismiss)."""
 
@@ -212,6 +232,6 @@ class ChatError(_Chat):
 
 WsMessage = Annotated[
     Union[SystemAuthOk, SystemHello, SystemResync, CheckoutStep, CheckoutDone, CheckoutFailed, CheckoutInterrupted, OrderStatus,
-          ChatTurnStarted, ChatToolCall, ChatToolResult, ChatMessage, ChatProposal, ChatTurnDone, ChatError],
+          ChatTurnStarted, ChatConversation, ChatToolCall, ChatToolResult, ChatNavigate, ChatMessage, ChatProposal, ChatTurnDone, ChatError],
     Field(discriminator="type"),
 ]

@@ -18,6 +18,9 @@ INTERRUPTED = (
 )
 
 
+_background: set = set()  # keeps fire-and-forget tasks alive until they finish
+
+
 def step_data(event: pb.CheckoutEvent) -> dict:
     data = {
         "order_id": event.order_id, "step": pb.CheckoutStep.Name(event.step),
@@ -58,6 +61,10 @@ async def forward(
         if event.state == pb.STEP_SUCCEEDED and fresh:
             await clear_cart(clients, user_id, cart_version)
         hub.publish(user_id, "checkout", *final_message(event))
+        if event.state == pb.STEP_SUCCEEDED and fresh:  # after `done`: a slow assistant service must not delay the shopper
+            background = asyncio.create_task(clear_temporal_facts(clients, user_id, event.order))
+            _background.add(background)
+            background.add_done_callback(_background.discard)
     except (grpc.aio.AioRpcError, ConnectionError) as e:
         log.warning("checkout %s: event stream failed: %s", first.order_id, e)
         # The outcome is UNKNOWN (recovery may still confirm the order), so this is never reported as `failed`.
@@ -76,6 +83,18 @@ async def clear_cart(clients: Clients, user_id: str, cart_version: int) -> None:
             log.info("cart of %s changed during checkout; left as it is", user_id)
         else:
             log.warning("could not clear the cart of %s after checkout: %s", user_id, e.message)
+
+
+async def clear_temporal_facts(clients: Clients, user_id: str, order: pb.Order) -> None:
+    """A bought item settles the user's current need for its category: forget those temporal facts. Never breaks checkout."""
+    categories = sorted({line.category for line in order.lines if line.category})
+    if not categories:
+        return
+    try:
+        await clients.call("assistant", clients.assistant.ClearTemporalFacts,
+                           pb.ClearTemporalFactsRequest(categories=categories), user_id=user_id)
+    except Exception as e:  # noqa: BLE001 - memory housekeeping must not affect the order
+        log.warning("could not clear temporal facts of %s after order %s: %s", user_id, order.order_id, type(e).__name__)
 
 
 def spawn(app_state, user_id: str, call, first: pb.CheckoutEvent, cart_version: int) -> bool:

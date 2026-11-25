@@ -49,6 +49,12 @@ export function pickConversation(raw: string | null, identity: string, make: () 
   return make();
 }
 
+/** What of the transcript state goes to sessionStorage: a guest's own words and decisions; nothing for a signed-in user, whose
+ *  transcript lives on the server (only the current conversation id is remembered, see rememberConversation). */
+export function persistable(identity: string, stored: StoredChat): StoredChat | null {
+  return identity === "anon" ? stored : null;
+}
+
 // Every access below is wrapped: the chat works without storage, a refresh just forgets the questions.
 export function currentConversation(identity: string): string {
   let raw: string | null = null;

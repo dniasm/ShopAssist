@@ -38,7 +38,7 @@ class ConversationMemory:
 class Proposal:
     proposal_id: str
     user_id: str
-    action: str  # "checkout" | "cancel_order"
+    action: str  # "checkout_redirect" | "cancel_order"
     args: dict
     summary: str
     turn_id: str

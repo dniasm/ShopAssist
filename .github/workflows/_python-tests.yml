@@ -1,12 +1,21 @@
-name: CI
+# Reusable: Postgres service + Python setup once; callers pass only the test paths.
+name: Python tests (reusable)
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
+    inputs:
+      name:
+        description: Job name shown in the Actions UI
+        type: string
+        default: pytest
+      tests:
+        description: Space-separated test paths/globs (shell-expanded)
+        type: string
+        required: true
 
 jobs:
-  backend:
+  pytest:
+    name: ${{ inputs.name }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -27,21 +36,4 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: cp .env.example .env && python scripts/db_setup.py
-      - run: pytest -q -rs
-
-  web:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - run: pytest -q -rs ${{ inputs.tests }}

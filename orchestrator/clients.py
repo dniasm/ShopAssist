@@ -22,6 +22,7 @@ SERVICES = {
     "order": ("shopassist.v2.OrderService", pb_grpc.OrderServiceStub, "order_addr"),
     "customer": ("shopassist.v2.CustomerService", pb_grpc.CustomerServiceStub, "customer_addr"),
     "payment": ("shopassist.v2.PaymentService", pb_grpc.PaymentServiceStub, "payment_addr"),
+    "assistant": ("shopassist.v2.AssistantService", pb_grpc.AssistantServiceStub, "assistant_addr"),
 }
 
 
@@ -36,6 +37,7 @@ class Clients:
         self.inventory = SERVICES["inventory"][1](self._channels["inventory"])
         self.order = SERVICES["order"][1](self._channels["order"])
         self.customer = SERVICES["customer"][1](self._channels["customer"])
+        self.assistant = SERVICES["assistant"][1](self._channels["assistant"])
 
     async def call(self, service: str, rpc, request, user_id: str | None = None):
         """Run one unary RPC with the standard deadline; `user_id` is forwarded as `x-user-id` metadata."""

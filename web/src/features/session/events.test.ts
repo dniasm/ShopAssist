@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SocketMessage } from "../../api/types";
 import { appendEvent, eventsOn } from "./eventLog";
-import { checkoutOrderId, parseSocketMessage, toCheckoutEvent, toOrderStatus } from "./events";
+import { checkoutOrderId, parseSocketMessage, toCheckoutEvent, toNavigate, toOrderStatus } from "./events";
 
 const frame = (o: unknown) => JSON.stringify(o);
 const USER = { user_id: "U-03", name: "Priya Raman", email: "p@example.com", city: "Seattle" };
@@ -107,5 +107,28 @@ describe("event log", () => {
     for (let i = 1; i <= 7; i++) log = appendEvent(log, e(i, i % 2 ? "checkout" : "order"), 5);
     expect(log.map((x) => x.seq)).toEqual([3, 4, 5, 6, 7]);
     expect(eventsOn(log, "checkout").map((x) => x.seq)).toEqual([3, 5, 7]);
+  });
+});
+
+describe("chat: navigate, conversation and checkout_redirect", () => {
+  it("toNavigate returns a relative path", () => {
+    expect(toNavigate(must(msg("chat", "navigate", { turn_id: "T1", path: "/checkout" })))).toBe("/checkout");
+    expect(toNavigate(must(msg("chat", "navigate", { turn_id: "T1", path: "/p/P-1017?x=1" })))).toBe("/p/P-1017?x=1");
+  });
+  it("rejects absolute URLs and anything not starting with a single slash", () => {
+    for (const path of ["https://evil.example", "//evil.example", "/\\evil", "cart", "", "javascript:alert(1)", "/a\nb", 5, null]) {
+      expect(parseSocketMessage(msg("chat", "navigate", { turn_id: "T1", path }))).toBeNull();
+    }
+  });
+  it("toNavigate ignores other messages", () => {
+    expect(toNavigate(must(msg("chat", "turn_started", { turn_id: "T1" })))).toBeNull();
+  });
+  it("parses the conversation event and needs an id", () => {
+    expect(must(msg("chat", "conversation", { turn_id: "T1", conversation_id: "C-9" }))).toMatchObject({ type: "conversation", data: { conversation_id: "C-9" } });
+    expect(parseSocketMessage(msg("chat", "conversation", { turn_id: "T1" }))).toBeNull();
+  });
+  it("accepts checkout_redirect proposals and no longer the old checkout action", () => {
+    expect(must(msg("chat", "proposal", { turn_id: "T1", proposal_id: "PR-1", action: "checkout_redirect", args: {}, summary: "s" }))).toMatchObject({ data: { action: "checkout_redirect" } });
+    expect(parseSocketMessage(msg("chat", "proposal", { turn_id: "T1", proposal_id: "PR-1", action: "checkout", args: {}, summary: "s" }))).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { argsSummary, confirmLabel, proposalDetails, toolLabel } from "./trace";
+import { argsSummary, confirmLabel, dismissLabel, proposalDetails, toolLabel } from "./trace";
 
 describe("route trace wording", () => {
   it("names each tool in the past and in the present tense", () => {
@@ -24,10 +24,10 @@ describe("route trace wording", () => {
 
 describe("proposals", () => {
   it("says what will be paid with or cancelled, and labels the confirm button for the action", () => {
-    expect(proposalDetails("checkout", { payment_method: "card_ok" })).toEqual(["Pay with: Card that works"]);
-    expect(proposalDetails("checkout", {})).toEqual(["Pay with: the default demo card"]);
+    expect(proposalDetails("checkout_redirect", {})).toEqual([]);
     expect(proposalDetails("cancel_order", { order_id: "O-5" })).toEqual(["Order O-5"]);
     expect(proposalDetails("something_else", {})).toEqual([]);
-    expect([confirmLabel("checkout"), confirmLabel("cancel_order"), confirmLabel("other")]).toEqual(["Place order", "Cancel order", "Confirm"]);
+    expect([confirmLabel("checkout_redirect"), confirmLabel("cancel_order"), confirmLabel("other")]).toEqual(["Yes, check out", "Cancel order", "Confirm"]);
+    expect([dismissLabel("checkout_redirect"), dismissLabel("cancel_order")]).toEqual(["Not now", "Dismiss"]);
   });
 });

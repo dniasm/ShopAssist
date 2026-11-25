@@ -1,6 +1,6 @@
-"""One-shot Docker step: create the five databases and service roles, idempotently, reusing db_setup's helpers.
+"""One-shot Docker step: create the six databases and service roles, idempotently, reusing db_setup's helpers.
 
-Reads PG_ADMIN_URL and <DB>_DB_PASSWORD (CATALOG, INVENTORY, ORDERS, CUSTOMER, PAYMENT) from the environment.
+Reads PG_ADMIN_URL and <DB>_DB_PASSWORD (CATALOG, INVENTORY, ORDERS, CUSTOMER, PAYMENT, ASSISTANT) from the environment.
 Re-running is safe: missing pieces are created, existing roles get their password re-applied, CONNECT stays locked down.
 """
 

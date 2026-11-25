@@ -28,6 +28,7 @@ class Settings:
     order_addr: str = "localhost:50053"
     customer_addr: str = "localhost:50054"
     payment_addr: str = "localhost:50055"  # only health-checked from here: the Order service is the one that charges
+    assistant_addr: str = "localhost:50056"
     port: int = 8011
     session_secret: str = field(default="", repr=False)  # signs session tokens; secret, so out of repr/logs
     session_max_age_seconds: int = 12 * 3600
@@ -53,6 +54,9 @@ class Settings:
     llm_limit_rpd: int = 1000
     llm_limit_tpm: int = 8000
     llm_limit_tpd: int = 200000
+    voyage_api_key: str = field(default="", repr=False)  # secret: embeddings for fact memory
+    voyage_model: str = "voyage-4-lite"
+    memory_model: str = "openai/gpt-oss-20b"  # cheap model that extracts facts from a chat turn
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -66,6 +70,7 @@ class Settings:
             order_addr=env("ORDER_ADDR") or d.order_addr,
             customer_addr=env("CUSTOMER_ADDR") or d.customer_addr,
             payment_addr=env("PAYMENT_ADDR") or d.payment_addr,
+            assistant_addr=env("ASSISTANT_ADDR") or d.assistant_addr,
             port=int(env("ORCHESTRATOR_PORT") or d.port),
             session_secret=env("SESSION_SECRET") or secrets.token_urlsafe(32),  # random: tokens die with the process
             signup_code=(env("SIGNUP_CODE") or "").strip(),
@@ -82,4 +87,7 @@ class Settings:
             llm_limit_rpd=int(env("LLM_LIMIT_RPD") or d.llm_limit_rpd),
             llm_limit_tpm=int(env("LLM_LIMIT_TPM") or d.llm_limit_tpm),
             llm_limit_tpd=int(env("LLM_LIMIT_TPD") or d.llm_limit_tpd),
+            voyage_api_key=(env("VOYAGE_API_KEY") or "").strip(),
+            voyage_model=env("VOYAGE_MODEL") or d.voyage_model,
+            memory_model=env("MEMORY_MODEL") or d.memory_model,
         )

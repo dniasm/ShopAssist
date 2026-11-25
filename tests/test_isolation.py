@@ -21,6 +21,7 @@ SERVICE_DBS = {
     "customer": ("CUSTOMER_DATABASE_URL", "customer"),
     "order": ("ORDER_DATABASE_URL", "orders"),
     "payment": ("PAYMENT_DATABASE_URL", "payment"),
+    "assistant": ("ASSISTANT_DATABASE_URL", "assistant"),
 }
 
 
@@ -57,7 +58,7 @@ def test_importing_the_orchestrator_loads_no_database_driver_at_runtime():
     assert out.stdout.strip() == "[]", out.stdout
 
 
-@pytest.mark.parametrize("service", ["catalog", "inventory", "customer", "order", "payment"])
+@pytest.mark.parametrize("service", ["catalog", "inventory", "customer", "order", "payment", "assistant"])
 def test_a_service_reads_only_its_own_database_url(service):
     own_var = SERVICE_DBS[service][0]
     for path in (SERVICES_DIR / service).rglob("*.py"):

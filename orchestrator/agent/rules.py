@@ -350,3 +350,27 @@ def compose(results: list[dict]) -> str:
     """The answer, from what the tools said (their summaries are already written for people)."""
     summaries = dict.fromkeys(r["summary"] for r in results[-3:] if r.get("summary"))  # a repeated call is said once
     return " ".join(summaries) or "Done."
+
+
+def to_tool_call(tool: str, args: dict) -> tuple[str, dict]:
+    """A rules action in the 8-tool vocabulary the model and the tools speak (the no-model fallback and the eval use this)."""
+    if tool == "search_products":
+        dollars = {k: (c // 100 if c % 100 == 0 else c / 100) for k in ("min_price", "max_price") if (c := args.get(f"{k}_cents"))}
+        return "search", {**{k: args[k] for k in ("query", "category", "color", "size", "brand", "sort") if args.get(k)}, **dollars}
+    if tool in ("get_product", "get_stock"):
+        return "product", {"ids": [args["product_id"]], **{k: args[k] for k in ("size", "color") if args.get(k)}}
+    if tool == "get_cart":
+        return "cart", {"action": "view"}
+    if tool == "add_to_cart":
+        return "cart", {"action": "add", **args}
+    if tool == "remove_from_cart":
+        return "cart", {"action": "remove", **{k: args[k] for k in ("product_id", "size", "color") if args.get(k)}}
+    if tool == "list_orders":
+        return "orders", {}
+    if tool == "get_order":
+        return "orders", {"order_id": args["order_id"]}
+    if tool == "propose_checkout":
+        return "checkout", {}
+    if tool == "propose_cancel_order":
+        return "cancel_order", {"order_id": args["order_id"]}
+    return tool, args

@@ -1,18 +1,22 @@
-"""Score the agent's first action against tests/eval/queries.jsonl.
+"""Score the agent's FIRST action against tests/eval/queries.jsonl.
 
 Usage (from the repo root):
-    python scripts/eval_agent.py --mode rules                 # rules parser (llm=None)
-    python scripts/eval_agent.py --mode llm                   # LLM with the keys in .env
+    python scripts/eval_agent.py --mode rules                 # rules planner, mapped to the 8 tools (no LLM)
+    python scripts/eval_agent.py --mode llm                   # the tool-calling model with the keys in .env
     python scripts/eval_agent.py --mode rules --limit 20 --tags basic,typo
 
-For each line, plan_next_action(query, history, context, llm=...) is called once, with no tool results,
-and its FIRST action is compared with expect:
-  - tool: exact string match
+llm mode builds the messages the chat loop builds (system prompt, memory block from the case's context and history, the
+message), calls llm.chat(messages, TOOLS) once and takes tool_calls[0] (or "reply" when the model called nothing).
+rules mode runs rules.plan and maps its action to the same tool names (rules.to_tool_call); lines tagged llm_only
+(the reported-bug cases that need the model) are skipped there. The action is compared with expect:
+  - tool: exact string match (lines tagged `names` are scored on args only)
   - expect.args: must be a subset of the actual args
       strings: case-insensitive equality
       query:   token containment (expected tokens are a subset of the actual tokens; lower-cased,
                simple plural strip on both sides)
       numbers: exact (an integer or a numeric string equal to it)
+      lists:   every expected item is in the actual list (product `ids`)
+  - expect.alt: other acceptable actions (same shape); any one of them also passes
 Prints overall accuracy, accuracy per tag and per expected tool, and the failures. Writes
 tests/eval/results/<mode>-<YYYYMMDD-HHMM>.json.
 
@@ -24,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import importlib
 import json
 import re
 import sys
@@ -35,10 +38,14 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from orchestrator.agent import rules  # noqa: E402
+from orchestrator.agent.compact import cart_summary  # noqa: E402
+from orchestrator.agent.loop import AgentLoop  # noqa: E402
+from orchestrator.agent.prompt import TOOLS  # noqa: E402
+
 EVAL_FILE = REPO / "tests" / "eval" / "queries.jsonl"
 RESULTS_DIR = REPO / "tests" / "eval" / "results"
 SEED = REPO / "data" / "seed" / "v2"
-PLANNER_MODULE = "orchestrator.agent.planner"
 
 
 # ----------------------------------------------------------------------------- pure matching
@@ -66,6 +73,9 @@ def arg_matches(key: str, expected, actual) -> tuple[bool, str]:
         if query_matches(expected, actual if isinstance(actual, str) else str(actual)):
             return True, ""
         return False, f"query {actual!r} lacks the words of {expected!r}"
+    if isinstance(expected, list):
+        ok = isinstance(actual, list) and all(str(e).lower() in {str(a).lower() for a in actual} for e in expected)
+        return ok, f"{key}: expected {expected!r}, got {actual!r}"
     if isinstance(expected, bool):
         return (actual is expected), f"{key}: expected {expected!r}, got {actual!r}"
     if isinstance(expected, int):
@@ -84,17 +94,21 @@ def arg_matches(key: str, expected, actual) -> tuple[bool, str]:
     return actual == expected, f"{key}: expected {expected!r}, got {actual!r}"
 
 
-def action_matches(expected: dict, actual: dict | None) -> tuple[bool, list[str]]:
-    """Tool exact; expected args a subset of the actual args. Returns (passed, reasons)."""
+def action_matches(expected: dict, actual: dict | None, args_only: bool = False) -> tuple[bool, list[str]]:
+    """Tool exact (unless args_only); expected args a subset of the actual args; any `alt` action also passes."""
     actual = actual or {}
     reasons: list[str] = []
-    if actual.get("tool") != expected["tool"]:
+    if not args_only and actual.get("tool") != expected["tool"]:
         reasons.append(f"tool {actual.get('tool')!r} != {expected['tool']!r}")
     actual_args = actual.get("args") or {}
     for key, value in expected.get("args", {}).items():
         ok, why = arg_matches(key, value, actual_args.get(key))
         if not ok:
             reasons.append(why)
+    if reasons:
+        for alt in expected.get("alt", []):
+            if action_matches(alt, actual, args_only)[0]:
+                return True, []
     return not reasons, reasons
 
 
@@ -129,14 +143,46 @@ def pool_usable(status: list[dict]) -> bool:
 
 
 def enrich_context(context: dict, products: dict[str, dict]) -> dict:
-    """Fill the product summary the planner expects (no gRPC; the seed is read once by the caller)."""
+    """Fill what the chat loop knows before the model runs: the page product summary and the cart text (with line ids)."""
     ctx = dict(context)
     pid = ctx.get("product_id")
     if pid and pid in products:
         p = products[pid]
         ctx["product"] = {"product_id": p["product_id"], "name": p["name"], "category": p["category"],
                           "price_cents": p["price_cents"], "colors": p["colors"], "sizes": p["sizes"]}
+    if view := ctx.pop("cart_view", None):
+        ctx["cart_text"] = cart_summary(view)
     return ctx
+
+
+def with_cards(history: list[dict], products: dict[str, dict]) -> list[dict]:
+    """History cards are stored as product ids; expand them to the product dicts the loop saves with a reply."""
+    return [{**t, "cards": [{"kind": c["kind"], "data": {"products": [products[i] for i in c["ids"]]}} for c in t.get("cards", [])]}
+            for t in history]
+
+
+def model_input(line: dict, products: dict[str, dict]) -> list[dict]:
+    """The messages the chat loop sends for this case: system prompt, memory block, the last exchange, the message."""
+    context = enrich_context(line["context"], products)
+    latest = [m for t in with_cards(line["history"], products)[-1:]
+              for m in ({"role": "user", "text": t["user"], "cards": []}, {"role": "assistant", "text": t["assistant"], "cards": t["cards"]})]
+    return AgentLoop.model_messages({"facts": [], "summary": "", "latest": latest}, context, line["query"])
+
+
+def rules_action(line: dict, products: dict[str, dict]) -> dict:
+    action = rules.plan(line["query"], line["history"], enrich_context(line["context"], products), [])
+    if action["tool"] == "reply":
+        return {"tool": "reply", "args": {}}
+    name, args = rules.to_tool_call(action["tool"], action["args"])
+    return {"tool": name, "args": args}
+
+
+async def llm_action(line: dict, llm, products: dict[str, dict]) -> dict:
+    reply = await llm.chat(model_input(line, products), TOOLS)
+    if not reply["tool_calls"]:
+        return {"tool": "reply", "args": {}}
+    first = reply["tool_calls"][0]
+    return {"tool": first["name"], "args": first["args"]}
 
 
 # ----------------------------------------------------------------------------- I/O side
@@ -147,19 +193,6 @@ def load_lines(path: Path) -> list[dict]:
 def load_products() -> dict[str, dict]:
     catalog = json.loads((SEED / "catalog.json").read_text(encoding="utf-8"))
     return {p["product_id"]: p for p in catalog["products"]}
-
-
-def load_planner(module_name: str = PLANNER_MODULE):
-    """Import the planner, or stop with a clear message if it has not been built yet."""
-    try:
-        return importlib.import_module(module_name)
-    except ModuleNotFoundError as exc:
-        if exc.name and module_name.startswith(exc.name):
-            sys.exit(f"eval_agent: {module_name.replace('.', '/')}.py is missing. "
-                     "The agent planner is not built yet, so there is nothing to score.")
-        raise
-    except ImportError as exc:
-        sys.exit(f"eval_agent: {module_name} failed to import: {exc}")
 
 
 def build_llm():
@@ -176,7 +209,7 @@ def build_llm():
     return LLMClient(settings)
 
 
-async def run_eval(planner, lines: list[dict], llm, products: dict[str, dict]) -> tuple[list[dict], str | None]:
+async def run_eval(lines: list[dict], llm, products: dict[str, dict]) -> tuple[list[dict], str | None]:
     results: list[dict] = []
     stopped: str | None = None
     for line in lines:
@@ -186,15 +219,13 @@ async def run_eval(planner, lines: list[dict], llm, products: dict[str, dict]) -
                 stopped = (f"every LLM key is cooling or disabled before {line['id']}; "
                            f"{len(results)} of {len(lines)} lines were scored")
                 break
-        context = enrich_context(line["context"], products)
         row = {"id": line["id"], "query": line["query"], "tags": line["tags"], "expected": line["expect"]}
         try:
-            action = await planner.plan_next_action(line["query"], line["history"], context, llm=llm)
+            actual = await llm_action(line, llm, products) if llm is not None else rules_action(line, products)
         except Exception as exc:  # the planner or the LLM failed for this line; record it and carry on
             row.update({"actual": None, "passed": False, "reasons": [f"error: {type(exc).__name__}: {exc}"]})
         else:
-            actual = {"tool": action.get("tool"), "args": action.get("args") or {}, "source": action.get("source")}
-            passed, reasons = action_matches(line["expect"], actual)
+            passed, reasons = action_matches(line["expect"], actual, args_only="names" in line["tags"])
             row.update({"actual": actual, "passed": passed, "reasons": reasons})
         results.append(row)
         print(f"{'PASS' if row['passed'] else 'FAIL'} {row['id']}", flush=True)
@@ -228,15 +259,17 @@ def main() -> int:
     args = parser.parse_args()
     tags = {t.strip() for t in args.tags.split(",") if t.strip()} or None
 
-    planner = load_planner()
-    lines = select_lines(load_lines(EVAL_FILE), tags, args.limit)
+    lines = load_lines(EVAL_FILE)
+    if args.mode == "rules":
+        lines = [l for l in lines if "llm_only" not in l["tags"]]
+    lines = select_lines(lines, tags, args.limit)
     if not lines:
         sys.exit("eval_agent: no lines selected")
     llm = build_llm() if args.mode == "llm" else None
     products = load_products()
 
     print(f"mode={args.mode} lines={len(lines)}")
-    results, stopped = asyncio.run(run_eval(planner, lines, llm, products))
+    results, stopped = asyncio.run(run_eval(lines, llm, products))
     summary = summarise(results)
     failures = [r for r in results if not r["passed"]]
     print_report(summary, failures)

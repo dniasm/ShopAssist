@@ -1,6 +1,6 @@
 import { request } from "./client";
 import type {
-  Cart, CancelOrderBody, ChatAccepted, ChatRequest, CheckoutAccepted, ListProductsParams, LlmStatus, Order, OrderList, PaymentMethod, ProductDetail, ProductList, ProposalAck, ServicesHealth,
+  Cart, CancelOrderBody, ChatAccepted, ChatRequest, CheckoutAccepted, Conversation, ListProductsParams, LlmStatus, Order, OrderList, PaymentMethod, ProductDetail, ProductList, ProposalAck, SavedMessage, ServicesHealth,
   Session, SignUpInput, Signups, User,
 } from "./types";
 
@@ -92,4 +92,23 @@ export function confirmProposal(proposalId: string, signal?: AbortSignal): Promi
 
 export function dismissProposal(proposalId: string, signal?: AbortSignal): Promise<ProposalAck> {
   return request<ProposalAck>("POST", `/chat/proposals/${encodeURIComponent(proposalId)}/dismiss`, { signal });
+}
+
+// ---- saved conversations (signed in) ----
+
+/** The signed-in shopper's saved chats, newest first. */
+export function listConversations(signal?: AbortSignal): Promise<Conversation[]> {
+  return request<Conversation[]>("GET", "/chat/conversations", { signal });
+}
+
+export function getConversationMessages(conversationId: string, signal?: AbortSignal): Promise<SavedMessage[]> {
+  return request<SavedMessage[]>("GET", `/chat/conversations/${encodeURIComponent(conversationId)}/messages`, { signal });
+}
+
+export function renameConversation(conversationId: string, title: string, signal?: AbortSignal): Promise<Conversation> {
+  return request<Conversation>("PATCH", `/chat/conversations/${encodeURIComponent(conversationId)}`, { body: { title }, signal });
+}
+
+export function deleteConversation(conversationId: string, signal?: AbortSignal): Promise<ProposalAck> {
+  return request<ProposalAck>("DELETE", `/chat/conversations/${encodeURIComponent(conversationId)}`, { signal });
 }

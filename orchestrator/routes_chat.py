@@ -1,5 +1,6 @@
 """The chat endpoints: start a turn, confirm or dismiss a proposal. Progress and answers arrive on the session WebSocket."""
 import asyncio
+import json
 import secrets
 
 from fastapi import APIRouter, Depends, Request
@@ -9,8 +10,9 @@ from pydantic import BaseModel, Field
 from orchestrator.clients import Clients
 from orchestrator.deps import current_user_id, get_clients
 from orchestrator.errors import ApiError
-from orchestrator.routes_checkout import start_checkout
 from orchestrator.routes_orders import cancel_for
+from orchestrator.schemas import ChatMessageOut, ConversationOut, RenameIn
+from shopassist_proto import shopassist_pb2 as pb
 
 router = APIRouter()
 _optional_bearer = HTTPBearer(auto_error=False)
@@ -63,12 +65,14 @@ async def confirm(proposal_id: str, request: Request, user_id: str = Depends(cur
     state = request.app.state
     proposal = state.proposals.claim(proposal_id, user_id)  # open -> confirmed, atomically: a double click cannot run it twice
     try:
-        if proposal.action == "checkout":
-            order_id = await start_checkout(state, clients, user_id, proposal.proposal_id, proposal.args.get("payment_method", "card_ok"))
-            text, cards = f"Placing order {order_id} now. You can follow its progress live.", []
-        else:
+        if proposal.action == "checkout_redirect":  # going to the checkout page is all this does: the person places the order there
+            state.hub.publish(user_id, "chat", "navigate", {"turn_id": proposal.turn_id, "path": "/checkout"})
+            text, cards = "Taking you to checkout.", []
+        elif proposal.action == "cancel_order":
             order = await cancel_for(clients, user_id, proposal.args["order_id"], proposal.proposal_id)
             text, cards = f"Done: order {order['order_id']} is cancelled and your card is refunded.", [{"kind": "order", "data": {"order": order}}]
+        else:
+            raise ApiError("invalid", "That proposal cannot be confirmed.")
     except ApiError:
         state.proposals.release(proposal)  # nothing happened: the person can try again
         raise
@@ -79,4 +83,44 @@ async def confirm(proposal_id: str, request: Request, user_id: str = Depends(cur
 @router.post("/chat/proposals/{proposal_id}/dismiss", response_model=OkOut)
 async def dismiss(proposal_id: str, request: Request, user_id: str = Depends(current_user_id)):
     request.app.state.proposals.dismiss(proposal_id, user_id)
+    return {"ok": True}
+
+
+def _cards(cards_json: str) -> list:
+    try:
+        cards = json.loads(cards_json) if cards_json else []
+    except ValueError:
+        return []
+    return cards if isinstance(cards, list) else []
+
+
+def _conversation(c: pb.Conversation) -> dict:
+    return {"conversation_id": c.conversation_id, "title": c.title, "updated_at": c.updated_at}
+
+
+@router.get("/chat/conversations", response_model=list[ConversationOut])
+async def list_conversations(user_id: str = Depends(current_user_id), clients: Clients = Depends(get_clients)):
+    """Saved chats, most recently updated first."""
+    reply = await clients.call("assistant", clients.assistant.ListConversations, pb.ListConversationsRequest(page_size=50), user_id=user_id)
+    return [_conversation(c) for c in reply.conversations]
+
+
+@router.get("/chat/conversations/{conversation_id}/messages", response_model=list[ChatMessageOut])
+async def list_messages(conversation_id: str, user_id: str = Depends(current_user_id), clients: Clients = Depends(get_clients)):
+    """One chat's messages, oldest first (the last 200)."""
+    reply = await clients.call("assistant", clients.assistant.ListMessages,
+                               pb.ListMessagesRequest(conversation_id=conversation_id, limit=200), user_id=user_id)
+    return [{"role": m.role, "text": m.text, "cards": _cards(m.cards_json), "created_at": m.created_at} for m in reply.messages]
+
+
+@router.patch("/chat/conversations/{conversation_id}", response_model=ConversationOut)
+async def rename_conversation(conversation_id: str, body: RenameIn, user_id: str = Depends(current_user_id), clients: Clients = Depends(get_clients)):
+    c = await clients.call("assistant", clients.assistant.RenameConversation,
+                           pb.RenameConversationRequest(conversation_id=conversation_id, title=body.title), user_id=user_id)
+    return _conversation(c)
+
+
+@router.delete("/chat/conversations/{conversation_id}", response_model=OkOut)
+async def delete_conversation(conversation_id: str, user_id: str = Depends(current_user_id), clients: Clients = Depends(get_clients)):
+    await clients.call("assistant", clients.assistant.DeleteConversation, pb.DeleteConversationRequest(conversation_id=conversation_id), user_id=user_id)
     return {"ok": True}

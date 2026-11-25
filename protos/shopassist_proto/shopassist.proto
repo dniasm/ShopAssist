@@ -358,3 +358,46 @@ service OrderService {
   rpc CancelOrder(CancelOrderRequest) returns (Order);
   rpc WatchOrders(WatchOrdersRequest) returns (stream OrderEvent);  // never ends on its own
 }
+
+// ---- Assistant: chat history and fact memory. The user id comes from `x-user-id` metadata (like Customer). ----
+message Conversation { string conversation_id = 1; string title = 2; string summary = 3; string created_at = 4; string updated_at = 5; }
+message ChatMessage { int64 message_id = 1; string conversation_id = 2; string role = 3; string text = 4; string cards_json = 5; string created_at = 6; }
+message Fact { string fact_id = 1; string kind = 2; string key = 3; string value = 4; string category = 5; string expires_at = 6; double score = 7; }
+message FactChange {
+  string op = 1;  // "remember" | "forget"
+  string kind = 2; string key = 3; string value = 4; string category = 5;
+  repeated float embedding = 6;
+}
+
+message CreateConversationRequest { string title = 1; }
+message ListConversationsRequest { int32 page_size = 1; }   // newest updated first
+message ListConversationsResponse { repeated Conversation conversations = 1; }
+message GetConversationRequest { string conversation_id = 1; }   // NOT_FOUND if not the caller's
+message RenameConversationRequest { string conversation_id = 1; string title = 2; }
+message DeleteConversationRequest { string conversation_id = 1; }
+message DeleteConversationResponse {}
+message AppendMessageRequest { string conversation_id = 1; string role = 2; string text = 3; string cards_json = 4; }  // role "user" | "assistant"
+message ListMessagesRequest { string conversation_id = 1; int32 limit = 2; }   // oldest first
+message ListMessagesResponse { repeated ChatMessage messages = 1; }
+message SetSummaryRequest { string conversation_id = 1; string summary = 2; }
+message ApplyFactsRequest { repeated FactChange changes = 1; }
+message SearchFactsRequest { string query_text = 1; repeated float query_embedding = 2; int32 limit = 3; double min_score = 4; }
+message ListFactsRequest {}
+message ListFactsResponse { repeated Fact facts = 1; }
+message ClearTemporalFactsRequest { repeated string categories = 1; }
+message ClearTemporalFactsResponse { int32 removed = 1; }
+
+service AssistantService {
+  rpc CreateConversation(CreateConversationRequest) returns (Conversation);
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+  rpc GetConversation(GetConversationRequest) returns (Conversation);
+  rpc RenameConversation(RenameConversationRequest) returns (Conversation);
+  rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);  // also deletes its messages
+  rpc AppendMessage(AppendMessageRequest) returns (ChatMessage);
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
+  rpc SetSummary(SetSummaryRequest) returns (Conversation);
+  rpc ApplyFacts(ApplyFactsRequest) returns (ListFactsResponse);
+  rpc SearchFacts(SearchFactsRequest) returns (ListFactsResponse);
+  rpc ListFacts(ListFactsRequest) returns (ListFactsResponse);
+  rpc ClearTemporalFacts(ClearTemporalFactsRequest) returns (ClearTemporalFactsResponse);
+}
