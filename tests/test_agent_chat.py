@@ -430,3 +430,42 @@ def test_turn_logs_calls_and_tokens_without_content(make_shop, caplog):
         turn(ws)
     assert [r.getMessage() for r in caplog.records if r.getMessage().startswith("chat turn ")] == ["chat turn llm_calls=2 tokens=42"]
     assert not any("secret" in r.getMessage() for r in caplog.records)
+
+
+def restart(shop, llm):
+    """A new AgentLoop over the same services: nothing in process memory survives, as after a restart or on a second instance."""
+    from orchestrator.agent.loop import AgentLoop
+
+    s = shop.client.app.state
+    s.agent = AgentLoop(s.clients, s.hub, s.proposals, type(s.memory)(), llm, s.memory_reader, s.memory_worker)
+
+
+def test_follow_up_after_a_restart_still_sees_the_numbered_list(make_shop):
+    shop, llm = llm_shop(make_shop, uses(("search", {"category": "hoodies"})), says("It is navy."))
+    headers, ws = open_chat(shop)
+    say(shop, headers, "show me hoodies")
+    msgs = turn(ws)
+    cid = next(m for m in msgs if m["type"] == "conversation")["data"]["conversation_id"]
+    products = message_of(msgs)["cards"][0]["data"]["products"]
+    restart(shop, llm)
+    say(shop, headers, "tell me about the second one", conversation_id=cid)
+    turn(ws)
+    shown = llm.requests[-1][3]["content"]
+    assert f"2. {products[1]['name']} [{products[1]['product_id']}]" in shown and f"1. {products[0]['name']}" in shown
+
+
+def test_remove_the_second_one_request_contains_the_cart_line_ids(make_shop):
+    shop, llm = llm_shop(make_shop, uses(("cart", {"action": "view"})), says("ok"))
+    headers, ws = open_chat(shop)
+    first = sku_row()[3]
+    second = next(s["sku_id"] for s in SKUS if s["sku_id"] != first and sku_with(4, 1) == s["sku_id"])
+    shop.put(headers, first, 1)
+    shop.put(headers, second, 1)
+    say(shop, headers, "what is in my cart")
+    msgs = turn(ws)
+    cid = next(m for m in msgs if m["type"] == "conversation")["data"]["conversation_id"]
+    restart(shop, llm)
+    say(shop, headers, "remove the second one", conversation_id=cid)
+    turn(ws)
+    shown = llm.requests[-1][3]["content"]
+    assert f"[{first}]" in shown and f"[{second}]" in shown

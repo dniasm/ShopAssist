@@ -176,7 +176,7 @@ def test_context_top5_only():
     assert (search.limit, search.min_score) == (5, 0.45) and list(search.query_embedding) == [0.5, 0.25]
     assert block["facts"] == [f"k{i}: v{i}" for i in range(5)]
     assert block["summary"] == "likes red"
-    assert block["latest"] == [{"role": "user", "text": "hi"}, {"role": "assistant", "text": "hey"}]
+    assert block["latest"] == [{"role": "user", "text": "hi", "cards": []}, {"role": "assistant", "text": "hey", "cards": []}]
     assert emb.seen == [(["any hoodies likes red"], "query")]
     assert stub.sent("ListMessages")[0].limit == 2
 

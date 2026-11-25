@@ -12,7 +12,7 @@ import logging
 import re
 
 from orchestrator.agent import rules
-from orchestrator.agent.compact import cart_summary
+from orchestrator.agent.compact import cart_summary, order_line, product_line
 from orchestrator.agent.legacy_tools import LegacyTools
 from orchestrator.agent.prompt import SYSTEM_PROMPT, TOOLS
 from orchestrator.agent.state import ConversationMemory, ProposalStore
@@ -28,14 +28,12 @@ log = logging.getLogger(__name__)
 MAX_STEPS = 6
 MAX_CARDS = 3
 MAX_SHOWN_CHARS = 1500
-MAX_SHOWN_CONVERSATIONS = 500
 TITLE_CHARS = 60
 LLM_DOWN = "I can't do that right now. Please try again in a minute."
 READ_ONLY = {"search_products", "get_product", "get_stock", "get_cart", "list_orders", "get_order"}  # the rules planner's read tools
 WRITE_WORDS = re.compile(r"\b(add|remove|delete|cancel|check ?out|buy|purchase|put|take out)\b", re.I)
 PRODUCT_ID = re.compile(r"P-\d+")
 BRACKETED_ID = re.compile(r"\s*[(\[]\s*(P-\d+)\s*[)\]]")
-LIST_KINDS = {"products", "product", "cart", "orders", "order"}
 
 
 class AgentLoop:
@@ -46,7 +44,6 @@ class AgentLoop:
         self.tools = AgentTools(clients, proposals, reader.search if reader else None)
         self.legacy = LegacyTools(self.tools)
         self._locks: dict[str, asyncio.Lock] = {}
-        self._shown: dict[str, str] = {}  # per conversation: what the last answer listed, so "the second one" still resolves
 
     def emit(self, owner: str, type_: str, data: dict) -> None:
         self.hub.publish(owner, "chat", type_, data)
@@ -73,7 +70,8 @@ class AgentLoop:
             block = await self.reader.context(user_id, conversation_id, message)
         elif not user_id:
             last = self.memory.history(key)[-1:]
-            block["latest"] = [m for t in last for m in ({"role": "user", "text": t["user"]}, {"role": "assistant", "text": t["assistant"]})]
+            block["latest"] = [m for t in last for m in ({"role": "user", "text": t["user"], "cards": []},
+                                                         {"role": "assistant", "text": t["assistant"], "cards": t["entities"].get("cards", [])})]
         saving = bool(user_id)
         if saving:
             conversation_id, saving = await self.save(owner, user_id, turn_id, conversation_id, "user", message, "", title=message)
@@ -103,7 +101,7 @@ class AgentLoop:
             elif not llm_ok and results:
                 text, closing, cards[-1] = product_list(cards[-1], context.get("product"))
         self.emit(owner, "message", {"turn_id": turn_id, "text": text, "cards": cards, "closing": closing})
-        self.remember(key, message, text, results)
+        self.remember(key, message, text, results, cards)
         if saving:
             await self.save(owner, user_id, turn_id, conversation_id, "assistant", text, json.dumps(cards))
             if self.worker:
@@ -177,10 +175,31 @@ class AgentLoop:
 
     def model_messages(self, block: dict, context: dict, message: str, key: str) -> list[dict]:
         latest = [{"role": m["role"], "content": m["text"]} for m in block["latest"]]
-        if (shown := self._shown.get(key)) and latest and latest[-1]["role"] == "assistant":
+        if block["latest"] and block["latest"][-1]["role"] == "assistant" and (shown := self.shown_text(block["latest"][-1].get("cards") or [])):
             latest[-1]["content"] += f"\n[Shown to the user:\n{shown}]"
         return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": self.memory_text(block, context)},
                 *latest, {"role": "user", "content": message}]
+
+    @staticmethod
+    def shown_text(cards: list[dict]) -> str:
+        """What the last answer's cards listed, in the shopper's numbering, so "the second one" and "remove the L one" resolve."""
+        lines: list[str] = []
+        for c in cards:
+            data = c.get("data") or {}
+            try:
+                if c["kind"] == "products":
+                    lines += [product_line(i, p) for i, p in enumerate(data["products"], 1)]
+                elif c["kind"] == "product":
+                    lines.append(product_line(1, data["product"]))
+                elif c["kind"] == "cart":
+                    lines.append(cart_summary(data))
+                elif c["kind"] == "orders":
+                    lines += [order_line(o) for o in data["orders"]]
+                elif c["kind"] == "order":
+                    lines.append(order_line(data["order"]))
+            except (KeyError, TypeError):
+                continue  # a card in an older shape: skip it rather than fail the turn
+        return "\n".join(lines)[:MAX_SHOWN_CHARS]
 
     @staticmethod
     def memory_text(block: dict, context: dict) -> str:
@@ -248,15 +267,8 @@ class AgentLoop:
             log.warning("saving a chat message failed: %s", e.code)
             return conversation_id, False
 
-    def remember(self, key: str, message: str, text: str, results: list[dict]) -> None:
-        self.memory.add(key, message, text, self.entities(results))
-        shown = "\n".join(r["text"] for r in results if (r.get("card") or {}).get("kind") in LIST_KINDS and not r.get("error"))
-        if shown:
-            self._shown[key] = shown[:MAX_SHOWN_CHARS]
-        else:
-            self._shown.pop(key, None)
-        while len(self._shown) > MAX_SHOWN_CONVERSATIONS:
-            self._shown.pop(next(iter(self._shown)))
+    def remember(self, key: str, message: str, text: str, results: list[dict], cards: list[dict]) -> None:
+        self.memory.add(key, message, text, {**self.entities(results), "cards": cards})
 
     # ---------------- the answer ----------------
 

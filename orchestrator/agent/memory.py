@@ -1,6 +1,7 @@
 """Chat memory on the orchestrator side: fact retrieval for a turn, and a background worker that extracts facts and
 rewrites the conversation summary. The worker never blocks or fails a chat turn; failures are logged without content."""
 import asyncio
+import json
 import logging
 import re
 
@@ -102,7 +103,7 @@ class MemoryReader:
             self._call("ListMessages", pb.ListMessagesRequest(conversation_id=conversation_id, limit=2), user_id))
         summary = conv.summary if conv else ""
         facts = await self.search(user_id, f"{message} {summary[:300]}".strip())
-        latest = [{"role": m.role, "text": m.text} for m in recent.messages] if recent else []
+        latest = [{"role": m.role, "text": m.text, "cards": parse_cards(m.cards_json)} for m in recent.messages] if recent else []
         return {"facts": facts, "summary": summary, "latest": latest}
 
     async def search(self, user_id: str, query: str) -> list[str]:
@@ -110,6 +111,15 @@ class MemoryReader:
         request = pb.SearchFactsRequest(query_text=query, query_embedding=vectors[0] if vectors else [], limit=FACT_LIMIT, min_score=MIN_SCORE)
         reply = await self._call("SearchFacts", request, user_id)
         return [fact_line(f) for f in reply.facts] if reply else []
+
+
+def parse_cards(cards_json: str) -> list[dict]:
+    """The cards saved with a message; [] when there are none or the text is not a list of cards."""
+    try:
+        cards = json.loads(cards_json) if cards_json else []
+    except ValueError:
+        return []
+    return [c for c in cards if isinstance(c, dict) and "kind" in c] if isinstance(cards, list) else []
 
 
 class MemoryWorker:
