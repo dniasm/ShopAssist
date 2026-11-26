@@ -24,6 +24,7 @@ from services.order.saga import Deps, InjectedCrash, Interrupted, Saga
 from services.order.watch import WatchHub
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
+from shared_common.common.log import setup_logging
 
 log = logging.getLogger("order")
 MIGRATIONS = Path(__file__).parent / "migrations"
@@ -224,7 +225,7 @@ async def create_service(
 
 async def main() -> None:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s order %(levelname)s %(message)s")
+    setup_logging("order")
     url = database_url("ORDER_DATABASE_URL")
     log.info("database %s", safe_target(url))
     service = await create_service(

@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY orchestrator/ orchestrator/
 COPY services/ services/
 COPY shopassist_proto/ shopassist_proto/
+COPY shared_common/ shared_common/
 COPY protos/ protos/
 COPY data/ data/
 COPY scripts/ scripts/

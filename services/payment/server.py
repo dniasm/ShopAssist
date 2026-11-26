@@ -15,6 +15,7 @@ from services.common.server import Service, listen_address
 from services.payment import db
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
+from shared_common.common.log import setup_logging
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 DEFAULT_LATENCY_MS = 300
@@ -85,7 +86,7 @@ async def create_service(
 
 async def main() -> None:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s payment %(levelname)s %(message)s")
+    setup_logging("payment")
     url = database_url("PAYMENT_DATABASE_URL")
     logging.getLogger("payment").info("database %s", safe_target(url))
     service = await create_service(url, address=listen_address("PAYMENT_ADDR", "localhost:50055"))

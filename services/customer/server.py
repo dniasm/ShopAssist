@@ -22,6 +22,7 @@ from services.customer import db
 from services.customer.passwords import MAX_PASSWORD, MIN_PASSWORD, check_password, hash_password
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
+from shared_common.common.log import setup_logging
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 MAX_LINE_QUANTITY = 10
@@ -124,7 +125,7 @@ async def create_service(url: str, *, seed_dir: Path | None = None, address: str
 
 async def main() -> None:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s customer %(levelname)s %(message)s")
+    setup_logging("customer")
     url = database_url("CUSTOMER_DATABASE_URL")
     logging.getLogger("customer").info("database %s", safe_target(url))
     service = await create_service(url, address=listen_address("CUSTOMER_ADDR", "localhost:50054"))

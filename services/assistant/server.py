@@ -18,6 +18,7 @@ from services.common.server import Service, listen_address
 from services.common.util import iso
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
+from shared_common.common.log import setup_logging
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 DEFAULT_TITLE = "New chat"
@@ -180,7 +181,7 @@ async def create_service(url: str, *, address: str = "127.0.0.1:0", clock=None) 
 
 async def main() -> None:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s assistant %(levelname)s %(message)s")
+    setup_logging("assistant")
     url = database_url("ASSISTANT_DATABASE_URL")
     logging.getLogger("assistant").info("database %s", safe_target(url))
     service = await create_service(url, address=listen_address("ASSISTANT_ADDR", "localhost:50056"))

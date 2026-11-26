@@ -16,6 +16,7 @@ from services.common.util import iso
 from services.inventory import db
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
+from shared_common.common.log import setup_logging
 
 log = logging.getLogger("inventory")
 MIGRATIONS = Path(__file__).parent / "migrations"
@@ -131,7 +132,7 @@ async def create_service(
 
 async def main() -> None:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s inventory %(levelname)s %(message)s")
+    setup_logging("inventory")
     url = database_url("INVENTORY_DATABASE_URL")
     log.info("database %s", safe_target(url))
     service = await create_service(url, address=listen_address("INVENTORY_ADDR", "localhost:50052"))
