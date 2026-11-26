@@ -11,6 +11,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from shared_common.common.log import get_request_id
+
 log = logging.getLogger(__name__)
 
 STATUS = {
@@ -71,6 +73,8 @@ def install(app: FastAPI) -> None:
         return envelope(code, message, status=e.status_code)
 
     @app.exception_handler(Exception)
-    async def _unexpected(_: Request, e: Exception):
-        log.exception("unhandled error")
-        return envelope("internal", "Something went wrong on our side.")
+    async def _unexpected(request: Request, e: Exception):
+        log.exception("unhandled %s %s", request.method, request.url.path)  # the one traceback line for this request
+        response = envelope("internal", "Something went wrong on our side.")
+        response.headers["X-Request-Id"] = get_request_id()  # this response leaves outside RequestLogMiddleware
+        return response

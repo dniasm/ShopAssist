@@ -48,10 +48,7 @@ class RequestLogMiddleware:
 
         try:
             await self.app(scope, receive, send_with_id)
-        except Exception:
-            log.exception("unhandled %s %s", method, path)
-            raise
-        finally:
+        finally:  # an exception passes through: errors.py logs its traceback once and answers 500
             ms = int((time.perf_counter() - started) * 1000)
             level = logging.ERROR if status >= 500 else logging.DEBUG if path == "/api/health" else logging.INFO
             log.log(level, "%s %s -> %d %dms user=%s", method, path, status, ms, _user_of(scope))

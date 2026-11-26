@@ -10,7 +10,7 @@ from services.order import db
 from services.order.cancel import Canceller
 from services.order.runs import Runs
 from services.order.saga import Deps, InjectedCrash, Interrupted, Saga
-from shared_common.common.log import set_request_id
+from shared_common.common.log import get_request_id, set_request_id
 
 log = logging.getLogger(__name__)
 
@@ -28,11 +28,13 @@ class Recovery:
         stays PENDING until the next pass.
         """
         settled = 0
+        caller_id = get_request_id()
         async with self._one_at_a_time:
             for order in await db.unsettled_older_than(self.deps.pool, self.min_age):
                 if self.runs.is_live(order["order_id"]):
                     continue
-                set_request_id()  # one trace per recovered order
+                if caller_id == "-":  # keep an id the caller (operator, test) already set
+                    set_request_id()  # else one trace per recovered order
                 log.info("recovering order %s (step %s)", order["order_id"], order["saga_step"])
                 try:
                     if order["saga_step"] == "CANCELLING":

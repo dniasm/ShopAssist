@@ -50,7 +50,7 @@ class RequestIdInterceptor(grpc.aio.ServerInterceptor):
         method = handler_call_details.method
         name = method.rsplit(".", 1)[-1]  # "CatalogService/ListProducts"
         ok_level = logging.DEBUG if method == HEALTH_CHECK_METHOD else logging.INFO
-        who = f"caller={md.get(CALLER_HEADER, '-')} user={md.get(USER_HEADER, '-')}"
+        who = f"caller={md.get(CALLER_HEADER, '-')[:64]} user={md.get(USER_HEADER, '-')[:64]}"
         incoming = md.get(REQUEST_ID_HEADER)
 
         def line(started: float, code: grpc.StatusCode) -> None:

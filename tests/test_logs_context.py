@@ -145,3 +145,51 @@ def test_chat_turn_lines_share_id(make_shop, caplog):
     rpc_lines = _access(caplog, "CatalogService/ListProducts")
     assert llm_lines and all(r.request_id == turn_id for r in llm_lines)
     assert any(r.request_id == turn_id for r in rpc_lines)
+
+
+def _raw_call(addr, metadata):
+    with grpc.insecure_channel(addr) as ch:
+        call = ch.unary_unary("/shopassist.v2.CatalogService/ListProducts", request_serializer=pb.ListProductsRequest.SerializeToString,
+                              response_deserializer=pb.ListProductsResponse.FromString)
+        try:
+            call(pb.ListProductsRequest(), metadata=metadata, timeout=5)
+        except grpc.RpcError as e:
+            return e.code()
+
+
+def test_denied_grpc_call_is_warning(catalog_running, caplog):
+    assert _raw_call(catalog_running.addr, (("x-request-id", "rid-denied"),)) == grpc.StatusCode.UNAUTHENTICATED
+    seen = _access(caplog, "CatalogService/ListProducts")
+    assert seen and seen[-1].levelno == logging.WARNING and "UNAUTHENTICATED" in seen[-1].getMessage()
+    assert seen[-1].request_id == "rid-denied"
+
+
+@pytest.mark.parametrize("bad", ["a" * 300, "../x"])
+def test_hostile_grpc_request_id_replaced(loop_thread, catalog_running, caplog, bad):
+    async def call():
+        async with authchan.aio_channel(catalog_running.addr) as ch:
+            await pb_grpc.CatalogServiceStub(ch).ListProducts(pb.ListProductsRequest(), metadata=(("x-request-id", bad),))
+
+    loop_thread.call(call())
+    assert HEX12.fullmatch(_access(caplog, "CatalogService/ListProducts")[-1].request_id)
+
+
+def test_unhandled_error_has_header_and_one_traceback(settings, caplog):
+    from fastapi.testclient import TestClient
+
+    from orchestrator.app import create_app
+
+    app = create_app(settings)
+
+    async def boom():
+        raise RuntimeError("kaput")
+
+    app.add_api_route("/api/boom", boom)
+    app.router.routes.insert(0, app.router.routes.pop())  # ahead of the SPA catch-all
+
+    response = TestClient(app, raise_server_exceptions=False).get("/api/boom", headers={"X-Request-Id": "rid-500"})
+    assert response.status_code == 500 and response.headers["x-request-id"] == "rid-500"
+    tracebacks = [r for r in caplog.records if r.exc_info]
+    assert len(tracebacks) == 1 and tracebacks[0].request_id == "rid-500"
+    access = [r for r in caplog.records if r.name == "orchestrator.request_log"]
+    assert access and access[-1].levelno == logging.ERROR and "-> 500" in access[-1].getMessage()
