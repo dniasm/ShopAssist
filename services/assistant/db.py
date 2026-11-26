@@ -2,7 +2,7 @@
 reach another's rows (a conversation that is not yours is simply not found)."""
 import secrets
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
@@ -137,11 +137,11 @@ async def apply_facts(pool: AsyncConnectionPool, user_id: str, changes: list[dic
         inserts, deletes = rules.plan_changes(await _live_facts(conn, user_id, now), changes, now)
         if deletes:
             await conn.execute("DELETE FROM facts WHERE user_id = %s AND fact_id = ANY(%s)", (user_id, deletes))
-        for row in inserts:
+        for i, row in enumerate(inserts):  # +i µs keeps a batch in the order given (listing is by created_at)
             await conn.execute(
                 "INSERT INTO facts (fact_id, user_id, kind, key, value, category, embedding, created_at, expires_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s::real[], %s, %s)",
-                (row["fact_id"], user_id, row["kind"], row["key"], row["value"], row["category"], row["embedding"], now, row["expires_at"]),
+                (row["fact_id"], user_id, row["kind"], row["key"], row["value"], row["category"], row["embedding"], now + timedelta(microseconds=i), row["expires_at"]),
             )
         return await _live_facts(conn, user_id, now)
 

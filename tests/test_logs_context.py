@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import re
+import time
 
 import grpc
 import pytest
@@ -58,8 +59,14 @@ def test_http_access_line(client, caplog):
     assert seen[-1].levelno == logging.DEBUG and seen[-1].request_id == "rid-http"  # health checks are not worth INFO
 
 
-def _access(caplog, rpc):
-    return [r for r in caplog.records if r.name == "services.common.server" and r.getMessage().startswith(rpc)]
+def _access(caplog, rpc, wait: float = 2.0):
+    """The server's access lines for `rpc`. The server logs after replying, so wait briefly for the line to land."""
+    deadline = time.monotonic() + wait
+    while True:
+        seen = [r for r in caplog.records if r.name == "services.common.server" and r.getMessage().startswith(rpc)]
+        if seen or time.monotonic() > deadline:
+            return seen
+        time.sleep(0.02)
 
 
 def test_grpc_continues_request_id(loop_thread, catalog_running, caplog):
