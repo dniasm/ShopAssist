@@ -11,7 +11,7 @@ import { guestIdForBrowser, newId } from "../session/ids";
 import { useSocketChannel } from "../session/SessionSocket";
 import { clearStored, currentConversation, loadStored, persistable, rememberConversation, saveStored } from "./chatStorage";
 import { showsCart } from "./cartSignal";
-import { chatContextFor } from "./context";
+import { chatContextFor, confirmedPath } from "./context";
 import { chatReducer, fromHistory, initialChat, type ChatTurn } from "./transcript";
 
 export interface PageProduct { id: string; name: string }
@@ -191,13 +191,20 @@ function ChatSession({ userId, children }: { userId: string | null; children: Re
   const confirm = useCallback((id: string) => {
     dispatch({ type: "proposal_confirming", id });
     confirmProposal(id).then(
-      () => dispatch({ type: "proposal_confirmed", id }),
+      (ack) => {
+        dispatch({ type: "proposal_confirmed", id });
+        const path = confirmedPath(ack);   // the ack is the one place that navigates, so a restored proposal works and nothing runs twice
+        if (path) {
+          if (window.matchMedia("(max-width: 720px)").matches) close();
+          navigate(path);
+        }
+      },
       (err: unknown) => {
         if (err instanceof ApiError && err.status === 409) dispatch({ type: "proposal_handled", id, note: "This was already confirmed or dismissed, so nothing more happened." });
         else dispatch({ type: "proposal_failed", id, note: describeError(err) });
       },
     );
-  }, []);
+  }, [close, navigate]);
 
   const dismiss = useCallback((id: string) => {
     dispatch({ type: "proposal_dismissed", id });

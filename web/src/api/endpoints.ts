@@ -1,6 +1,6 @@
 import { request } from "./client";
 import type {
-  Cart, CancelOrderBody, ChatAccepted, ChatRequest, CheckoutAccepted, Conversation, ListProductsParams, LlmStatus, Order, OrderList, PaymentMethod, ProductDetail, ProductList, ProposalAck, SavedMessage, ServicesHealth,
+  Cart, CancelOrderBody, ChatAccepted, ChatRequest, CheckoutAccepted, ConfirmAck, Conversation, ListProductsParams, LlmStatus, Order, OrderList, PaymentMethod, ProductDetail, ProductList, ProposalAck, SavedMessage, ServicesHealth,
   Session, SignUpInput, Signups, User,
 } from "./types";
 
@@ -86,8 +86,8 @@ export function sendChat(body: ChatRequest, signal?: AbortSignal): Promise<ChatA
 }
 
 /** Runs the proposed write as the signed-in user. A proposal can be confirmed once: a second try is a 409. */
-export function confirmProposal(proposalId: string, signal?: AbortSignal): Promise<ProposalAck> {
-  return request<ProposalAck>("POST", `/chat/proposals/${encodeURIComponent(proposalId)}/confirm`, { signal });
+export function confirmProposal(proposalId: string, signal?: AbortSignal): Promise<ConfirmAck> {
+  return request<ConfirmAck>("POST", `/chat/proposals/${encodeURIComponent(proposalId)}/confirm`, { signal });
 }
 
 export function dismissProposal(proposalId: string, signal?: AbortSignal): Promise<ProposalAck> {

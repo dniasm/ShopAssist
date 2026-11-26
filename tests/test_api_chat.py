@@ -88,10 +88,10 @@ def redirect_proposal(make_shop, user):
 def test_confirm_checkout_redirect_navigates_only(make_shop):
     shop, headers, ws, proposal_id = redirect_proposal(make_shop, "U-05")
     checkouts = count_calls(shop, "Checkout")
-    assert shop.client.post(f"/api/chat/proposals/{proposal_id}/confirm", headers=headers).status_code == 202
+    r = shop.client.post(f"/api/chat/proposals/{proposal_id}/confirm", headers=headers)
+    assert r.status_code == 202 and r.json() == {"ok": True, "path": "/checkout"}  # the ack is what navigates the tab
     msgs = ws.until("message")
-    navigate = next(m for m in msgs if m["type"] == "navigate")["data"]
-    assert navigate["path"] == "/checkout" and navigate["turn_id"]
+    assert "navigate" not in [m["type"] for m in msgs]  # not twice: no socket navigate for a confirm
     assert msgs[-1]["data"]["text"] == "Taking you to checkout." and msgs[-1]["data"]["cards"] == []
     assert checkouts == [] and rows(shop.stack.order.url, "SELECT count(*) FROM orders WHERE order_id > 'O-2'") == [(0,)]
     error(shop.client.post(f"/api/chat/proposals/{proposal_id}/confirm", headers=headers), 409, "conflict")
@@ -136,7 +136,8 @@ def test_proposal_confirms_after_an_orchestrator_restart(make_shop):
     shop, headers, ws, proposal_id = redirect_proposal(make_shop, "U-08")
     restart(shop)
     assert reopened(shop, headers)[0]["available"] is True
-    assert shop.client.post(f"/api/chat/proposals/{proposal_id}/confirm", headers=headers).status_code == 202
+    r = shop.client.post(f"/api/chat/proposals/{proposal_id}/confirm", headers=headers)
+    assert r.status_code == 202 and r.json() == {"ok": True, "path": "/checkout"}  # navigates from the ack even with no turn on screen
     error(shop.client.post(f"/api/chat/proposals/{proposal_id}/confirm", headers=headers), 409, "conflict")
 
 

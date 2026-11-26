@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { chatContextFor } from "./context";
+import { chatContextFor, confirmedPath } from "./context";
+import { fromHistory } from "./transcript";
+
+describe("confirmedPath", () => {
+  it("navigates from the confirm response, also for a proposal restored from a saved chat", () => {
+    const [turn] = fromHistory([{ role: "assistant", text: "Ready?", cards: [{ kind: "proposal", data: { proposal_id: "PR-x", action: "checkout_redirect", args: {}, summary: "Check out?", available: true } }] }]);
+    expect(turn?.proposals[0]).toMatchObject({ id: "PR-x", state: "pending" });
+    expect(confirmedPath({ path: "/checkout" })).toBe("/checkout");
+  });
+  it("ignores a missing or unsafe path", () => {
+    for (const path of [null, undefined, "", "//evil.example", "https://evil.example", "/a\b"]) expect(confirmedPath({ path })).toBeNull();
+  });
+});
 
 describe("chatContextFor", () => {
   it("sends the product of a product page", () => {

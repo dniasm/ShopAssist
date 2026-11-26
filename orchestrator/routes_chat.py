@@ -40,6 +40,10 @@ class OkOut(BaseModel):
     ok: bool
 
 
+class ConfirmOut(OkOut):
+    path: str | None = Field(None, description="A page to open now (checkout_redirect: /checkout); null when there is none.")
+
+
 def owner_of(request: Request, credentials: HTTPAuthorizationCredentials | None, guest_id: str | None) -> tuple[str, str | None]:
     """(event owner, user id). A valid session token means a user; otherwise the visitor needs a guest id of their own."""
     if credentials is not None:
@@ -61,15 +65,16 @@ async def chat(body: ChatIn, request: Request, credentials: HTTPAuthorizationCre
     return {"turn_id": turn_id}
 
 
-@router.post("/chat/proposals/{proposal_id}/confirm", status_code=202, response_model=OkOut)
+@router.post("/chat/proposals/{proposal_id}/confirm", status_code=202, response_model=ConfirmOut)
 async def confirm(proposal_id: str, request: Request, user_id: str = Depends(current_user_id), clients: Clients = Depends(get_clients)):
     """Run what the assistant proposed, AS THE USER, through the same code as the REST endpoints. Works once per proposal."""
     state = request.app.state
     proposal = state.proposals.claim(proposal_id, user_id)  # open -> confirmed, atomically: a double click cannot run it twice
+    path = None
     try:
         await _check_still_valid(clients, user_id, proposal.action, proposal.args)
         if proposal.action == "checkout_redirect":  # going to the checkout page is all this does: the person places the order there
-            state.hub.publish(user_id, "chat", "navigate", {"turn_id": proposal.turn_id, "path": "/checkout"})
+            path = "/checkout"  # returned to the tab that confirmed (the single place that navigates), not published: a restored proposal has no turn
             text, cards = "Taking you to checkout.", []
         elif proposal.action == "cancel_order":
             order = await cancel_for(clients, user_id, proposal.args["order_id"], proposal.proposal_id)
@@ -79,8 +84,9 @@ async def confirm(proposal_id: str, request: Request, user_id: str = Depends(cur
     except ApiError:
         state.proposals.release(proposal)  # nothing happened: the person can try again
         raise
-    state.hub.publish(user_id, "chat", "message", {"turn_id": proposal.turn_id, "text": text, "cards": cards})
-    return {"ok": True}
+    if proposal.turn_id:  # a proposal restored after a restart has no turn on screen to attach the message to
+        state.hub.publish(user_id, "chat", "message", {"turn_id": proposal.turn_id, "text": text, "cards": cards})
+    return {"ok": True, "path": path}
 
 
 async def _check_still_valid(clients: Clients, user_id: str, action: str, args: dict) -> None:

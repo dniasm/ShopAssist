@@ -977,6 +977,16 @@ export interface components {
             /** Shortages */
             shortages?: components["schemas"]["Shortage"][] | null;
         };
+        /** ConfirmOut */
+        ConfirmOut: {
+            /** Ok */
+            ok: boolean;
+            /**
+             * Path
+             * @description A page to open now (checkout_redirect: /checkout); null when there is none.
+             */
+            path?: string | null;
+        };
         /** ConversationOut */
         ConversationOut: {
             /** Conversation Id */
@@ -2523,7 +2533,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OkOut"];
+                    "application/json": components["schemas"]["ConfirmOut"];
                 };
             };
             /** @description Error envelope */

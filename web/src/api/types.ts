@@ -67,4 +67,5 @@ export type ChatAccepted = Schemas["TurnOut"];
 export type Conversation = Schemas["ConversationOut"];
 export type SavedMessage = Schemas["ChatMessageOut"];
 export type ProposalAck = Schemas["OkOut"];
+export type ConfirmAck = Schemas["ConfirmOut"];
 export type ProposalAction = Extract<ChatWsMessage, { type: "proposal" }>["data"]["action"];
