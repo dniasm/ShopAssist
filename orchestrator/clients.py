@@ -39,9 +39,10 @@ class Clients:
         self.customer = SERVICES["customer"][1](self._channels["customer"])
         self.assistant = SERVICES["assistant"][1](self._channels["assistant"])
 
-    async def call(self, service: str, rpc, request, user_id: str | None = None):
-        """Run one unary RPC with the standard deadline; `user_id` is forwarded as `x-user-id` metadata."""
-        metadata = ((USER_HEADER, user_id),) if user_id else None
+    async def call(self, service: str, rpc, request, user_id: str | None = None, source: str | None = None):
+        """Run one unary RPC with the standard deadline; `user_id` is forwarded as `x-user-id` metadata and
+        `source` (e.g. "assistant") as `x-source`, which the customer service puts on its cart audit lines."""
+        metadata = tuple(m for m in ((USER_HEADER, user_id), ("x-source", source)) if m[1]) or None
         try:
             return await rpc(request, timeout=self._timeout, metadata=metadata)
         except grpc.aio.AioRpcError as e:

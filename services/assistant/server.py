@@ -18,6 +18,7 @@ from services.common.server import Service, listen_address
 from services.common.util import iso
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
+from shared_common.common.log import audit, setup_logging
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 DEFAULT_TITLE = "New chat"
@@ -75,7 +76,9 @@ class AssistantServicer(pb_grpc.AssistantServiceServicer):
     async def CreateConversation(self, request, context):
         user_id = await require_user(context)
         title = request.title.strip()[:MAX_TITLE] or DEFAULT_TITLE
-        return to_conversation(await db.create_conversation(self.pool, user_id, title))
+        row = await db.create_conversation(self.pool, user_id, title)
+        audit("conversation_created", user=user_id, conversation=row["conversation_id"], title=row["title"])
+        return to_conversation(row)
 
     async def ListConversations(self, request, context):
         user_id = await require_user(context)
@@ -91,11 +94,14 @@ class AssistantServicer(pb_grpc.AssistantServiceServicer):
         title = request.title.strip()
         if not 1 <= len(title) <= MAX_TITLE:
             await self._invalid(context, f"a title is 1-{MAX_TITLE} characters")
-        return to_conversation(await self._run(context, db.rename_conversation(self.pool, user_id, request.conversation_id, title)))
+        row = await self._run(context, db.rename_conversation(self.pool, user_id, request.conversation_id, title))
+        audit("conversation_renamed", user=user_id, conversation=row["conversation_id"], title=row["title"])
+        return to_conversation(row)
 
     async def DeleteConversation(self, request, context):
         user_id = await require_user(context)
-        await self._run(context, db.delete_conversation(self.pool, user_id, request.conversation_id))
+        title = await self._run(context, db.delete_conversation(self.pool, user_id, request.conversation_id))
+        audit("conversation_deleted", user=user_id, conversation=request.conversation_id, title=title)
         return pb.DeleteConversationResponse()
 
     async def AppendMessage(self, request, context):
@@ -165,7 +171,10 @@ class AssistantServicer(pb_grpc.AssistantServiceServicer):
     async def ClearTemporalFacts(self, request, context):
         user_id = await require_user(context)
         categories = [c.strip().lower() for c in request.categories]
-        return pb.ClearTemporalFactsResponse(removed=await db.clear_temporal(self.pool, user_id, categories))
+        removed = await db.clear_temporal(self.pool, user_id, categories)
+        if removed:
+            audit("temporal_facts_cleared", user=user_id, categories=",".join(categories), count=removed)
+        return pb.ClearTemporalFactsResponse(removed=removed)
 
 
 async def create_service(url: str, *, address: str = "127.0.0.1:0", clock=None) -> Service:
@@ -180,7 +189,7 @@ async def create_service(url: str, *, address: str = "127.0.0.1:0", clock=None) 
 
 async def main() -> None:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s assistant %(levelname)s %(message)s")
+    setup_logging("assistant")
     url = database_url("ASSISTANT_DATABASE_URL")
     logging.getLogger("assistant").info("database %s", safe_target(url))
     service = await create_service(url, address=listen_address("ASSISTANT_ADDR", "localhost:50056"))

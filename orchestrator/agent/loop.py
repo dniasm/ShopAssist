@@ -10,6 +10,8 @@ import asyncio
 import json
 import logging
 import re
+import sys
+import time
 
 from orchestrator.agent import rules
 from orchestrator.agent.compact import cart_summary, order_line, product_line
@@ -22,6 +24,7 @@ from orchestrator.clients import Clients
 from orchestrator.errors import ApiError
 from orchestrator.events import EventHub
 from orchestrator.llm import LLMError
+from shared_common.common.log import audit
 from shopassist_proto import shopassist_pb2 as pb
 
 log = logging.getLogger(__name__)
@@ -29,6 +32,10 @@ MAX_STEPS = 6
 MAX_CARDS = 3
 MAX_SHOWN_CHARS = 1500
 TITLE_CHARS = 60
+TRACE_CHARS = 300  # how much of a tool's answer the turn's audit line keeps
+LINE_TEXT_CHARS = 1000  # the message and the reply on the turn line
+LINE_ARGS_CHARS = 500  # one tool's arguments on the turn line
+LINE_TOOLS = 20  # tool entries on the turn line
 LLM_DOWN = "I can't do that right now. Please try again in a minute."
 READ_ONLY = {"search_products", "get_product", "get_stock", "get_cart", "list_orders", "get_order"}  # the rules planner's read tools
 WRITE_WORDS = re.compile(r"\b(add|remove|delete|cancel|check ?out|buy|purchase|put|take out)\b", re.I)
@@ -61,11 +68,12 @@ class AgentLoop:
             async with lock:
                 self.emit(owner, "turn_started", {"turn_id": turn_id})
                 source = "rules"
-                saved = {}  # set by _turn once the user message is saved: (conversation id)
+                saved = {}  # this turn's own state: conversation id once saved, trace, counters (never on the AgentLoop)
                 try:
                     source = await self._turn(owner, user_id, turn_id, message, page, conversation_id, saved)
                 except Exception:
                     log.exception("chat turn %s failed", turn_id)
+                    self.audit_turn(saved, turn_id, conversation_id, message, "", "error", user_id=user_id, error=type(sys.exc_info()[1]).__name__)
                     if "conversation_id" in saved and "answered" not in saved:
                         await self.save(owner, user_id, turn_id, saved["conversation_id"], "assistant", SORRY, "")
                     self.emit(owner, "error", {"turn_id": turn_id, "message": SORRY})
@@ -98,13 +106,16 @@ class AgentLoop:
                 saved["conversation_id"] = conversation_id
 
         results: list[dict] = []
+        trace: list[dict] = saved.setdefault("trace", [])  # what each tool was asked and answered, for the turn line
+        stats = saved.setdefault("stats", {"calls": 0, "tokens": 0})
+        saved["started"] = time.monotonic()
         calls = tokens = 0
         text, final_reply, reply_args, llm_ok = "", False, {}, False
         if self.llm is not None:
             messages = self.model_messages(block, context, message, key)
             try:
                 text, final_reply, calls, tokens = await self.converse(
-                    owner, user_id, turn_id, messages, results, context.get("product"), block["all"] if self.reader and user_id else None)
+                    owner, user_id, turn_id, messages, results, context.get("product"), block["all"] if self.reader and user_id else None, trace, stats)
                 llm_ok = True
             except LLMError as e:
                 log.warning("agent: LLM failed (%s)", e)
@@ -112,7 +123,7 @@ class AgentLoop:
             if results:  # tools already ran this turn: say what they found rather than guess again
                 text = self.said(results)
             else:
-                text, reply_args, results = await self.fallback(owner, user_id, turn_id, message, key, context)
+                text, reply_args, results = await self.fallback(owner, user_id, turn_id, message, key, context, trace)
         text = plain_text(self.without_ids(text, results))
         cards = self.cards(results, reply_args)
         closing = ""
@@ -128,11 +139,31 @@ class AgentLoop:
             await self.save(owner, user_id, turn_id, conversation_id, "assistant", text, json.dumps(cards + self.proposal_cards(results)))
             if self.worker:
                 self.worker.submit(user_id, conversation_id, message, text)
-        log.info("chat turn llm_calls=%d tokens=%d", calls, tokens)
+        outcome = "ok" if llm_ok else ("llm_down" if self.llm is not None else "rules")
+        self.audit_turn(saved, turn_id, conversation_id, message, text, outcome, user_id=user_id)
         return "llm" if llm_ok else "rules"
 
+    @staticmethod
+    def audit_turn(saved: dict, turn_id: str, conversation_id: str, message: str, reply: str, outcome: str, user_id: str | None = None, error: str = "") -> None:
+        """The turn's one audit line (a turn that already wrote it does not write it again)."""
+        if saved.get("audited"):
+            return
+        saved["audited"] = True
+        trace = saved.get("trace", [])
+        shown = [{**t, "args": t["args"] if len(a := json.dumps(t["args"])) <= LINE_ARGS_CHARS else a[:LINE_ARGS_CHARS]} for t in trace[:LINE_TOOLS]]
+        extra = {"tools_dropped": len(trace) - LINE_TOOLS} if len(trace) > LINE_TOOLS else {}
+        if error:
+            extra["error"] = error
+        who = {"user": user_id} if user_id else {}
+        stats = saved.get("stats", {})
+        started = saved.get("started")
+        audit("assistant_turn", conversation=saved.get("conversation_id", conversation_id), turn=turn_id, **who, message=message[:LINE_TEXT_CHARS],
+              tools=json.dumps(shown), reply=reply[:LINE_TEXT_CHARS], llm_calls=stats.get("calls", 0), tokens=stats.get("tokens", 0),
+              ms=int((time.monotonic() - started) * 1000) if started else 0, outcome=outcome, **extra)
+
     async def converse(self, owner: str, user_id: str | None, turn_id: str, messages: list[dict], results: list[dict],
-                       page_product: dict | None, facts: list[dict] | None = None) -> tuple[str, bool, int, int]:
+                       page_product: dict | None, facts: list[dict] | None = None, trace: list[dict] | None = None,
+                       stats: dict | None = None) -> tuple[str, bool, int, int]:
         """The model/tool loop. Returns (text, text is a tool's own `final`, model calls, tokens). Raises LLMError."""
         seen: set[str] = set()
         calls = tokens = 0
@@ -144,6 +175,8 @@ class AgentLoop:
             reply = await self.llm.chat(messages, TOOLS)
             calls += 1
             tokens += int(reply.get("usage") or 0)
+            if stats is not None:
+                stats["calls"], stats["tokens"] = calls, tokens
             wanted = reply["tool_calls"]
             if not wanted:
                 return (reply["content"] or "").strip() or self.said(results), False, calls, tokens
@@ -155,9 +188,11 @@ class AgentLoop:
                 if signature in seen:
                     repeated = True
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": "Already done this turn."})
+                    if trace is not None:
+                        trace.append({"tool": c["name"], "args": c["args"], "result": "repeated", "ms": 0, "error": False})
                     continue
                 seen.add(signature)
-                out = await self.run_tool(owner, user_id, turn_id, c["name"], c["args"], page_product, facts)
+                out = await self.run_tool(owner, user_id, turn_id, c["name"], c["args"], page_product, facts, trace)
                 results.append(out)
                 messages.append({"role": "tool", "tool_call_id": c["id"], "content": out["text"]})
             if repeated:
@@ -168,11 +203,21 @@ class AgentLoop:
         return self.said(results), False, calls, tokens
 
     async def run_tool(self, owner: str, user_id: str | None, turn_id: str, name: str, args: dict, page_product: dict | None,
-                       facts: list[dict] | None = None) -> dict:
+                       facts: list[dict] | None = None, trace: list[dict] | None = None) -> dict:
         self.emit(owner, "tool_call", {"turn_id": turn_id, "tool": name, "args": args})
-        out = await self.tools.run(name, args, user_id, turn_id, page_product, facts)
+        started = time.monotonic()
+        try:
+            out = await self.tools.run(name, args, user_id, turn_id, page_product, facts)
+        except Exception:
+            if trace is not None:
+                trace.append({"tool": name, "args": args, "result": "raised", "ms": int((time.monotonic() - started) * 1000), "error": True})
+            raise
         self.emit(owner, "tool_result", {"turn_id": turn_id, "tool": name, "summary": out["final"] or out["text"]})
+        if trace is not None:
+            trace.append({"tool": name, "args": args, "result": (out["final"] or out["text"])[:TRACE_CHARS],
+                          "ms": int((time.monotonic() - started) * 1000), "error": bool(out["error"])})
         if proposal := out.get("proposal"):
+            audit("proposal_created", **({"user": user_id} if user_id else {}), proposal=proposal.proposal_id, action=proposal.action, summary=proposal.summary)
             self.emit(owner, "proposal", {"turn_id": turn_id, "proposal_id": proposal.proposal_id, "action": proposal.action,
                                           "args": proposal.args, "summary": proposal.summary})
         if out.get("navigate"):
@@ -184,7 +229,8 @@ class AgentLoop:
         """The answer when the model wrote none: what the last tools said (a repeated call is said once)."""
         return rules.compose([{"summary": r["final"] or r["text"]} for r in results])
 
-    async def fallback(self, owner: str, user_id: str | None, turn_id: str, message: str, key: str, context: dict) -> tuple[str, dict, list[dict]]:
+    async def fallback(self, owner: str, user_id: str | None, turn_id: str, message: str, key: str, context: dict,
+                       trace: list[dict] | None = None) -> tuple[str, dict, list[dict]]:
         """No model: the rules planner may look things up, never change anything. Returns (text, reply args, results)."""
         action = rules.plan(message, self.memory.history(key), context, [])
         if action["tool"] == "reply":
@@ -195,8 +241,12 @@ class AgentLoop:
             return LLM_DOWN, {}, []
         name, args = rules.to_tool_call(action["tool"], action["args"])
         self.emit(owner, "tool_call", {"turn_id": turn_id, "tool": name, "args": args})
+        started = time.monotonic()
         out = await self.tools.run(name, args, user_id, turn_id)
         summary = out["final"] or out["text"]
+        if trace is not None:
+            trace.append({"tool": name, "args": args, "result": summary[:TRACE_CHARS],
+                          "ms": int((time.monotonic() - started) * 1000), "error": bool(out.get("error"))})
         self.emit(owner, "tool_result", {"turn_id": turn_id, "tool": name, "summary": summary})
         extra = {"needs_sign_in": True} if out.get("needs_sign_in") else {}
         return rules.compose([{"summary": summary}]), extra, [{"text": summary, "final": None, "card": out["card"], "error": False}]

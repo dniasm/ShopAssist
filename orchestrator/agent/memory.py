@@ -7,6 +7,7 @@ import re
 
 from orchestrator.errors import ApiError
 from orchestrator.llm import LLMError
+from shared_common.common.log import set_request_id
 from shopassist_proto import shopassist_pb2 as pb
 
 log = logging.getLogger(__name__)
@@ -230,6 +231,8 @@ class MemoryWorker:
     async def _consume(self) -> None:
         while True:
             job = await self._queue.get()
+            set_request_id()  # each job is its own trace
+            log.info("memory job started user=%s conversation=%s", job[0], job[1])
             try:
                 await self._run(*job)
             except Exception as e:  # a bad job must never stop the worker
@@ -240,31 +243,36 @@ class MemoryWorker:
     async def _run(self, user_id: str, conversation_id: str, user_text: str, assistant_text: str) -> None:
         if self._llm is None:
             return
+        done = {"_facts": 0, "_summary": 0}
         for step in (self._facts, self._summary):
             try:
-                await step(user_id, conversation_id, user_text, assistant_text)
+                done[step.__name__] = await step(user_id, conversation_id, user_text, assistant_text) or 0
             except Exception as e:
                 log.warning("memory %s failed (%s)", step.__name__.lstrip("_"), type(e).__name__)
+        log.info("memory update conversation=%s summary_words=%d facts=%d", conversation_id, done["_summary"], done["_facts"])
 
     async def _call(self, rpc_name: str, request, user_id: str):
         return await self._clients.call("assistant", getattr(self._clients.assistant, rpc_name), request, user_id=user_id)
 
-    async def _facts(self, user_id: str, _conversation_id: str, user_text: str, _assistant_text: str) -> None:
+    async def _facts(self, user_id: str, _conversation_id: str, user_text: str, _assistant_text: str) -> int:
+        """Returns how many fact changes were applied."""
         if not may_hold_fact(user_text):
-            return
+            return 0
         changes = await self._llm.complete_json(
             FACTS_SYSTEM, user_text, "facts", FACTS_SCHEMA, _parse_changes, max_tokens=400, model=self._settings.memory_model)
         if not changes:
-            return
+            return 0
         remembered = [c for c in changes if c["op"] == "remember"]
         vectors = await self._embedder.embed([f"{c['key']}: {c['value']}" for c in remembered], "document") if remembered else None
         embedding = {id(c): v for c, v in zip(remembered, vectors)} if vectors else {}
         await self._call("ApplyFacts", pb.ApplyFactsRequest(
             changes=[pb.FactChange(**c, embedding=embedding.get(id(c), [])) for c in changes]), user_id)
+        return len(changes)
 
-    async def _summary(self, user_id: str, conversation_id: str, _user_text: str, _assistant_text: str) -> None:
+    async def _summary(self, user_id: str, conversation_id: str, _user_text: str, _assistant_text: str) -> int:
         reply = await self._call("ListMessages", pb.ListMessagesRequest(conversation_id=conversation_id, limit=SUMMARY_MESSAGES), user_id)
         prompt = "\n".join(f"{'User' if m.role == 'user' else 'Assistant'}: {m.text[:MESSAGE_CHARS]}" for m in reply.messages)
         summary = await self._llm.complete_json(
             SUMMARY_SYSTEM, prompt, "summary", SUMMARY_SCHEMA, _parse_summary, max_tokens=500, model=self._settings.memory_model)
         await self._call("SetSummary", pb.SetSummaryRequest(conversation_id=conversation_id, summary=summary), user_id)
+        return len(summary.split())

@@ -20,8 +20,11 @@ from collections.abc import Mapping
 
 import grpc
 
+from shared_common.common.log import get_request_id
+
 CALLER_HEADER = "x-svc-caller"
 TOKEN_HEADER = "x-svc-token"
+REQUEST_ID_HEADER = "x-request-id"
 TOKEN_TTL_SECONDS = 30  # how long a freshly signed token is valid
 MAX_LIFETIME_SECONDS = 60  # the server rejects an expiry further out than this (and any in the past)
 HEALTH_CHECK_METHOD = "/grpc.health.v1.Health/Check"
@@ -65,7 +68,9 @@ def signed_metadata(details, key: bytes, caller: str, audience: str | None) -> t
     method = details.method.decode() if isinstance(details.method, bytes) else details.method
     aud = audience or audience_of(method)
     extra = auth_metadata(key, caller, aud, method) if aud else ()
-    return tuple(details.metadata or ()) + extra
+    rid = get_request_id()
+    trace = ((REQUEST_ID_HEADER, rid),) if rid != "-" and aud else ()  # the trace id travels with our own calls only
+    return tuple(details.metadata or ()) + extra + trace
 
 
 class _Signer:

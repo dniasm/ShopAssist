@@ -14,6 +14,7 @@ from services.common.server import Service, listen_address
 from services.common.util import decode_offset, encode_offset, iso, page_size
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
+from shared_common.common.log import setup_logging
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL"]
@@ -110,7 +111,7 @@ async def create_service(url: str, *, seed_dir: Path | None = None, address: str
 
 async def main() -> None:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s catalog %(levelname)s %(message)s")
+    setup_logging("catalog")
     url = database_url("CATALOG_DATABASE_URL")
     logging.getLogger("catalog").info("database %s", safe_target(url))
     service = await create_service(url, address=listen_address("CATALOG_ADDR", "localhost:50051"))

@@ -8,6 +8,7 @@ import logging
 
 from services.order import db
 from services.order.saga import Deps, crash_point, remote_call
+from shared_common.common.log import audit
 from shopassist_proto import shopassist_pb2 as pb
 
 log = logging.getLogger(__name__)
@@ -59,6 +60,8 @@ class Canceller:
     async def cancel(self, user_id: str, order_id: str, key: str) -> dict:
         """Cancel the caller's order (idempotent by key) and return it. Raises OrderNotFound / NotCancellable."""
         outcome = await claim(self.deps.pool, user_id, order_id, key)
+        if outcome == "claimed":
+            audit("cancel_requested", user=user_id, order=order_id)
         if outcome != "done":
             await self.finish(await db.load_order(self.deps.pool, order_id, history=False))
         return await db.load_order(self.deps.pool, order_id)
@@ -67,13 +70,16 @@ class Canceller:
         """The steps after the claim: restock, refund, CANCELLED. All idempotent, so recovery just calls this again."""
         order_id, timeout = order["order_id"], self.deps.call_timeout
         lines = [pb.StockLine(sku_id=l["sku_id"], quantity=l["quantity"]) for l in order["lines"]]
-        await remote_call(self.deps.inventory.Restock, pb.RestockRequest(idempotency_key=f"cancel:{order_id}", lines=lines), timeout)
+        await remote_call(self.deps.inventory.Restock, pb.RestockRequest(idempotency_key=f"cancel:{order_id}", lines=lines), timeout,
+                          user_id=order["user_id"])
         crash_point(self.deps, "cancel_after_restock", recovering)
         if order["payment_id"]:
             await remote_call(
                 self.deps.payment.Refund,
                 pb.RefundRequest(idempotency_key=f"refund:{order_id}", payment_id=order["payment_id"], amount_cents=order["total_cents"]),
-                timeout,
+                timeout, user_id=order["user_id"],
             )
         async with self.deps.pool.connection() as conn:
-            await db.change_status(conn, order_id, CANCELLABLE, "CANCELLED", CANCELLED_MESSAGE)
+            changed = await db.change_status(conn, order_id, CANCELLABLE, "CANCELLED", CANCELLED_MESSAGE)
+        if changed:
+            audit("order_cancelled", user=order["user_id"], order=order_id, reason="cancelled by customer")

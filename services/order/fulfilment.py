@@ -10,6 +10,7 @@ import logging
 from psycopg_pool import AsyncConnectionPool
 
 from services.order import db
+from shared_common.common.log import set_request_id
 
 log = logging.getLogger(__name__)
 
@@ -35,12 +36,14 @@ async def advance_due(pool: AsyncConnectionPool, step_seconds: float, batch: int
             next_status, message = NEXT[order["status"]]
             if await db.change_status(conn, order["order_id"], (order["status"],), next_status, message):
                 moved += 1
+                log.info("order %s %s -> %s", order["order_id"], order["status"], next_status)
         return moved
 
 
 async def fulfilment_loop(pool: AsyncConnectionPool, step_seconds: float, poll_seconds: float) -> None:
     """Every `poll_seconds`; a failed pass is logged and retried."""
     while True:
+        set_request_id()  # one trace per pass
         try:
             if moved := await advance_due(pool, step_seconds):
                 log.info("advanced %d order(s)", moved)

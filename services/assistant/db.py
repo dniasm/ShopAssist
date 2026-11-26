@@ -8,6 +8,7 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from services.assistant import facts as rules
+from shared_common.common.log import audit
 
 Clock = Callable[[], datetime]
 CONVERSATION = "conversation_id, title, summary, created_at, updated_at"
@@ -71,11 +72,15 @@ async def set_summary(pool: AsyncConnectionPool, user_id: str, conversation_id: 
     return await _update(pool, user_id, conversation_id, "summary", summary)
 
 
-async def delete_conversation(pool: AsyncConnectionPool, user_id: str, conversation_id: str) -> None:
+async def delete_conversation(pool: AsyncConnectionPool, user_id: str, conversation_id: str) -> str:
+    """Delete the conversation and return its title (for the audit line)."""
     async with pool.connection() as conn:  # the messages go with it (ON DELETE CASCADE)
-        cur = await conn.execute("DELETE FROM conversations WHERE conversation_id = %s AND user_id = %s", (conversation_id, user_id))
-        if not cur.rowcount:
+        cur = await conn.execute(
+            "DELETE FROM conversations WHERE conversation_id = %s AND user_id = %s RETURNING title", (conversation_id, user_id))
+        row = await cur.fetchone()
+        if row is None:
             raise NotFound(conversation_id)
+    return row["title"]
 
 
 # ---------------- messages ----------------
@@ -134,16 +139,35 @@ async def apply_facts(pool: AsyncConnectionPool, user_id: str, changes: list[dic
     """Plan and apply a batch of remember/forget changes atomically (one batch per user at a time); returns all live facts."""
     async with pool.connection() as conn:
         await conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"facts:{user_id}",))
-        inserts, deletes = rules.plan_changes(await _live_facts(conn, user_id, now), changes, now)
+        existing = await _live_facts(conn, user_id, now)
+        inserts, deletes = rules.plan_changes(existing, changes, now)
         if deletes:
             await conn.execute("DELETE FROM facts WHERE user_id = %s AND fact_id = ANY(%s)", (user_id, deletes))
-        for row in inserts:
+        for row in inserts:  # `seq` keeps a batch in the order given (listing is by created_at, seq)
             await conn.execute(
                 "INSERT INTO facts (fact_id, user_id, kind, key, value, category, embedding, created_at, expires_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s::real[], %s, %s)",
                 (row["fact_id"], user_id, row["kind"], row["key"], row["value"], row["category"], row["embedding"], now, row["expires_at"]),
             )
-        return await _live_facts(conn, user_id, now)
+        live = await _live_facts(conn, user_id, now)
+    _audit_fact_changes(user_id, existing, inserts, deletes)  # after the commit: only changes that happened
+    return live
+
+
+def _audit_fact_changes(user_id: str, existing: list[dict], inserts: list[dict], deletes: list[str]) -> None:
+    """One audit line per fact change: a new row for a key whose old row was deleted is a replacement."""
+    gone = [f for f in existing if f["fact_id"] in deletes]
+    for row in inserts:
+        old = next((f for f in gone if f["key"] == row["key"]), None)
+        fields = dict(user=user_id, key=row["key"], value=row["value"], kind=row["kind"], category=row["category"])
+        if old is None:
+            audit("fact_added", **fields)
+            continue
+        gone.remove(old)
+        if (old["value"], old["kind"], old["category"]) != (row["value"], row["kind"], row["category"]):
+            audit("fact_replaced", **fields)
+    for old in gone:
+        audit("fact_removed", user=user_id, key=old["key"], value=old["value"], kind=old["kind"], category=old["category"])
 
 
 async def clear_temporal(pool: AsyncConnectionPool, user_id: str, categories: list[str]) -> int:

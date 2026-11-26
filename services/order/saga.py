@@ -15,8 +15,10 @@ from datetime import datetime, timezone
 import grpc
 import grpc.aio
 
-from services.common.util import iso
+from services.common.auth import USER_HEADER
+from services.common.util import dollars, iso
 from services.order import convert, db
+from shared_common.common.log import audit
 from shopassist_proto import shopassist_pb2 as pb
 
 log = logging.getLogger(__name__)
@@ -46,10 +48,12 @@ class Deps:
     call_timeout: float = 5.0
 
 
-async def remote_call(rpc, request, timeout: float, tolerate: tuple = ()):
-    """One remote call. Codes in `tolerate` come back as the error; any other failure leaves the outcome unknown."""
+async def remote_call(rpc, request, timeout: float, tolerate: tuple = (), user_id: str = ""):
+    """One remote call (`user_id` goes along as x-user-id, for the callee's audit lines). Codes in `tolerate` come back
+    as the error; any other failure leaves the outcome unknown."""
+    metadata = ((USER_HEADER, user_id),) if user_id else None
     try:
-        return await rpc(request, timeout=timeout), None
+        return await rpc(request, timeout=timeout, metadata=metadata), None
     except grpc.aio.AioRpcError as e:
         if e.code() in tolerate:
             return None, e
@@ -119,6 +123,7 @@ class Saga:
         self.total = subtotal + shipping
         totals = {"subtotal_cents": subtotal, "shipping_cents": shipping, "total_cents": self.total}
         await db.save_priced_lines(self.deps.pool, self.order_id, self.lines, totals, next_step="RESERVING")  # write-ahead
+        audit("checkout_started", user=self.user_id, order=self.order_id, lines=len(self.lines), total=dollars(self.total))
         await self._emit(pb.VALIDATING, pb.STEP_SUCCEEDED, f"{len(self.lines)} item(s), total {self.total} cents")
         return True
 
@@ -153,6 +158,7 @@ class Saga:
             return False
         self.payment_id = reply.payment_id
         await db.save_payment(self.deps.pool, self.order_id, reply.payment_id, "CONFIRMING")  # outcome + write-ahead for commit
+        audit("order_placed", user=self.user_id, order=self.order_id)
         await self._emit(pb.CHARGING, pb.STEP_SUCCEEDED, "Payment received")
         return True
 
@@ -170,6 +176,7 @@ class Saga:
             return False
         self.payment_id = reply.payment_id
         await db.save_payment(self.deps.pool, self.order_id, reply.payment_id, "CONFIRMING")
+        audit("order_placed", user=self.user_id, order=self.order_id)
         return True
 
     async def _confirm(self) -> None:
@@ -182,7 +189,8 @@ class Saga:
             await self._emit(pb.CONFIRMING, pb.STEP_FAILED, "The stock hold expired before payment completed")
             await self._compensate("reservation expired before payment completed")
             return
-        await db.settle(self.deps.pool, self.order_id, "CONFIRMED")
+        if await db.settle(self.deps.pool, self.order_id, "CONFIRMED"):
+            audit("order_confirmed", user=self.user_id, order=self.order_id)
         await self._emit(pb.CONFIRMING, pb.STEP_SUCCEEDED, "Stock committed")
         await self._finish(pb.STEP_SUCCEEDED, "Order confirmed.")
 
@@ -195,13 +203,15 @@ class Saga:
         if self.payment_id:
             await self._call(self.deps.payment.Refund, pb.RefundRequest(
                 idempotency_key=f"refund:{self.order_id}", payment_id=self.payment_id, amount_cents=self.total))
-        await db.settle(self.deps.pool, self.order_id, "FAILED", reason)
+        if await db.settle(self.deps.pool, self.order_id, "FAILED", reason):
+            audit("order_failed", user=self.user_id, order=self.order_id, reason=reason)
         await self._emit(pb.COMPENSATING, pb.STEP_SUCCEEDED, "Everything undone")
         await self._finish(pb.STEP_FAILED, reason)
 
     async def _fail(self, reason: str, shortages: list[dict] | None = None) -> bool:
         """End a checkout that failed before anything needed undoing. Always returns False (for `and` chains)."""
-        await db.settle(self.deps.pool, self.order_id, "FAILED", reason, shortages)
+        if await db.settle(self.deps.pool, self.order_id, "FAILED", reason, shortages):
+            audit("order_failed", user=self.user_id, order=self.order_id, reason=reason)
         await self._finish(pb.STEP_FAILED, reason)
         return False
 
@@ -222,7 +232,7 @@ class Saga:
             ))
 
     async def _call(self, rpc, request, tolerate: tuple = ()):
-        return await remote_call(rpc, request, self.deps.call_timeout, tolerate)
+        return await remote_call(rpc, request, self.deps.call_timeout, tolerate, self.user_id)
 
     def _crash_point(self, name: str) -> None:
         crash_point(self.deps, name, self.recovering)

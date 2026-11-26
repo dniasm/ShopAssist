@@ -18,6 +18,7 @@ import grpc.aio
 from orchestrator.checkout_flow import clear_temporal_facts
 from orchestrator.clients import USER_HEADER, Clients
 from orchestrator.events import EventHub
+from shared_common.common.log import set_request_id
 from shopassist_proto import shopassist_pb2 as pb
 
 log = logging.getLogger(__name__)
@@ -123,6 +124,8 @@ class OrderWatchers:
 
     async def _run(self, user_id: str, watch: _Watch) -> None:
         """Stream, forward, and on any failure wait a moment and resume from the last event id."""
+        set_request_id()  # the watch outlives the socket that opened it: its own trace
+        log.info("order watch started user=%s", user_id)
         delay = self._retry_after
         while True:
             call = self._clients.order.WatchOrders(

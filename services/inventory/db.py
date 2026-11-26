@@ -37,6 +37,7 @@ class Shortage:
 class ReserveResult:
     ok: bool
     expires_at: object = None
+    created: bool = False  # a new hold was made now (not a replay)
     shortages: list[Shortage] = field(default_factory=list)
 
 
@@ -74,12 +75,13 @@ async def _lock_reservation(conn: AsyncConnection, reservation_id: str) -> dict 
     return await cur.fetchone()
 
 
-async def _give_back(conn: AsyncConnection, reservation_id: str, new_state: str, reason: str = "") -> None:
+async def _give_back(conn: AsyncConnection, reservation_id: str, new_state: str, reason: str = "") -> list[str]:
     """Return a HELD reservation's units to available and record why. Caller holds the reservation row lock."""
     cur = await conn.execute(
         "SELECT sku_id, quantity FROM reservation_lines WHERE reservation_id = %s ORDER BY sku_id", (reservation_id,)
     )
-    for line in await cur.fetchall():
+    lines = await cur.fetchall()
+    for line in lines:
         await conn.execute(
             "UPDATE stock SET reserved = reserved - %s WHERE sku_id = %s", (line["quantity"], line["sku_id"])
         )
@@ -87,6 +89,7 @@ async def _give_back(conn: AsyncConnection, reservation_id: str, new_state: str,
         "UPDATE reservations SET state = %s, reason = %s, updated_at = now() WHERE reservation_id = %s",
         (new_state, reason, reservation_id),
     )
+    return [line["sku_id"] for line in lines]
 
 
 async def reserve(pool: AsyncConnectionPool, reservation_id: str, lines: dict[str, int], ttl_seconds: int) -> ReserveResult:
@@ -122,7 +125,7 @@ async def reserve(pool: AsyncConnectionPool, reservation_id: str, lines: dict[st
         if shortages:
             await conn.rollback()  # undoes the lines that did fit and the reservation row itself
             return ReserveResult(ok=False, shortages=shortages)
-        return ReserveResult(ok=True, expires_at=created["expires_at"])
+        return ReserveResult(ok=True, expires_at=created["expires_at"], created=True)
 
 
 async def _available(conn: AsyncConnection, sku_id: str) -> int:
@@ -161,19 +164,19 @@ async def commit(pool: AsyncConnectionPool, reservation_id: str) -> None:
         raise WrongState(f"reservation {reservation_id} expired before it was committed")
 
 
-async def release(pool: AsyncConnectionPool, reservation_id: str, reason: str) -> None:
-    """HELD -> RELEASED. Unknown, already released or expired ids are no-ops (compensation may run twice)."""
+async def release(pool: AsyncConnectionPool, reservation_id: str, reason: str) -> list[str]:
+    """HELD -> RELEASED; returns the SKUs given back. Unknown, already released or expired ids are no-ops (compensation may run twice)."""
     async with pool.connection() as conn:
         row = await _lock_reservation(conn, reservation_id)
         if row is None or row["state"] in ("RELEASED", "EXPIRED"):
-            return
+            return []
         if row["state"] == "COMMITTED":
             raise WrongState(f"reservation {reservation_id} is already committed; restock instead")
-        await _give_back(conn, reservation_id, "RELEASED", reason)
+        return await _give_back(conn, reservation_id, "RELEASED", reason)
 
 
-async def restock(pool: AsyncConnectionPool, idempotency_key: str, lines: dict[str, int]) -> None:
-    """Add units back to on_hand once per key. An unknown SKU aborts everything, including the key;
+async def restock(pool: AsyncConnectionPool, idempotency_key: str, lines: dict[str, int]) -> bool:
+    """Add units back to on_hand once per key (False: a replay, nothing added). An unknown SKU aborts everything, including the key;
     reusing a key with different lines raises KeyReused."""
     fp = _lines_fingerprint(lines)
     async with pool.connection() as conn:
@@ -184,11 +187,12 @@ async def restock(pool: AsyncConnectionPool, idempotency_key: str, lines: dict[s
         if await cur.fetchone() is None:
             cur = await conn.execute("SELECT fingerprint FROM restocks WHERE idempotency_key = %s", (idempotency_key,))
             check_replay(idempotency_key, (await cur.fetchone())["fingerprint"], fp)
-            return
+            return False
         for sku_id, quantity in sorted(lines.items()):
             cur = await conn.execute("UPDATE stock SET on_hand = on_hand + %s WHERE sku_id = %s", (quantity, sku_id))
             if cur.rowcount == 0:
                 raise UnknownSku(sku_id)  # the exception rolls the whole transaction back
+    return True
 
 
 async def expire_due(pool: AsyncConnectionPool, batch: int = 100) -> int:

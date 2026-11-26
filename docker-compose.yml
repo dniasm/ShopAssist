@@ -15,8 +15,16 @@ x-app: &app
     PAYMENT_ADDR: payment:50055
     ASSISTANT_ADDR: assistant:50056
 
+x-logs: &logs
+  LOG_DIR: /app/logs
+  TZ: ${TZ:-UTC}
+
 x-service: &service
   <<: *app
+  environment:
+    <<: [*addrs, *logs]
+  volumes:
+    - ./logs:/app/logs
   depends_on:
     db-init:
       condition: service_completed_successfully
@@ -112,6 +120,10 @@ services:
   orchestrator:
     <<: *app
     env_file: .docker-env/orchestrator.env
+    environment:
+      <<: [*addrs, *logs]
+    volumes:
+      - ./logs:/app/logs
     ports:
       - "127.0.0.1:8011:8011"   # this machine only; the demo is not exposed to the network
     depends_on:

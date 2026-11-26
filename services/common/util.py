@@ -7,6 +7,11 @@ DEFAULT_PAGE_SIZE = 24
 MAX_PAGE_SIZE = 100
 
 
+def dollars(cents: int) -> str:
+    """Cents as `$12.34` (for audit lines)."""
+    return f"${int(cents) // 100}.{int(cents) % 100:02d}"
+
+
 def iso(dt: datetime | None) -> str:
     """ISO-8601 UTC string, which is the timestamp format of the whole API ("" when there is no value)."""
     return dt.astimezone(timezone.utc).isoformat() if dt else ""
