@@ -13,6 +13,7 @@ import re
 
 from orchestrator.agent import rules
 from orchestrator.agent.compact import cart_summary, order_line, product_line
+from orchestrator.agent.plain import plain_text
 from orchestrator.agent.prompt import SYSTEM_PROMPT, TOOLS
 from orchestrator.agent.state import ConversationMemory, ProposalStore
 from orchestrator.agent.tools import CLOSING, AgentTools, product_list
@@ -112,7 +113,7 @@ class AgentLoop:
                 text = self.said(results)
             else:
                 text, reply_args, results = await self.fallback(owner, user_id, turn_id, message, key, context)
-        text = self.without_ids(text, results)
+        text = plain_text(self.without_ids(text, results))
         cards = self.cards(results, reply_args)
         closing = ""
         if cards and cards[-1]["kind"] == "products" and cards[-1]["data"]["products"]:
