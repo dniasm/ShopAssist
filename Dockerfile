@@ -14,10 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY orchestrator/ orchestrator/
 COPY services/ services/
 COPY shopassist_proto/ shopassist_proto/
+COPY shared_common/ shared_common/
 COPY protos/ protos/
 COPY data/ data/
 COPY scripts/ scripts/
 COPY --from=web /web/dist web/dist
-RUN useradd --system --no-create-home app
+RUN useradd --system --no-create-home app && mkdir -p /app/logs && chown app /app/logs
 USER app
 CMD ["python", "-m", "orchestrator.main"]

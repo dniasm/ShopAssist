@@ -14,6 +14,7 @@ from orchestrator.deps import current_user_id, get_clients, get_tokens
 from orchestrator.errors import ApiError
 from orchestrator.schemas import MeOut, SessionIn, SessionOut, SignUpIn, SignupsOut
 from orchestrator.session import SessionTokens
+from shared_common.common.log import audit
 from shopassist_proto import shopassist_pb2 as pb
 
 router = APIRouter()
@@ -36,6 +37,7 @@ async def create_session(body: SessionIn, request: Request, clients: Clients = D
     """Sign in with email and password. A wrong email and a wrong password get the same answer."""
     limits, address, email = request.app.state.login_limits, _address(request), body.email.strip()
     if limits.blocked(email, address):
+        audit("login_rate_limited", email=email)
         raise ApiError("rate_limited", TOO_MANY)
     try:
         u = await clients.call("customer", clients.customer.Authenticate, pb.AuthenticateRequest(email=email, password=body.password))

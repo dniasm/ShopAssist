@@ -1,6 +1,7 @@
 """The chat endpoints: start a turn, confirm or dismiss a proposal. Progress and answers arrive on the session WebSocket."""
 import asyncio
 import json
+import logging
 import secrets
 
 from fastapi import APIRouter, Depends, Request
@@ -12,6 +13,7 @@ from orchestrator.deps import current_user_id, get_clients
 from orchestrator.errors import ApiError
 from orchestrator.routes_orders import cancel_for
 from orchestrator.schemas import ChatMessageOut, ConversationOut, RenameIn
+from shared_common.common.log import audit, get_request_id, set_request_id
 from shopassist_proto import shopassist_pb2 as pb
 
 router = APIRouter()
@@ -48,12 +50,23 @@ def owner_of(request: Request, credentials: HTTPAuthorizationCredentials | None,
     return f"guest:{guest_id}", None
 
 
+log = logging.getLogger(__name__)
+
+
+async def _run_turn(agent, owner: str, user_id: str | None, turn_id: str, *args) -> None:
+    """A chat turn outlives the POST that started it, so it gets its own request id and says which POST it came from."""
+    http_request = get_request_id()
+    set_request_id()
+    log.info("chat turn started conversation=%s turn=%s http_request=%s", args[-1], turn_id, http_request)
+    await agent.run_turn(owner, user_id, turn_id, *args)
+
+
 @router.post("/chat", status_code=202, response_model=TurnOut)
 async def chat(body: ChatIn, request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer)):
     owner, user_id = owner_of(request, credentials, body.guest_id)
     state = request.app.state
     turn_id = "T-" + secrets.token_hex(6)
-    task = asyncio.create_task(state.agent.run_turn(owner, user_id, turn_id, body.message.strip(), body.context.model_dump(), body.conversation_id or "default"))
+    task = asyncio.create_task(_run_turn(state.agent, owner, user_id, turn_id, body.message.strip(), body.context.model_dump(), body.conversation_id or "default"))
     state.tasks.add(task)
     task.add_done_callback(state.tasks.discard)
     return {"turn_id": turn_id}
@@ -76,13 +89,15 @@ async def confirm(proposal_id: str, request: Request, user_id: str = Depends(cur
     except ApiError:
         state.proposals.release(proposal)  # nothing happened: the person can try again
         raise
+    audit("proposal_confirmed", user=user_id, proposal=proposal.proposal_id, action=proposal.action)
     state.hub.publish(user_id, "chat", "message", {"turn_id": proposal.turn_id, "text": text, "cards": cards})
     return {"ok": True}
 
 
 @router.post("/chat/proposals/{proposal_id}/dismiss", response_model=OkOut)
 async def dismiss(proposal_id: str, request: Request, user_id: str = Depends(current_user_id)):
-    request.app.state.proposals.dismiss(proposal_id, user_id)
+    proposal = request.app.state.proposals.dismiss(proposal_id, user_id)
+    audit("proposal_dismissed", user=user_id, proposal=proposal.proposal_id, action=proposal.action)
     return {"ok": True}
 
 

@@ -20,6 +20,7 @@ from orchestrator.llm import LLMClient
 from orchestrator.schemas import ErrorResponse
 from orchestrator.login_limits import LoginLimits
 from orchestrator.session import SessionTokens
+from orchestrator.request_log import RequestLogMiddleware
 from orchestrator.settings import SECRET_WARNING, Settings
 from orchestrator.spa import install_spa
 
@@ -73,6 +74,7 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, w
         CORSMiddleware, allow_origins=DEV_ORIGINS, allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
+    app.add_middleware(RequestLogMiddleware)  # added last = outermost: every request, errors included, gets an id and a line
     errors.install(app)
     routers = (routes_health, routes_auth, routes_products, routes_cart, routes_orders, routes_checkout, routes_chat, routes_ws)
     for router in (m.router for m in routers):

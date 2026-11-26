@@ -173,6 +173,27 @@ All settings are environment variables; `.env.example` lists them with comments:
 (`CATALOG_ADDR` … `PAYMENT_ADDR`, `ASSISTANT_ADDR`), `ORCHESTRATOR_PORT` (8011), `RESERVATION_TTL_SECONDS`, `FULFILMENT_STEP_SECONDS`
 (seconds between order status steps), `PAYMENT_LATENCY_MS`, `SESSION_SECRET`, `SVC_KEY_ORCHESTRATOR`/`SVC_KEY_ORDER`, `WS_AUTH_TIMEOUT_SECONDS`, `WS_ALLOWED_ORIGINS`, `DEMO_PASSWORD` and `SIGNUP_CODE`.
 
+## Logs
+
+Every service and the orchestrator write one line format to the console and to files: `logs/<service>/<YYYY-MM-DD>.log`
+(all lines) and `logs/audit/<service>-<YYYY-MM-DD>.log` (business events and one `assistant_turn` line per chat turn).
+Each request carries an id (`[request_id]`) across all services. Docker bind-mounts `./logs`. Secrets are masked.
+On a Linux Docker host, `./logs` must exist and be writable by the container's `app` user (`mkdir -p logs` and `chown` it) before `docker compose up`.
+
+| Setting | Default | |
+|---|---|---|
+| `LOG_DIR` | `<repo>/logs` | where the files go (`/app/logs` in Docker) |
+| `LOG_LEVEL` | `INFO` | console and service files; audit lines are always written |
+| `LOG_RETENTION_DAYS` | `30` | service files older than this are deleted; audit files are kept forever |
+
+```powershell
+python scripts/logs.py --since 30m --level WARNING        # all services merged by time
+python scripts/logs.py --audit --user <id> --since 1d     # business events of one customer (also --order <id>)
+python scripts/logs.py --request <id>                     # every line of one request, across services
+python scripts/logs.py --turn <turn_id>                   # replay one assistant turn: message, tools, reply, tokens
+python scripts/logs.py --follow --service order --grep cancel
+```
+
 ## Troubleshooting
 
 - **A port is busy.** `run_all.py` refuses to start if a port it needs is taken and never kills other processes. Find the owner

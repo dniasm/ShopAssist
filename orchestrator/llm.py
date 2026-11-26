@@ -128,6 +128,7 @@ class LLMClient:
                       salvage: Callable[[dict], object] | None):
         """Key rotation shared by every call. `from_data` turns the decoded 200 body into the result (raise LLMError to reject);
         `salvage` (strict-JSON calls only) receives the model's own JSON from a 400 json_validate_failed."""
+        started = time.perf_counter()
         tried: set[int] = set()   # keys that failed softly for this request
         soft_retry_left = True    # timeout / 5xx / bad JSON: at most one retry, on another key
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as http:
@@ -159,8 +160,9 @@ class LLMClient:
                         data = payload.json()
                         usage = data.get("usage") or {}
                         await self.pool.record(lease.index, status, headers, usage.get("total_tokens") or est_tokens)
-                        log.info("llm call model=%s prompt=%d completion=%d", body["model"],
-                                 usage.get("prompt_tokens") or 0, usage.get("completion_tokens") or 0)
+                        log.info("llm call model=%s prompt=%d completion=%d ms=%d key=%d", body["model"],
+                                 usage.get("prompt_tokens") or 0, usage.get("completion_tokens") or 0,
+                                 int((time.perf_counter() - started) * 1000), lease.index)
                         return from_data(data)
                     except LLMError:
                         raise

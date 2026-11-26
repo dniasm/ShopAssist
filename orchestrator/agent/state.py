@@ -79,10 +79,11 @@ class ProposalStore:
         """Execution failed before anything happened: let the person try again."""
         proposal.state = "open"
 
-    def dismiss(self, proposal_id: str, user_id: str) -> None:
+    def dismiss(self, proposal_id: str, user_id: str) -> Proposal:
         proposal = self._visible(proposal_id, user_id)
         if proposal.state == "open":
             proposal.state = "dismissed"
+        return proposal
 
     def _purge(self) -> None:
         now = self._clock()

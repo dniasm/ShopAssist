@@ -10,3 +10,4 @@ web/dist/
 *.log
 loadtest/out/
 .docker-env/
+logs/

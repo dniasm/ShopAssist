@@ -196,7 +196,8 @@ class AgentTools:
         quantity = min(MAX_QTY, have + added)
         updated = await self.clients.call(
             "customer", self.clients.customer.SetCartLine,
-            pb.SetCartLineRequest(sku_id=sku.sku_id, product_id=product.product_id, quantity=quantity), user_id=user_id)
+            pb.SetCartLineRequest(sku_id=sku.sku_id, product_id=product.product_id, quantity=quantity), user_id=user_id,
+            source="assistant")
         view = await priced_cart(self.clients, updated)
         what = f"{product.name} ({sku.size}, {sku.color})" if added == 1 else f"{added} × {product.name} ({sku.size}, {sku.color})"
         cap = f" Limit is {MAX_QTY} per item." if have + added > MAX_QTY else ""
@@ -213,7 +214,8 @@ class AgentTools:
                           card("cart", view), error=True)
         quantity = 0 if action == "remove" else max(0, min(MAX_QTY, int(a["quantity"])))
         updated = await self.clients.call("customer", self.clients.customer.SetCartLine,
-                                          pb.SetCartLineRequest(sku_id=line["sku_id"], product_id=line["product_id"], quantity=quantity), user_id=user_id)
+                                          pb.SetCartLineRequest(sku_id=line["sku_id"], product_id=line["product_id"], quantity=quantity),
+                                          user_id=user_id, source="assistant")
         view = await priced_cart(self.clients, updated)
         what = f"{line['name']} ({line['size']}, {line['color']})"
         tail = f"Cart total {money(view['total_cents'])}." if view["lines"] else "Your cart is now empty."
