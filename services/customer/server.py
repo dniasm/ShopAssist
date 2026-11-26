@@ -12,7 +12,7 @@ from pathlib import Path
 import grpc
 from dotenv import load_dotenv
 
-from services.common.auth import require_user
+from services.common.auth import metadata_value, require_user
 from services.common.db import create_pool, database_url, safe_target
 from services.common.migrate import apply_migrations
 from services.common.seed import read_seed, seed_dir as default_seed_dir, seed_if_empty
@@ -22,14 +22,19 @@ from services.customer import db
 from services.customer.passwords import MAX_PASSWORD, MIN_PASSWORD, check_password, hash_password
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
-from shared_common.common.log import setup_logging
+from shared_common.common.log import audit, setup_logging
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 MAX_LINE_QUANTITY = 10
+SOURCE_HEADER = "x-source"  # "assistant" when the orchestrator sends the shopping assistant's edit; anything else is "web"
 DEFAULT_DEMO_PASSWORD = "shopassist-demo"
 EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]+$")
 # Checked even when the email is unknown, so a wrong email takes as long as a wrong password (no account probing).
 _DUMMY_HASH = hash_password("not a real password")
+
+
+def source_of(context) -> str:
+    return "assistant" if metadata_value(context, SOURCE_HEADER) == "assistant" else "web"
 
 
 def to_user(row: dict) -> pb.User:
@@ -61,7 +66,10 @@ class CustomerServicer(pb_grpc.CustomerServiceServicer):
         row = await db.credentials(self.pool, request.email.strip())
         ok = await asyncio.to_thread(check_password, request.password, row["password_hash"] if row else _DUMMY_HASH)
         if row is None or not ok:
+            audit("login_failed", email=request.email.strip(), reason="unknown_email" if row is None else "wrong_password",
+                  **({"user": row["user_id"]} if row else {}))
             await context.abort(grpc.StatusCode.UNAUTHENTICATED, "wrong email or password")
+        audit("login_ok", email=row["email"], user=row["user_id"])
         return to_user(row)
 
     async def CreateUser(self, request, context):
@@ -74,13 +82,15 @@ class CustomerServicer(pb_grpc.CustomerServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"A password is {MIN_PASSWORD}-{MAX_PASSWORD} characters.")
         password_hash = await asyncio.to_thread(hash_password, request.password)
         try:
-            return to_user(await db.create_user(self.pool, name, email, city[:64], password_hash))
+            user = await db.create_user(self.pool, name, email, city[:64], password_hash)
         except db.EmailTaken:
             await context.abort(grpc.StatusCode.ALREADY_EXISTS, "an account with that email already exists")
+        audit("signup", email=user["email"], user=user["user_id"])
+        return to_user(user)
 
     async def GetCart(self, request, context):
         user_id = await require_user(context)
-        return await self._run(context, db.get_cart(self.pool, user_id))
+        return to_cart(await self._run(context, db.get_cart(self.pool, user_id)))
 
     async def SetCartLine(self, request, context):
         user_id = await require_user(context)
@@ -90,17 +100,26 @@ class CustomerServicer(pb_grpc.CustomerServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"quantity must be 0..{MAX_LINE_QUANTITY} (0 removes the line)")
         if request.quantity > 0 and not request.product_id:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "product_id is required")
-        return await self._run(context, db.set_line(self.pool, user_id, request.sku_id, request.product_id, request.quantity))
+        cart = await self._run(context, db.set_line(self.pool, user_id, request.sku_id, request.product_id, request.quantity))
+        before, source = cart["qty_before"], source_of(context)
+        if request.quantity == 0 and before:
+            audit("cart_line_removed", user=user_id, sku=request.sku_id, qty_before=before, source=source)
+        elif request.quantity != before:
+            audit("cart_line_set", user=user_id, sku=request.sku_id, qty_before=before, qty_after=request.quantity, source=source)
+        return to_cart(cart)
 
     async def ClearCart(self, request, context):
         user_id = await require_user(context)
-        return await self._run(context, db.clear_cart(self.pool, user_id, request.if_version))
+        cart = await self._run(context, db.clear_cart(self.pool, user_id, request.if_version))
+        if cart["removed"]:
+            audit("cart_cleared", user=user_id, lines=cart["removed"], source=source_of(context))
+        return to_cart(cart)
 
     @staticmethod
-    async def _run(context, operation) -> pb.Cart:
-        """Await a cart operation and translate its domain errors; always returns the resulting cart."""
+    async def _run(context, operation) -> dict:
+        """Await a cart operation and translate its domain errors; returns the resulting cart row."""
         try:
-            return to_cart(await operation)
+            return await operation
         except db.UnknownUser as e:
             await context.abort(grpc.StatusCode.NOT_FOUND, f"user {e} not found")
         except db.VersionMismatch as e:

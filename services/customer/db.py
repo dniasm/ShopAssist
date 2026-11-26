@@ -113,6 +113,7 @@ async def set_line(pool: AsyncConnectionPool, user_id: str, sku_id: str, product
         await _lock_cart(conn, user_id)  # serialises edits of one cart, so the version counts every change
         cur = await conn.execute("SELECT quantity FROM cart_lines WHERE user_id = %s AND sku_id = %s", (user_id, sku_id))
         existing = await cur.fetchone()
+        before = existing["quantity"] if existing else 0
         if quantity == 0:
             if existing:
                 await conn.execute("DELETE FROM cart_lines WHERE user_id = %s AND sku_id = %s", (user_id, sku_id))
@@ -128,7 +129,8 @@ async def set_line(pool: AsyncConnectionPool, user_id: str, sku_id: str, product
                 "UPDATE cart_lines SET quantity = %s WHERE user_id = %s AND sku_id = %s", (quantity, user_id, sku_id)
             )
             await _bump(conn, user_id)
-        return await _read_cart(conn, user_id)
+        cart = await _read_cart(conn, user_id)
+    return {**cart, "qty_before": before}  # qty_before is for the audit line; the cart conversion ignores it
 
 
 async def clear_cart(pool: AsyncConnectionPool, user_id: str, if_version: int) -> dict:
@@ -140,4 +142,5 @@ async def clear_cart(pool: AsyncConnectionPool, user_id: str, if_version: int) -
         cur = await conn.execute("DELETE FROM cart_lines WHERE user_id = %s", (user_id,))
         if cur.rowcount:
             await _bump(conn, user_id)
-        return await _read_cart(conn, user_id)
+        cart = await _read_cart(conn, user_id)
+    return {**cart, "removed": cur.rowcount}  # removed is for the audit line

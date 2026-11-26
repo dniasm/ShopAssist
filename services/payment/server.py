@@ -7,15 +7,17 @@ from pathlib import Path
 import grpc
 from dotenv import load_dotenv
 
+from services.common.auth import user_field
 from services.common.db import create_pool, database_url, safe_target
 from services.common.idempotency import KeyReused
 from services.common.migrate import apply_migrations
 from services.common.seed import read_seed, seed_dir as default_seed_dir, seed_if_empty
 from services.common.server import Service, listen_address
+from services.common.util import dollars
 from services.payment import db
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
-from shared_common.common.log import setup_logging
+from shared_common.common.log import audit, setup_logging
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 DEFAULT_LATENCY_MS = 300
@@ -26,6 +28,10 @@ class PaymentServicer(pb_grpc.PaymentServiceServicer):
     def __init__(self, pool, latency_ms: int):
         self.pool = pool
         self.latency = latency_ms / 1000
+
+    @staticmethod
+    def _refund_failed(context, order_id: str, reason: str) -> None:
+        audit("refund_failed", order=order_id, reason=reason, **user_field(context))
 
     async def Charge(self, request, context):
         if not request.idempotency_key or not request.order_id:
@@ -39,6 +45,12 @@ class PaymentServicer(pb_grpc.PaymentServiceServicer):
             row = await db.charge(self.pool, request.idempotency_key, request.order_id, request.amount_cents, request.payment_method)
         except KeyReused as e:
             await context.abort(grpc.StatusCode.ALREADY_EXISTS, str(e))
+        if row.get("created"):
+            amount = dollars(request.amount_cents)
+            if row["status"] == "SUCCEEDED":
+                audit("payment_charged", order=request.order_id, amount=amount, method=request.payment_method, **user_field(context))
+            else:
+                audit("payment_failed", order=request.order_id, amount=amount, reason=row["decline_reason"] or "declined", **user_field(context))
         return pb.ChargeResponse(payment_id=row["payment_id"], status=STATUS[row["status"]], decline_reason=row["decline_reason"])
 
     async def LookupCharge(self, request, context):
@@ -60,11 +72,16 @@ class PaymentServicer(pb_grpc.PaymentServiceServicer):
         except KeyReused as e:
             await context.abort(grpc.StatusCode.ALREADY_EXISTS, str(e))
         except db.PaymentNotFound:
+            self._refund_failed(context, request.idempotency_key.removeprefix("refund:"), "payment not found")
             await context.abort(grpc.StatusCode.NOT_FOUND, f"payment {request.payment_id} not found")
         except db.NotRefundable as e:
+            self._refund_failed(context, e.order_id, str(e))
             await context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(e))
         except db.AmountTooLarge as e:
+            self._refund_failed(context, e.order_id, str(e))
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+        if row.get("created"):
+            audit("refund_issued", order=row["order_id"], amount=dollars(request.amount_cents), **user_field(context))
         return pb.RefundResponse(refund_id=row["refund_id"], status=pb.PAYMENT_REFUNDED)
 
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import grpc
 from dotenv import load_dotenv
 
+from services.common.auth import user_field
 from services.common.db import create_pool, database_url, safe_target
 from services.common.idempotency import KeyReused
 from services.common.migrate import apply_migrations
@@ -16,7 +17,7 @@ from services.common.util import iso
 from services.inventory import db
 from shopassist_proto import shopassist_pb2 as pb
 from shopassist_proto import shopassist_pb2_grpc as pb_grpc
-from shared_common.common.log import setup_logging
+from shared_common.common.log import audit, setup_logging
 
 log = logging.getLogger("inventory")
 MIGRATIONS = Path(__file__).parent / "migrations"
@@ -65,6 +66,8 @@ class InventoryServicer(pb_grpc.InventoryServiceServicer):
             await context.abort(grpc.StatusCode.ALREADY_EXISTS, str(e))
         except db.WrongState as e:
             await context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(e))
+        if result.created and result.ok:
+            audit("stock_reserved", order=request.reservation_id, skus=",".join(sorted(lines)), **user_field(context))
         return pb.ReserveResponse(
             ok=result.ok, expires_at=iso(result.expires_at),
             shortages=[pb.Shortage(sku_id=s.sku_id, requested=s.requested, available=s.available) for s in result.shortages],
@@ -81,9 +84,11 @@ class InventoryServicer(pb_grpc.InventoryServiceServicer):
 
     async def Release(self, request, context):
         try:
-            await db.release(self.pool, request.reservation_id, request.reason)
+            skus = await db.release(self.pool, request.reservation_id, request.reason)
         except db.WrongState as e:
             await context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(e))
+        if skus:
+            audit("stock_released", order=request.reservation_id, skus=",".join(skus), **user_field(context))
         return pb.ReleaseResponse()
 
     async def Restock(self, request, context):
@@ -94,11 +99,14 @@ class InventoryServicer(pb_grpc.InventoryServiceServicer):
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
         try:
-            await db.restock(self.pool, request.idempotency_key, lines)
+            applied = await db.restock(self.pool, request.idempotency_key, lines)
         except KeyReused as e:
             await context.abort(grpc.StatusCode.ALREADY_EXISTS, str(e))
         except db.UnknownSku as e:
             await context.abort(grpc.StatusCode.NOT_FOUND, f"unknown sku {e}")
+        if applied:
+            for sku_id, quantity in sorted(lines.items()):
+                audit("restock", sku=sku_id, qty=quantity, **user_field(context))
         return pb.RestockResponse()
 
 

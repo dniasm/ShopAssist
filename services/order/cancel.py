@@ -7,6 +7,7 @@ idempotent write keyed by the order id, so recovery can simply run the remaining
 import logging
 
 from services.order import db
+from shared_common.common.log import audit
 from services.order.saga import Deps, crash_point, remote_call
 from shopassist_proto import shopassist_pb2 as pb
 
@@ -59,6 +60,8 @@ class Canceller:
     async def cancel(self, user_id: str, order_id: str, key: str) -> dict:
         """Cancel the caller's order (idempotent by key) and return it. Raises OrderNotFound / NotCancellable."""
         outcome = await claim(self.deps.pool, user_id, order_id, key)
+        if outcome == "claimed":
+            audit("cancel_requested", user=user_id, order=order_id)
         if outcome != "done":
             await self.finish(await db.load_order(self.deps.pool, order_id, history=False))
         return await db.load_order(self.deps.pool, order_id)
@@ -76,4 +79,6 @@ class Canceller:
                 timeout,
             )
         async with self.deps.pool.connection() as conn:
-            await db.change_status(conn, order_id, CANCELLABLE, "CANCELLED", CANCELLED_MESSAGE)
+            changed = await db.change_status(conn, order_id, CANCELLABLE, "CANCELLED", CANCELLED_MESSAGE)
+        if changed:
+            audit("order_cancelled", user=order["user_id"], order=order_id, reason="cancelled by customer")

@@ -17,9 +17,15 @@ class PaymentNotFound(Exception):
 class NotRefundable(Exception):
     """The payment did not succeed, or has already been refunded."""
 
+    def __init__(self, message: str, order_id: str = ""):
+        super().__init__(message)
+        self.order_id = order_id  # for the audit line
+
 
 class AmountTooLarge(Exception):
-    pass
+    def __init__(self, message: str, order_id: str = ""):
+        super().__init__(message)
+        self.order_id = order_id
 
 
 def decide(method: str, idempotency_key: str) -> tuple[str, str]:
@@ -61,7 +67,7 @@ async def charge(pool: AsyncConnectionPool, key: str, order_id: str, amount_cent
         )
         row = await cur.fetchone()
         if row is not None:
-            return row
+            return {**row, "created": True}  # created: this call made the charge (a replay returns the stored one)
         cur = await conn.execute(
             "SELECT payment_id, status, decline_reason, fingerprint FROM payments WHERE idempotency_key = %s", (key,)
         )
@@ -81,7 +87,7 @@ async def refund(pool: AsyncConnectionPool, key: str, payment_id: str, amount_ce
     """Refund a SUCCEEDED payment once. The payment row is locked, so racing refunds are decided one at a time."""
     fp = fingerprint({"payment_id": payment_id, "amount_cents": amount_cents})
     async with pool.connection() as conn:
-        cur = await conn.execute("SELECT status, amount_cents FROM payments WHERE payment_id = %s FOR UPDATE", (payment_id,))
+        cur = await conn.execute("SELECT status, amount_cents, order_id FROM payments WHERE payment_id = %s FOR UPDATE", (payment_id,))
         payment = await cur.fetchone()
         if payment is None:
             raise PaymentNotFound(payment_id)
@@ -91,9 +97,9 @@ async def refund(pool: AsyncConnectionPool, key: str, payment_id: str, amount_ce
             check_replay(key, replay["fingerprint"], fp)
             return {"refund_id": replay["refund_id"]}
         if payment["status"] != "SUCCEEDED":
-            raise NotRefundable(f"payment {payment_id} is {payment['status'].lower()}, so it cannot be refunded")
+            raise NotRefundable(f"payment {payment_id} is {payment['status'].lower()}, so it cannot be refunded", payment["order_id"])
         if amount_cents > payment["amount_cents"]:
-            raise AmountTooLarge(f"cannot refund {amount_cents}: only {payment['amount_cents']} was charged")
+            raise AmountTooLarge(f"cannot refund {amount_cents}: only {payment['amount_cents']} was charged", payment["order_id"])
         cur = await conn.execute(
             "INSERT INTO refunds (idempotency_key, fingerprint, payment_id, amount_cents) VALUES (%s, %s, %s, %s)"
             " RETURNING refund_id",
@@ -101,4 +107,4 @@ async def refund(pool: AsyncConnectionPool, key: str, payment_id: str, amount_ce
         )
         refund_row = await cur.fetchone()
         await conn.execute("UPDATE payments SET status = 'REFUNDED', updated_at = now() WHERE payment_id = %s", (payment_id,))
-        return refund_row
+    return {**refund_row, "order_id": payment["order_id"], "created": True}
