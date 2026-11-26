@@ -51,7 +51,7 @@ def test_turn_line_has_tools_and_reply(make_shop, caplog):
     tools = json.loads(f["tools"])
     assert tools[0]["tool"] == "search" and tools[0]["args"] == {"category": "headphones", "brand": "Mirelle"}
     assert f["reply"] == "Here you go" and f["llm_calls"] == "2" and f["outcome"] == "ok"
-    assert f["message"] == "Mirelle headphones" and f["turn"].startswith("T-") and f["conversation"]
+    assert f["user"] and f["message"] == "Mirelle headphones" and f["turn"].startswith("T-") and f["conversation"]
 
 
 def test_turn_line_llm_down(make_shop, caplog):
@@ -93,15 +93,16 @@ def test_proposal_audit(make_shop, caplog):
     say(shop, headers, "checkout")
     pid = next(m for m in turn(ws) if m["type"] == "proposal")["data"]["proposal_id"]
     created = parsed(audit_lines(caplog, "proposal_created")[0])
-    assert created["proposal"] == pid and created["action"] == "checkout_redirect"
+    assert created["proposal"] == pid and created["action"] == "checkout_redirect" and created["user"]
     assert shop.client.post(f"/api/chat/proposals/{pid}/confirm", headers=headers).status_code == 202
-    assert parsed(audit_lines(caplog, "proposal_confirmed")[0])["proposal"] == pid
+    confirmed = parsed(audit_lines(caplog, "proposal_confirmed")[0])
+    assert confirmed["proposal"] == pid and confirmed["user"] == created["user"]
     ws.until("message")  # the confirmation's own events
     say(shop, headers, "checkout again")
     pid2 = next(m for m in turn(ws) if m["type"] == "proposal")["data"]["proposal_id"]
     assert shop.client.post(f"/api/chat/proposals/{pid2}/dismiss", headers=headers).status_code == 200
     d = parsed(audit_lines(caplog, "proposal_dismissed")[0])
-    assert d["proposal"] == pid2 and d["action"] == "checkout_redirect"
+    assert d["proposal"] == pid2 and d["action"] == "checkout_redirect" and d["user"] == created["user"]
 
 
 def test_a_turn_that_raises_writes_one_error_line(make_shop, caplog):

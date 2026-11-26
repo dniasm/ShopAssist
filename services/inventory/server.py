@@ -105,8 +105,9 @@ class InventoryServicer(pb_grpc.InventoryServiceServicer):
         except db.UnknownSku as e:
             await context.abort(grpc.StatusCode.NOT_FOUND, f"unknown sku {e}")
         if applied:
+            order = {"order": request.idempotency_key.removeprefix("cancel:")} if request.idempotency_key.startswith("cancel:") else {}
             for sku_id, quantity in sorted(lines.items()):
-                audit("restock", sku=sku_id, qty=quantity, **user_field(context))
+                audit("restock", sku=sku_id, qty=quantity, **order, **user_field(context))
         return pb.RestockResponse()
 
 

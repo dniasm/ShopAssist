@@ -2,7 +2,7 @@
 import logging
 import time
 
-from shared_common.common.log import set_request_id, valid_request_id
+from shared_common.common.log import safe_path, set_request_id, valid_request_id
 
 log = logging.getLogger(__name__)
 REQUEST_ID_HEADER = "x-request-id"
@@ -51,4 +51,4 @@ class RequestLogMiddleware:
         finally:  # an exception passes through: errors.py logs its traceback once and answers 500
             ms = int((time.perf_counter() - started) * 1000)
             level = logging.ERROR if status >= 500 else logging.DEBUG if path == "/api/health" else logging.INFO
-            log.log(level, "%s %s -> %d %dms user=%s", method, path, status, ms, _user_of(scope))
+            log.log(level, "%s %s -> %d %dms user=%s", method, safe_path(path), status, ms, _user_of(scope))

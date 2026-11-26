@@ -178,6 +178,7 @@ All settings are environment variables; `.env.example` lists them with comments:
 Every service and the orchestrator write one line format to the console and to files: `logs/<service>/<YYYY-MM-DD>.log`
 (all lines) and `logs/audit/<service>-<YYYY-MM-DD>.log` (business events and one `assistant_turn` line per chat turn).
 Each request carries an id (`[request_id]`) across all services. Docker bind-mounts `./logs`. Secrets are masked.
+On a Linux Docker host, `./logs` must exist and be writable by the container's `app` user (`mkdir -p logs` and `chown` it) before `docker compose up`.
 
 | Setting | Default | |
 |---|---|---|

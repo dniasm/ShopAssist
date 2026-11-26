@@ -55,7 +55,8 @@ class RequestIdInterceptor(grpc.aio.ServerInterceptor):
 
         def line(started: float, code: grpc.StatusCode) -> None:
             ms = int((time.perf_counter() - started) * 1000)
-            log.log(ok_level if code == grpc.StatusCode.OK else logging.WARNING, "%s -> %s %dms %s", name, code.name, ms, who)
+            normal = (grpc.StatusCode.OK, grpc.StatusCode.NOT_FOUND, grpc.StatusCode.ALREADY_EXISTS)  # outcomes, not trouble
+            log.log(ok_level if code in normal else logging.WARNING, "%s -> %s %dms %s", name, code.name, ms, who)
 
         def failed(started: float, context, error: BaseException) -> None:
             if isinstance(error, grpc.aio.AbortError):  # the servicer ended the call with a status on purpose

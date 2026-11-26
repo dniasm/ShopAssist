@@ -182,3 +182,32 @@ def test_fact_audit(assistant, caplog):
     cleared = fields(named(lines, "temporal_facts_cleared")[0])
     assert cleared["count"] == "1" and cleared["categories"] == "trip" and cleared["user"] == "U-01"
     assert len(named(lines, "fact_added")) == 3 and len(named(lines, "fact_replaced")) == 1
+
+
+def test_restock_fields_with_and_without_order(make_stack, caplog):
+    stack = make_stack()
+    sku = sku_with(4)
+    with authchan.channel(stack.inventory.addr) as ch:
+        stub = pb_grpc.InventoryServiceStub(ch)
+        lines = [pb.StockLine(sku_id=sku, quantity=1)]
+        stub.Restock(pb.RestockRequest(idempotency_key="cancel:O-77", lines=lines), metadata=as_user("U-01"))
+        stub.Restock(pb.RestockRequest(idempotency_key="other-key", lines=lines), metadata=as_user("U-01"))
+    seen = [fields(l) for l in wait_for(caplog, "restock", "restock") if l.startswith("restock ")]
+    deadline = time.monotonic() + 2
+    while len(seen) < 2 and time.monotonic() < deadline:
+        time.sleep(0.02)
+        seen = [fields(l) for l in audit_lines(caplog) if l.startswith("restock ")]
+    assert len(seen) == 2
+    assert seen[0]["order"] == "O-77" and seen[0]["user"] == "U-01" and seen[0]["sku"] == sku
+    assert "order" not in seen[1] and seen[1]["user"] == "U-01"
+
+
+def test_refund_failed_fields(make_stack, caplog):
+    stack = make_stack()
+    with authchan.channel(stack.payment.addr) as ch:
+        with pytest.raises(grpc.RpcError):
+            pb_grpc.PaymentServiceStub(ch).Refund(
+                pb.RefundRequest(idempotency_key="refund:O-88", payment_id="PAY-none", amount_cents=100), metadata=as_user("U-01"))
+    (line,) = [l for l in wait_for(caplog, "refund_failed") if l.startswith("refund_failed ")]
+    f = fields(line)
+    assert f["order"] == "O-88" and f["user"] == "U-01" and f["reason"]

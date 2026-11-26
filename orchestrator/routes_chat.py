@@ -89,7 +89,7 @@ async def confirm(proposal_id: str, request: Request, user_id: str = Depends(cur
     except ApiError:
         state.proposals.release(proposal)  # nothing happened: the person can try again
         raise
-    audit("proposal_confirmed", proposal=proposal.proposal_id, action=proposal.action)
+    audit("proposal_confirmed", user=user_id, proposal=proposal.proposal_id, action=proposal.action)
     state.hub.publish(user_id, "chat", "message", {"turn_id": proposal.turn_id, "text": text, "cards": cards})
     return {"ok": True}
 
@@ -97,7 +97,7 @@ async def confirm(proposal_id: str, request: Request, user_id: str = Depends(cur
 @router.post("/chat/proposals/{proposal_id}/dismiss", response_model=OkOut)
 async def dismiss(proposal_id: str, request: Request, user_id: str = Depends(current_user_id)):
     proposal = request.app.state.proposals.dismiss(proposal_id, user_id)
-    audit("proposal_dismissed", proposal=proposal.proposal_id, action=proposal.action)
+    audit("proposal_dismissed", user=user_id, proposal=proposal.proposal_id, action=proposal.action)
     return {"ok": True}
 
 

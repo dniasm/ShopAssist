@@ -72,7 +72,7 @@ class AgentLoop:
                     source = await self._turn(owner, user_id, turn_id, message, page, conversation_id, saved)
                 except Exception:
                     log.exception("chat turn %s failed", turn_id)
-                    self.audit_turn(saved, turn_id, conversation_id, message, "", "error", error=type(sys.exc_info()[1]).__name__)
+                    self.audit_turn(saved, turn_id, conversation_id, message, "", "error", user_id=user_id, error=type(sys.exc_info()[1]).__name__)
                     if "conversation_id" in saved and "answered" not in saved:
                         await self.save(owner, user_id, turn_id, saved["conversation_id"], "assistant", SORRY, "")
                     self.emit(owner, "error", {"turn_id": turn_id, "message": SORRY})
@@ -139,11 +139,11 @@ class AgentLoop:
             if self.worker:
                 self.worker.submit(user_id, conversation_id, message, text)
         outcome = "ok" if llm_ok else ("llm_down" if self.llm is not None else "rules")
-        self.audit_turn(saved, turn_id, conversation_id, message, text, outcome)
+        self.audit_turn(saved, turn_id, conversation_id, message, text, outcome, user_id=user_id)
         return "llm" if llm_ok else "rules"
 
     @staticmethod
-    def audit_turn(saved: dict, turn_id: str, conversation_id: str, message: str, reply: str, outcome: str, error: str = "") -> None:
+    def audit_turn(saved: dict, turn_id: str, conversation_id: str, message: str, reply: str, outcome: str, user_id: str | None = None, error: str = "") -> None:
         """The turn's one audit line (a turn that already wrote it does not write it again)."""
         if saved.get("audited"):
             return
@@ -153,9 +153,10 @@ class AgentLoop:
         extra = {"tools_dropped": len(trace) - LINE_TOOLS} if len(trace) > LINE_TOOLS else {}
         if error:
             extra["error"] = error
+        who = {"user": user_id} if user_id else {}
         stats = saved.get("stats", {})
         started = saved.get("started")
-        audit("assistant_turn", conversation=saved.get("conversation_id", conversation_id), turn=turn_id, message=message[:LINE_TEXT_CHARS],
+        audit("assistant_turn", conversation=saved.get("conversation_id", conversation_id), turn=turn_id, **who, message=message[:LINE_TEXT_CHARS],
               tools=json.dumps(shown), reply=reply[:LINE_TEXT_CHARS], llm_calls=stats.get("calls", 0), tokens=stats.get("tokens", 0),
               ms=int((time.monotonic() - started) * 1000) if started else 0, outcome=outcome, **extra)
 
@@ -214,7 +215,7 @@ class AgentLoop:
             trace.append({"tool": name, "args": args, "result": (out["final"] or out["text"])[:TRACE_CHARS],
                           "ms": int((time.monotonic() - started) * 1000), "error": bool(out["error"])})
         if proposal := out.get("proposal"):
-            audit("proposal_created", proposal=proposal.proposal_id, action=proposal.action, summary=proposal.summary)
+            audit("proposal_created", **({"user": user_id} if user_id else {}), proposal=proposal.proposal_id, action=proposal.action, summary=proposal.summary)
             self.emit(owner, "proposal", {"turn_id": turn_id, "proposal_id": proposal.proposal_id, "action": proposal.action,
                                           "args": proposal.args, "summary": proposal.summary})
         if out.get("navigate"):

@@ -52,6 +52,15 @@ def test_valid_request_id_rules():
     assert valid_request_id("a" * 65) is None and valid_request_id("x\ny") is None and valid_request_id(None) is None
 
 
+def test_http_access_line_escapes_control_characters(client, caplog):
+    client.get("/api/x%0a12:00:00 INFO    [order] [abc] audit: fake")
+    seen = [r for r in caplog.records if r.name == "orchestrator.request_log"]
+    assert seen
+    message = seen[-1].getMessage()
+    assert "\\n12:00:00" in message and "\n" not in message
+    assert all("\n" not in r.getMessage() for r in caplog.records)
+
+
 def test_http_access_line(client, caplog):
     client.get("/api/health?x=1", headers={"X-Request-Id": "rid-http"})
     seen = [r for r in caplog.records if r.name == "orchestrator.request_log"]
@@ -81,7 +90,7 @@ def test_grpc_continues_request_id(loop_thread, catalog_running, caplog):
     assert "caller=orchestrator" in seen[-1].getMessage() and seen[-1].levelno == logging.INFO
 
 
-def test_grpc_error_is_warning(loop_thread, catalog_running, caplog):
+def test_grpc_not_found_is_info(loop_thread, catalog_running, caplog):
     async def call():
         set_request_id("rid-miss")
         async with authchan.aio_channel(catalog_running.addr) as ch:
@@ -90,7 +99,7 @@ def test_grpc_error_is_warning(loop_thread, catalog_running, caplog):
 
     loop_thread.call(call())
     seen = _access(caplog, "CatalogService/GetProduct")
-    assert seen and seen[-1].levelno == logging.WARNING and "NOT_FOUND" in seen[-1].getMessage()
+    assert seen and seen[-1].levelno == logging.INFO and "NOT_FOUND" in seen[-1].getMessage()
     assert seen[-1].request_id == "rid-miss"
 
 

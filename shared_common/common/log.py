@@ -143,12 +143,18 @@ def setup_logging(service: str) -> None:
         if isinstance(old, DailyFileHandler):
             old.close()
 
+    level = (os.getenv("LOG_LEVEL") or "INFO").upper()
+    bad_level = None
+    if not isinstance(logging.getLevelName(level), int):
+        bad_level, level = os.getenv("LOG_LEVEL"), "INFO"
     logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        level=level,
         handlers=handlers,
         force=True,          # replaces any earlier basicConfig
     )
     logging.getLogger("audit").setLevel(logging.INFO)   # audit lines are kept whatever LOG_LEVEL is
+    if bad_level is not None:
+        logging.getLogger(__name__).warning("LOG_LEVEL=%r is not a level; using INFO", bad_level)
     if bad_retention is not None:
         logging.getLogger(__name__).warning("LOG_RETENTION_DAYS=%r is not a number; using 30", bad_retention)
 
@@ -180,6 +186,11 @@ def request_id_scope(value: str | None = None):
 
 def get_request_id() -> str:
     return _request_id.get()
+
+
+def safe_path(path: str) -> str:
+    """A request path with control characters escaped, so a decoded `%0a` cannot forge a log line."""
+    return path.encode("unicode_escape").decode("ascii")
 
 
 def audit(event: str, **fields) -> None:

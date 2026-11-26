@@ -163,6 +163,13 @@ def test_bad_retention_falls_back(logs, monkeypatch):
     assert "LOG_RETENTION_DAYS" in (logs / "order" / f"{_today()}.log").read_text(encoding="utf-8")
 
 
+def test_bad_level_falls_back_to_info(logs, monkeypatch):
+    monkeypatch.setenv("LOG_LEVEL", "verbose")
+    setup_logging("order")
+    assert logging.getLogger().level == logging.INFO
+    assert "LOG_LEVEL" in (logs / "order" / f"{_today()}.log").read_text(encoding="utf-8")
+
+
 def test_uvicorn_lines_reach_the_file(logs):
     setup_logging("orchestrator")
     logging.getLogger("uvicorn.error").info("Started server process")
