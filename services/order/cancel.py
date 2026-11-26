@@ -7,8 +7,8 @@ idempotent write keyed by the order id, so recovery can simply run the remaining
 import logging
 
 from services.order import db
-from shared_common.common.log import audit
 from services.order.saga import Deps, crash_point, remote_call
+from shared_common.common.log import audit
 from shopassist_proto import shopassist_pb2 as pb
 
 log = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ class Canceller:
             await remote_call(
                 self.deps.payment.Refund,
                 pb.RefundRequest(idempotency_key=f"refund:{order_id}", payment_id=order["payment_id"], amount_cents=order["total_cents"]),
-                timeout,
+                timeout, user_id=order["user_id"],
             )
         async with self.deps.pool.connection() as conn:
             changed = await db.change_status(conn, order_id, CANCELLABLE, "CANCELLED", CANCELLED_MESSAGE)

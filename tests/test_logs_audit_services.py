@@ -62,6 +62,21 @@ def test_checkout_success_audit(make_stack, caplog):
     assert fields(named(lines, "checkout_started")[0])["user"] == "U-01"
     assert fields(named(lines, "payment_charged")[0])["amount"] == f"${order.total_cents / 100:.2f}"
     assert fields(named(lines, "payment_charged")[0])["method"] == "card_ok"
+    for event in wanted:
+        assert fields(named(lines, event)[0])["user"] == "U-01", event
+
+
+def test_replayed_checkout_logs_each_event_once(make_stack, caplog):
+    stack = make_stack()
+    sku = sku_with(4)
+    first = run(checkout(stack.order.addr, "U-01", "audit-replay", [(sku, 1)]))[-1].order
+    again = run(checkout(stack.order.addr, "U-01", "audit-replay", [(sku, 1)]))[-1].order
+    assert again.order_id == first.order_id
+    wanted = ("checkout_started", "stock_reserved", "payment_charged", "order_placed", "order_confirmed")
+    lines = wait_for(caplog, *wanted)
+    time.sleep(0.3)  # a wrongly repeated line would land about now
+    lines = audit_lines(caplog)
+    assert [len(named(lines, e)) for e in wanted] == [1] * 5
 
 
 def test_checkout_payment_failure_audit(make_stack, caplog):
@@ -74,6 +89,8 @@ def test_checkout_payment_failure_audit(make_stack, caplog):
         assert fields(named(lines, event)[0])["order"] == order.order_id
     assert "card declined" in named(lines, "payment_failed")[0]
     assert not named(lines, "payment_charged") and not named(lines, "order_confirmed")
+    for event in ("checkout_started", "stock_reserved", "payment_failed", "stock_released", "order_failed"):
+        assert fields(named(lines, event)[0])["user"] == "U-01", event
 
 
 def test_cancel_audit(make_stack, caplog):
@@ -89,6 +106,7 @@ def test_cancel_audit(make_stack, caplog):
     assert fields(named(lines, "cancel_requested")[0])["user"] == "U-01"
     assert fields(named(lines, "refund_issued")[0])["amount"] == f"${order.total_cents / 100:.2f}"
     assert named(lines, "restock")
+    assert fields(named(lines, "refund_issued")[0])["user"] == "U-01"
 
 
 # ---------------- carts ----------------

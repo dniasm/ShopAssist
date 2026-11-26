@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 import grpc
 import grpc.aio
 
+from services.common.auth import USER_HEADER
 from services.common.util import dollars, iso
 from services.order import convert, db
 from shared_common.common.log import audit
@@ -47,10 +48,12 @@ class Deps:
     call_timeout: float = 5.0
 
 
-async def remote_call(rpc, request, timeout: float, tolerate: tuple = ()):
-    """One remote call. Codes in `tolerate` come back as the error; any other failure leaves the outcome unknown."""
+async def remote_call(rpc, request, timeout: float, tolerate: tuple = (), user_id: str = ""):
+    """One remote call (`user_id` goes along as x-user-id, for the callee's audit lines). Codes in `tolerate` come back
+    as the error; any other failure leaves the outcome unknown."""
+    metadata = ((USER_HEADER, user_id),) if user_id else None
     try:
-        return await rpc(request, timeout=timeout), None
+        return await rpc(request, timeout=timeout, metadata=metadata), None
     except grpc.aio.AioRpcError as e:
         if e.code() in tolerate:
             return None, e
@@ -229,7 +232,7 @@ class Saga:
             ))
 
     async def _call(self, rpc, request, tolerate: tuple = ()):
-        return await remote_call(rpc, request, self.deps.call_timeout, tolerate)
+        return await remote_call(rpc, request, self.deps.call_timeout, tolerate, self.user_id)
 
     def _crash_point(self, name: str) -> None:
         crash_point(self.deps, name, self.recovering)
