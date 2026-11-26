@@ -194,6 +194,16 @@ python scripts/logs.py --turn <turn_id>                   # replay one assistant
 python scripts/logs.py --follow --service order --grep cancel
 ```
 
+## Deploy to Render (free tier)
+
+`render.yaml` runs the whole stack as one Docker web service (`scripts/render_start.py` starts the six gRPC services and the orchestrator) plus one free Postgres. Each service gets its own schema in that one database.
+
+1. Push this branch to GitHub.
+2. Render dashboard -> New -> Blueprint -> pick the repo and branch -> Apply.
+3. When asked, enter `LLM_API_KEYS` and `VOYAGE_API_KEY`. Set `SIGNUP_CODE` too, or strangers can create accounts and burn your LLM quota. The secrets (`SVC_KEY_*`, `SESSION_SECRET`) are generated for you.
+
+Free-tier caveats: the service sleeps after 15 minutes idle (the next visit takes about a minute); the free Postgres expires after 30 days; the disk is ephemeral, so `LOG_DIR` files are lost on restart (read logs in the Render log viewer); 512 MB RAM for all seven processes. The seeded demo users keep the public `DEMO_PASSWORD` default unless you set that variable.
+
 ## Troubleshooting
 
 - **A port is busy.** `run_all.py` refuses to start if a port it needs is taken and never kills other processes. Find the owner
