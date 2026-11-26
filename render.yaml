@@ -1,5 +1,6 @@
 # Render Blueprint: one Docker web service (orchestrator + six gRPC services in one container) + one free Postgres.
-# Secrets you must enter in the dashboard (sync: false): LLM_API_KEYS, VOYAGE_API_KEY, SIGNUP_CODE (optional).
+# Secrets you must enter in the dashboard (sync: false): LLM_API_KEYS, VOYAGE_API_KEY, SIGNUP_CODE (optional),
+# DEMO_PASSWORD (optional; seeded demo users otherwise log in with the public default).
 services:
   - type: web
     name: shopassist
@@ -24,6 +25,8 @@ services:
       - key: VOYAGE_API_KEY
         sync: false
       - key: SIGNUP_CODE
+        sync: false
+      - key: DEMO_PASSWORD
         sync: false
 
 databases:
