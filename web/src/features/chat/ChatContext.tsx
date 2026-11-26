@@ -4,11 +4,13 @@ import { confirmProposal, dismissProposal, getConversationMessages, sendChat } f
 import { ApiError, describeError } from "../../api/errors";
 import type { ChatWsMessage } from "../../api/types";
 import { useAuth } from "../auth/AuthContext";
+import { useCart } from "../cart/CartContext";
 import { useDrawer } from "../drawer/DrawerContext";
 import { safePath, toChatMessage, toOrderStatus } from "../session/events";
 import { guestIdForBrowser, newId } from "../session/ids";
 import { useSocketChannel } from "../session/SessionSocket";
 import { clearStored, currentConversation, loadStored, persistable, rememberConversation, saveStored } from "./chatStorage";
+import { showsCart } from "./cartSignal";
 import { chatContextFor } from "./context";
 import { chatReducer, fromHistory, initialChat, type ChatTurn } from "./transcript";
 
@@ -75,6 +77,8 @@ function ChatSession({ userId, children }: { userId: string | null; children: Re
   const identity = userId ?? "anon";
   const { show, close } = useDrawer();
   const navigate = useNavigate();
+  const { refresh: refreshCart } = useCart();
+  const cartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [conversationId, setConversationId] = useState(() => currentConversation(identity));
   // a guest's transcript comes back from sessionStorage; a signed-in one is read from the server
   const [state, dispatch] = useReducer(chatReducer, conversationId, (id) => initialChat(userId ? {} : loadStored(id)));
@@ -141,6 +145,10 @@ function ChatSession({ userId, children }: { userId: string | null; children: Re
     const m = toChatMessage(message);
     if (!m) return;
     dispatch({ type: "chat", message: m });
+    // the assistant just showed (or changed) the cart: read it again; one read per burst, so a replay of old events costs one
+    if (showsCart(m) && cartTimer.current === null) {
+      cartTimer.current = setTimeout(() => { cartTimer.current = null; void refreshCart(); }, 50);
+    }
     if (m.type !== "conversation" && m.type !== "navigate") return;
     if (sentTurns.current.has(m.data.turn_id)) act(m);
     else if (inFlight.current > 0) early.current.set(m.data.turn_id, [...(early.current.get(m.data.turn_id) ?? []), m]);

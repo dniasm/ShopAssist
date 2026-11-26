@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { placeOrder } from "../api/endpoints";
 import { describeError } from "../api/errors";
@@ -18,7 +18,16 @@ import styles from "./CheckoutPage.module.css";
 export function CheckoutPage() {
   useDocumentTitle("Checkout");
   const { user, openSignIn } = useAuth();
-  const { cart, status } = useCart();
+  const { cart, status, refresh } = useCart();
+  const signedIn = user !== null;
+  // The cart may have been changed elsewhere (the assistant, another tab): read it fresh each time this page opens.
+  const [fresh, setFresh] = useState(false);
+  useEffect(() => {
+    if (!signedIn) return;
+    let live = true;
+    void refresh().finally(() => { if (live) setFresh(true); });
+    return () => { live = false; };
+  }, [signedIn, refresh]);
 
   if (!user) {
     return (
@@ -30,7 +39,7 @@ export function CheckoutPage() {
       </>
     );
   }
-  if (status === "loading" && !cart) {
+  if (!fresh || (status === "loading" && !cart)) {
     return (
       <>
         <div className="title-row"><h1>Checkout</h1></div>
