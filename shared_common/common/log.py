@@ -20,6 +20,7 @@ _MASKS = (
     (re.compile(r"gsk_[A-Za-z0-9]{10,}"), "gsk_***"),
     (re.compile(r"pa-[A-Za-z0-9_-]{20,}"), "pa-***"),
     (re.compile(r"(postgres(?:ql)?://[^:/@\s]+):[^@\s]+@"), r"\1:***@"),
+    (re.compile(r"""(?i)\b(authorization)(["']?\s*[=:]\s*["']?)(?:bearer|basic)\s+[^\s"',}]+"""), r"\1\2***"),
     (re.compile(r"""(?i)\b(password|passwd|token|secret|api_key|authorization)(["']?\s*[=:]\s*["']?)[^\s"',}]+"""),
      r"\1\2***"),
 )
@@ -49,6 +50,7 @@ class DailyFileHandler(logging.Handler):
         self._today = today
         self._day: date | None = None
         self._stream = None
+        self._failed_day: date | None = None
 
     def _open(self, day: date) -> None:
         if self._stream is not None:
@@ -75,12 +77,21 @@ class DailyFileHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             day = self._today()
+            if day == self._failed_day:
+                return          # already reported for this date; retry tomorrow
             if self._stream is None or day != self._day:
                 self._open(day)
             self._stream.write(self.format(record) + "\n")
             self._stream.flush()
+        except Exception as exc:
+            self._failed_day = self._day_or_none()
+            print(f"logging: cannot write {self.directory}: {exc}", file=sys.stderr)
+
+    def _day_or_none(self) -> date | None:
+        try:
+            return self._today()
         except Exception:
-            self.handleError(record)
+            return None
 
     def close(self) -> None:
         with self.lock:
@@ -112,7 +123,11 @@ def setup_logging(service: str) -> None:
         "%H:%M:%S",
     )
     log_dir = Path(os.getenv("LOG_DIR") or _REPO_ROOT / "logs")
-    retention = int(os.getenv("LOG_RETENTION_DAYS") or 30)
+    bad_retention = None
+    try:
+        retention = int(os.getenv("LOG_RETENTION_DAYS") or 30)
+    except ValueError:
+        bad_retention, retention = os.getenv("LOG_RETENTION_DAYS"), 30
 
     console = logging.StreamHandler(sys.stdout)
     service_file = DailyFileHandler(log_dir / service, "{date}.log", retention)
@@ -133,6 +148,8 @@ def setup_logging(service: str) -> None:
         force=True,          # replaces any earlier basicConfig
     )
     logging.getLogger("audit").setLevel(logging.INFO)   # audit lines are kept whatever LOG_LEVEL is
+    if bad_retention is not None:
+        logging.getLogger(__name__).warning("LOG_RETENTION_DAYS=%r is not a number; using 30", bad_retention)
 
 
 def set_request_id(value: str | None = None) -> str:

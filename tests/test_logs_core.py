@@ -127,11 +127,11 @@ def test_retention(logs):
 def test_masks_message(logs):
     setup_logging("order")
     logging.getLogger("t").info(
-        "url=%s key=gsk_abcdefghijklmn password=p1 prompt_tokens=5 tokens=1200", DB_URL)
+        "url=%s key=gsk_abcdefghijklmn password=p1 prompt_tokens=5 tokens=1200 Authorization: Bearer xyz999", DB_URL)
     text = (logs / "order" / f"{_today()}.log").read_text(encoding="utf-8")
-    for expected in ("svc:***@", "gsk_***", "password=***", "prompt_tokens=5", "tokens=1200"):
+    for expected in ("svc:***@", "gsk_***", "password=***", "prompt_tokens=5", "tokens=1200", "Authorization: ***"):
         assert expected in text
-    for leaked in ("hunter2", "abcdefghijklmn", "p1 "):
+    for leaked in ("hunter2", "abcdefghijklmn", "p1 ", "xyz999"):
         assert leaked not in text
 
 
@@ -150,5 +150,20 @@ def test_unwritable_dir_does_not_raise(logs, monkeypatch, capsys):
     blocker.write_text("i am a file")
     monkeypatch.setenv("LOG_DIR", str(blocker))
     setup_logging("order")
-    logging.getLogger("t").info("still fine")
-    assert capsys.readouterr().err.strip()
+    for i in range(5):
+        logging.getLogger("t").info("still fine %s", i)
+    err = capsys.readouterr().err
+    assert 1 <= len(err.strip().splitlines()) <= 2   # one line per file handler
+    assert "Traceback" not in err and "--- Logging error ---" not in err
+
+
+def test_bad_retention_falls_back(logs, monkeypatch):
+    monkeypatch.setenv("LOG_RETENTION_DAYS", "abc")
+    setup_logging("order")
+    assert "LOG_RETENTION_DAYS" in (logs / "order" / f"{_today()}.log").read_text(encoding="utf-8")
+
+
+def test_uvicorn_lines_reach_the_file(logs):
+    setup_logging("orchestrator")
+    logging.getLogger("uvicorn.error").info("Started server process")
+    assert "uvicorn.error: Started server process" in (logs / "orchestrator" / f"{_today()}.log").read_text(encoding="utf-8")

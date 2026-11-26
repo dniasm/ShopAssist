@@ -19,6 +19,6 @@ COPY protos/ protos/
 COPY data/ data/
 COPY scripts/ scripts/
 COPY --from=web /web/dist web/dist
-RUN useradd --system --no-create-home app
+RUN useradd --system --no-create-home app && mkdir -p /app/logs && chown app /app/logs
 USER app
 CMD ["python", "-m", "orchestrator.main"]
