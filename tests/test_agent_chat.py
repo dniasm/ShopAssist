@@ -2,6 +2,7 @@
 databases; the only fake is the LLM (a scripted object that records every request, or none for the rules fallback)."""
 import copy
 import json
+import time
 
 import pytest
 
@@ -437,14 +438,18 @@ def test_memory_worker_gets_the_exchange_with_the_server_conversation_id(make_sh
     assert submitted == [("U-03", cid, "I'm Sam", "Nice to meet you.")]
 
 
-def test_turn_logs_calls_and_tokens_without_content(make_shop, caplog):
+def test_turn_logs_calls_and_tokens_in_the_audit_line_only(make_shop, caplog):
     shop, _ = llm_shop(make_shop, uses(("cart", {"action": "view"}), usage=30), says("It is empty.", usage=12))
     headers, ws = open_chat(shop, "U-03")
-    with caplog.at_level("INFO", logger="orchestrator.agent.loop"):
+    with caplog.at_level("INFO"):
         say(shop, headers, "secret words here")
         turn(ws)
-    assert [r.getMessage() for r in caplog.records if r.getMessage().startswith("chat turn ")] == ["chat turn llm_calls=2 tokens=42"]
-    assert not any("secret" in r.getMessage() for r in caplog.records)
+    deadline = time.monotonic() + 2
+    while not any(r.name == "audit" and r.getMessage().startswith("assistant_turn ") for r in caplog.records) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    turn_lines = [r.getMessage() for r in caplog.records if r.name == "audit" and r.getMessage().startswith("assistant_turn ")]
+    assert len(turn_lines) == 1 and "llm_calls=2 tokens=42" in turn_lines[0]
+    assert not any("secret" in r.getMessage() for r in caplog.records if r.name == "orchestrator.agent.loop")  # the content goes to the audit line only
 
 
 def restart(shop, llm):

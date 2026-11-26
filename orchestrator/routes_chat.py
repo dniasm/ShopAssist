@@ -13,7 +13,7 @@ from orchestrator.deps import current_user_id, get_clients
 from orchestrator.errors import ApiError
 from orchestrator.routes_orders import cancel_for
 from orchestrator.schemas import ChatMessageOut, ConversationOut, RenameIn
-from shared_common.common.log import get_request_id, set_request_id
+from shared_common.common.log import audit, get_request_id, set_request_id
 from shopassist_proto import shopassist_pb2 as pb
 
 router = APIRouter()
@@ -89,13 +89,15 @@ async def confirm(proposal_id: str, request: Request, user_id: str = Depends(cur
     except ApiError:
         state.proposals.release(proposal)  # nothing happened: the person can try again
         raise
+    audit("proposal_confirmed", proposal=proposal.proposal_id, action=proposal.action)
     state.hub.publish(user_id, "chat", "message", {"turn_id": proposal.turn_id, "text": text, "cards": cards})
     return {"ok": True}
 
 
 @router.post("/chat/proposals/{proposal_id}/dismiss", response_model=OkOut)
 async def dismiss(proposal_id: str, request: Request, user_id: str = Depends(current_user_id)):
-    request.app.state.proposals.dismiss(proposal_id, user_id)
+    proposal = request.app.state.proposals.dismiss(proposal_id, user_id)
+    audit("proposal_dismissed", proposal=proposal.proposal_id, action=proposal.action)
     return {"ok": True}
 
 

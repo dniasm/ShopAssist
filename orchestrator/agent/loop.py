@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 
 from orchestrator.agent import rules
 from orchestrator.agent.compact import cart_summary, order_line, product_line
@@ -21,6 +22,7 @@ from orchestrator.clients import Clients
 from orchestrator.errors import ApiError
 from orchestrator.events import EventHub
 from orchestrator.llm import LLMError
+from shared_common.common.log import audit
 from shopassist_proto import shopassist_pb2 as pb
 
 log = logging.getLogger(__name__)
@@ -28,6 +30,7 @@ MAX_STEPS = 6
 MAX_CARDS = 3
 MAX_SHOWN_CHARS = 1500
 TITLE_CHARS = 60
+TRACE_CHARS = 300  # how much of a tool's answer the turn's audit line keeps
 LLM_DOWN = "I can't do that right now. Please try again in a minute."
 READ_ONLY = {"search_products", "get_product", "get_stock", "get_cart", "list_orders", "get_order"}  # the rules planner's read tools
 WRITE_WORDS = re.compile(r"\b(add|remove|delete|cancel|check ?out|buy|purchase|put|take out)\b", re.I)
@@ -97,13 +100,15 @@ class AgentLoop:
                 saved["conversation_id"] = conversation_id
 
         results: list[dict] = []
+        trace: list[dict] = []  # local to this turn: what each tool was asked and answered
+        started = time.monotonic()
         calls = tokens = 0
         text, final_reply, reply_args, llm_ok = "", False, {}, False
         if self.llm is not None:
             messages = self.model_messages(block, context, message, key)
             try:
                 text, final_reply, calls, tokens = await self.converse(
-                    owner, user_id, turn_id, messages, results, context.get("product"), block["all"] if self.reader and user_id else None)
+                    owner, user_id, turn_id, messages, results, context.get("product"), block["all"] if self.reader and user_id else None, trace)
                 llm_ok = True
             except LLMError as e:
                 log.warning("agent: LLM failed (%s)", e)
@@ -111,7 +116,7 @@ class AgentLoop:
             if results:  # tools already ran this turn: say what they found rather than guess again
                 text = self.said(results)
             else:
-                text, reply_args, results = await self.fallback(owner, user_id, turn_id, message, key, context)
+                text, reply_args, results = await self.fallback(owner, user_id, turn_id, message, key, context, trace)
         text = self.without_ids(text, results)
         cards = self.cards(results, reply_args)
         closing = ""
@@ -127,11 +132,13 @@ class AgentLoop:
             await self.save(owner, user_id, turn_id, conversation_id, "assistant", text, json.dumps(cards))
             if self.worker:
                 self.worker.submit(user_id, conversation_id, message, text)
-        log.info("chat turn llm_calls=%d tokens=%d", calls, tokens)
+        outcome = "ok" if llm_ok else ("llm_down" if self.llm is not None else "rules")
+        audit("assistant_turn", conversation=conversation_id, turn=turn_id, message=message, tools=json.dumps(trace), reply=text,
+              llm_calls=calls, tokens=tokens, ms=int((time.monotonic() - started) * 1000), outcome=outcome)
         return "llm" if llm_ok else "rules"
 
     async def converse(self, owner: str, user_id: str | None, turn_id: str, messages: list[dict], results: list[dict],
-                       page_product: dict | None, facts: list[dict] | None = None) -> tuple[str, bool, int, int]:
+                       page_product: dict | None, facts: list[dict] | None = None, trace: list[dict] | None = None) -> tuple[str, bool, int, int]:
         """The model/tool loop. Returns (text, text is a tool's own `final`, model calls, tokens). Raises LLMError."""
         seen: set[str] = set()
         calls = tokens = 0
@@ -153,9 +160,11 @@ class AgentLoop:
                 if signature in seen:
                     repeated = True
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": "Already done this turn."})
+                    if trace is not None:
+                        trace.append({"tool": c["name"], "args": c["args"], "result": "repeated", "ms": 0, "error": False})
                     continue
                 seen.add(signature)
-                out = await self.run_tool(owner, user_id, turn_id, c["name"], c["args"], page_product, facts)
+                out = await self.run_tool(owner, user_id, turn_id, c["name"], c["args"], page_product, facts, trace)
                 results.append(out)
                 messages.append({"role": "tool", "tool_call_id": c["id"], "content": out["text"]})
             if repeated:
@@ -166,11 +175,16 @@ class AgentLoop:
         return self.said(results), False, calls, tokens
 
     async def run_tool(self, owner: str, user_id: str | None, turn_id: str, name: str, args: dict, page_product: dict | None,
-                       facts: list[dict] | None = None) -> dict:
+                       facts: list[dict] | None = None, trace: list[dict] | None = None) -> dict:
         self.emit(owner, "tool_call", {"turn_id": turn_id, "tool": name, "args": args})
+        started = time.monotonic()
         out = await self.tools.run(name, args, user_id, turn_id, page_product, facts)
         self.emit(owner, "tool_result", {"turn_id": turn_id, "tool": name, "summary": out["final"] or out["text"]})
+        if trace is not None:
+            trace.append({"tool": name, "args": args, "result": (out["final"] or out["text"])[:TRACE_CHARS],
+                          "ms": int((time.monotonic() - started) * 1000), "error": bool(out["error"])})
         if proposal := out.get("proposal"):
+            audit("proposal_created", proposal=proposal.proposal_id, action=proposal.action, summary=proposal.summary)
             self.emit(owner, "proposal", {"turn_id": turn_id, "proposal_id": proposal.proposal_id, "action": proposal.action,
                                           "args": proposal.args, "summary": proposal.summary})
         if out.get("navigate"):
@@ -182,7 +196,8 @@ class AgentLoop:
         """The answer when the model wrote none: what the last tools said (a repeated call is said once)."""
         return rules.compose([{"summary": r["final"] or r["text"]} for r in results])
 
-    async def fallback(self, owner: str, user_id: str | None, turn_id: str, message: str, key: str, context: dict) -> tuple[str, dict, list[dict]]:
+    async def fallback(self, owner: str, user_id: str | None, turn_id: str, message: str, key: str, context: dict,
+                       trace: list[dict] | None = None) -> tuple[str, dict, list[dict]]:
         """No model: the rules planner may look things up, never change anything. Returns (text, reply args, results)."""
         action = rules.plan(message, self.memory.history(key), context, [])
         if action["tool"] == "reply":
@@ -193,8 +208,12 @@ class AgentLoop:
             return LLM_DOWN, {}, []
         name, args = rules.to_tool_call(action["tool"], action["args"])
         self.emit(owner, "tool_call", {"turn_id": turn_id, "tool": name, "args": args})
+        started = time.monotonic()
         out = await self.tools.run(name, args, user_id, turn_id)
         summary = out["final"] or out["text"]
+        if trace is not None:
+            trace.append({"tool": name, "args": args, "result": summary[:TRACE_CHARS],
+                          "ms": int((time.monotonic() - started) * 1000), "error": bool(out.get("error"))})
         self.emit(owner, "tool_result", {"turn_id": turn_id, "tool": name, "summary": summary})
         extra = {"needs_sign_in": True} if out.get("needs_sign_in") else {}
         return rules.compose([{"summary": summary}]), extra, [{"text": summary, "final": None, "card": out["card"], "error": False}]
