@@ -281,7 +281,8 @@ export function isWorking(turn: ChatTurn): boolean {
 }
 
 /** What the server saved of a conversation (GET /chat/conversations/{id}/messages) as finished turns: each question starts a turn, the
- *  answers after it (text + cards) belong to it. Proposals are not saved, so none come back. */
+ *  answers after it (text + cards) belong to it. A saved proposal comes back as a card with buttons while the server says it is
+ *  still open (`available`), else as one that is no longer available. */
 export function fromHistory(messages: readonly { role: string; text: string; cards: unknown }[]): ChatTurn[] {
   const turns: ChatTurn[] = [];
   const start = (request: ChatTurn["request"]): ChatTurn => {
@@ -291,7 +292,28 @@ export function fromHistory(messages: readonly { role: string; text: string; car
   };
   for (const m of messages) {
     if (m.role === "user") start({ text: m.text, context: { path: "" } });
-    else if (m.role === "assistant") (turns[turns.length - 1] ?? start(null)).messages.push({ text: m.text, cards: parseChatCards(m.cards), closing: "" });
+    else if (m.role === "assistant") {
+      const turn = turns[turns.length - 1] ?? start(null);
+      turn.messages.push({ text: m.text, cards: parseChatCards(m.cards), closing: "" });
+      for (const p of savedProposals(m.cards)) if (!turn.proposals.some((q) => q.id === p.id)) turn.proposals.push(p);
+    }
   }
   return turns;
+}
+
+function savedProposals(cards: unknown): ChatProposal[] {
+  if (!Array.isArray(cards)) return [];
+  return cards.flatMap((c): ChatProposal[] => {
+    const d: unknown = c?.kind === "proposal" ? c.data : null;
+    if (typeof d !== "object" || d === null) return [];
+    const { proposal_id: id, action, args, summary, available } = d as Record<string, unknown>;
+    if (typeof id !== "string" || typeof action !== "string") return [];
+    const open = available === true;
+    return [{
+      id, action, summary: typeof summary === "string" ? summary : "",
+      args: typeof args === "object" && args !== null ? (args as Record<string, unknown>) : {},
+      state: open ? "pending" : "handled", note: open ? null : "This is no longer available.",
+      confirmedAfterSeq: null, follow: null,
+    }];
+  });
 }

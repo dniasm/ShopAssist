@@ -125,7 +125,7 @@ class AgentLoop:
         self.remember(key, message, text, results, cards)
         if saving:
             saved["answered"] = True
-            await self.save(owner, user_id, turn_id, conversation_id, "assistant", text, json.dumps(cards))
+            await self.save(owner, user_id, turn_id, conversation_id, "assistant", text, json.dumps(cards + self.proposal_cards(results)))
             if self.worker:
                 self.worker.submit(user_id, conversation_id, message, text)
         log.info("chat turn llm_calls=%d tokens=%d", calls, tokens)
@@ -210,6 +210,12 @@ class AgentLoop:
             latest[-1]["content"] += f"\n[Shown to the user:\n{shown}]"
         return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": cls.memory_text(block, context)},
                 *latest, {"role": "user", "content": message}]
+
+    @staticmethod
+    def proposal_cards(results: list[dict]) -> list[dict]:
+        """What is saved (not sent live) so a reopened chat can offer the proposal again: the web turns these back into a card with buttons."""
+        return [{"kind": "proposal", "data": {"proposal_id": p.proposal_id, "action": p.action, "args": p.args, "summary": p.summary}}
+                for r in results if (p := r.get("proposal"))]
 
     @staticmethod
     def shown_text(cards: list[dict]) -> str:

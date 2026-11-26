@@ -220,6 +220,18 @@ describe("saved conversations", () => {
     expect(turns[1]?.messages[0]?.text).toBe("None in red.");
     expect(new Set(turns.map((t) => t.key)).size).toBe(2);
   });
+  it("fromHistory restores a saved proposal: pending while available, else shown as no longer available", () => {
+    const saved = (id: string, available: boolean) => ({ kind: "proposal", data: { proposal_id: id, action: "cancel_order", args: { order_id: "O-1" }, summary: "Cancel O-1", available } });
+    const turns = fromHistory([
+      { role: "user", text: "cancel O-1", cards: [] },
+      { role: "assistant", text: "Sure", cards: [{ kind: "order", data: {} }, saved("PR-a", true), saved("PR-b", false)] },
+    ]);
+    expect(turns[0]?.messages[0]?.cards).toHaveLength(1);
+    expect(turns[0]?.proposals).toMatchObject([
+      { id: "PR-a", action: "cancel_order", args: { order_id: "O-1" }, state: "pending", note: null },
+      { id: "PR-b", state: "handled", note: "This is no longer available." },
+    ]);
+  });
   it("keeps an answer that has no question before it, and skips unknown roles", () => {
     const odd = [{ role: "assistant", text: "Welcome", cards: [], created_at: "t" }, { role: "system", text: "x", cards: [], created_at: "t" }];
     const turns = fromHistory(odd);

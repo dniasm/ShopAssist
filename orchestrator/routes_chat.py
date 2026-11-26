@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from orchestrator import serialize
+from orchestrator.agent.tools import CANCELLABLE
 from orchestrator.clients import Clients
 from orchestrator.deps import current_user_id, get_clients
 from orchestrator.errors import ApiError
@@ -65,6 +67,7 @@ async def confirm(proposal_id: str, request: Request, user_id: str = Depends(cur
     state = request.app.state
     proposal = state.proposals.claim(proposal_id, user_id)  # open -> confirmed, atomically: a double click cannot run it twice
     try:
+        await _check_still_valid(clients, user_id, proposal.action, proposal.args)
         if proposal.action == "checkout_redirect":  # going to the checkout page is all this does: the person places the order there
             state.hub.publish(user_id, "chat", "navigate", {"turn_id": proposal.turn_id, "path": "/checkout"})
             text, cards = "Taking you to checkout.", []
@@ -78,6 +81,18 @@ async def confirm(proposal_id: str, request: Request, user_id: str = Depends(cur
         raise
     state.hub.publish(user_id, "chat", "message", {"turn_id": proposal.turn_id, "text": text, "cards": cards})
     return {"ok": True}
+
+
+async def _check_still_valid(clients: Clients, user_id: str, action: str, args: dict) -> None:
+    """The world may have moved on since the proposal was made (it can be minutes or a restart old): 409 `conflict` when it has."""
+    if action == "checkout_redirect":
+        cart = await clients.call("customer", clients.customer.GetCart, pb.GetCartRequest(), user_id=user_id)
+        if not cart.lines:
+            raise ApiError("conflict", "Your cart is empty now, so there is nothing to check out.")
+    elif action == "cancel_order":
+        order = await clients.call("order", clients.order.GetOrder, pb.GetOrderRequest(order_id=args["order_id"]), user_id=user_id)
+        if serialize.order(order)["status"] not in CANCELLABLE:
+            raise ApiError("conflict", f"Order {order.order_id} can no longer be cancelled.")
 
 
 @router.post("/chat/proposals/{proposal_id}/dismiss", response_model=OkOut)
@@ -94,6 +109,23 @@ def _cards(cards_json: str) -> list:
     return cards if isinstance(cards, list) else []
 
 
+async def _saved_cards(cards_json: str, user_id: str, state, clients: Clients) -> list:
+    """Saved cards; a saved proposal says whether it can still be confirmed (open, not expired, order/cart still fit)."""
+    cards = _cards(cards_json)
+    for c in cards:
+        if not (isinstance(c, dict) and c.get("kind") == "proposal" and isinstance(c.get("data"), dict)):
+            continue
+        data = c["data"]
+        available = isinstance(data.get("proposal_id"), str) and state.proposals.is_open(data["proposal_id"], user_id)
+        if available:
+            try:
+                await _check_still_valid(clients, user_id, str(data.get("action")), data.get("args") or {})
+            except (ApiError, KeyError):
+                available = False
+        data["available"] = available
+    return cards
+
+
 def _conversation(c: pb.Conversation) -> dict:
     return {"conversation_id": c.conversation_id, "title": c.title, "updated_at": c.updated_at}
 
@@ -106,11 +138,12 @@ async def list_conversations(user_id: str = Depends(current_user_id), clients: C
 
 
 @router.get("/chat/conversations/{conversation_id}/messages", response_model=list[ChatMessageOut])
-async def list_messages(conversation_id: str, user_id: str = Depends(current_user_id), clients: Clients = Depends(get_clients)):
+async def list_messages(conversation_id: str, request: Request, user_id: str = Depends(current_user_id), clients: Clients = Depends(get_clients)):
     """One chat's messages, oldest first (the last 200)."""
     reply = await clients.call("assistant", clients.assistant.ListMessages,
                                pb.ListMessagesRequest(conversation_id=conversation_id, limit=200), user_id=user_id)
-    return [{"role": m.role, "text": m.text, "cards": _cards(m.cards_json), "created_at": m.created_at} for m in reply.messages]
+    return [{"role": m.role, "text": m.text, "cards": await _saved_cards(m.cards_json, user_id, request.app.state, clients), "created_at": m.created_at}
+            for m in reply.messages]
 
 
 @router.patch("/chat/conversations/{conversation_id}", response_model=ConversationOut)

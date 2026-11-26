@@ -61,7 +61,7 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, w
     app.state.settings = settings
     app.state.llm = llm
     app.state.hub = EventHub(settings.ws_buffer_size, settings.ws_keep_seconds)
-    app.state.proposals = ProposalStore()
+    app.state.proposals = ProposalStore(settings.session_secret)
     app.state.memory = ConversationMemory()
     app.state.forwarding = set()  # (user_id, order_id) pairs whose checkout events are being relayed right now
     app.state.tasks = set()
