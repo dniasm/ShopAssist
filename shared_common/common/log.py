@@ -159,6 +159,14 @@ def set_request_id(value: str | None = None) -> str:
     return rid
 
 
+_VALID_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
+
+
+def valid_request_id(value: str | None) -> str | None:
+    """The incoming id when it is safe to log and echo (letters, digits, . _ -, 1-64 long), else None (callers then start a new one)."""
+    return value if value and _VALID_ID.fullmatch(value) else None
+
+
 def get_request_id() -> str:
     return _request_id.get()
 

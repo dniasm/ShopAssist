@@ -7,6 +7,7 @@ import re
 
 from orchestrator.errors import ApiError
 from orchestrator.llm import LLMError
+from shared_common.common.log import set_request_id
 from shopassist_proto import shopassist_pb2 as pb
 
 log = logging.getLogger(__name__)
@@ -206,6 +207,8 @@ class MemoryWorker:
     async def _consume(self) -> None:
         while True:
             job = await self._queue.get()
+            set_request_id()  # each job is its own trace
+            log.info("memory job started user=%s conversation=%s", job[0], job[1])
             try:
                 await self._run(*job)
             except Exception as e:  # a bad job must never stop the worker

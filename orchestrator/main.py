@@ -15,7 +15,7 @@ def main() -> None:
     settings = Settings.from_env()
     # 127.0.0.1 locally; in Docker set ORCHESTRATOR_HOST=0.0.0.0 so the container accepts outside connections.
     uvicorn.run(create_app(settings), host=os.environ.get("ORCHESTRATOR_HOST") or "127.0.0.1", port=settings.port,
-                log_config=None)  # uvicorn logs through the root handlers (files, masking) instead of its own
+                log_config=None, access_log=False)  # uvicorn logs through the root handlers (files, masking) instead of its own
 
 
 if __name__ == "__main__":

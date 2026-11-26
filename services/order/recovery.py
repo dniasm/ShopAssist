@@ -10,6 +10,7 @@ from services.order import db
 from services.order.cancel import Canceller
 from services.order.runs import Runs
 from services.order.saga import Deps, InjectedCrash, Interrupted, Saga
+from shared_common.common.log import set_request_id
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,8 @@ class Recovery:
             for order in await db.unsettled_older_than(self.deps.pool, self.min_age):
                 if self.runs.is_live(order["order_id"]):
                     continue
+                set_request_id()  # one trace per recovered order
+                log.info("recovering order %s (step %s)", order["order_id"], order["saga_step"])
                 try:
                     if order["saga_step"] == "CANCELLING":
                         await self.canceller.finish(order, recovering=True)

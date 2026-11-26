@@ -1,0 +1,147 @@
+"""Request id across HTTP and gRPC: continued, validated, isolated per call; one access line per request and per RPC."""
+import asyncio
+import logging
+import re
+
+import grpc
+import pytest
+
+from shared_common.common.log import get_request_id, set_request_id, valid_request_id
+from shopassist_proto import shopassist_pb2 as pb
+from shopassist_proto import shopassist_pb2_grpc as pb_grpc
+from tests import authchan
+from tests.test_agent_chat import FakeLLM, open_chat, say, says, turn, uses
+from tests.test_api_shop import make_shop  # noqa: F401  (fixture)
+from tests.test_api import client  # noqa: F401  (fixture)
+from tests.test_api import settings  # noqa: F401  (fixture)
+
+HEX12 = re.compile(r"[0-9a-f]{12}")
+
+
+@pytest.fixture(autouse=True)
+def debug_records(caplog):
+    """caplog sees every record; the filter stamps the request id the way setup_logging's handlers do."""
+    caplog.set_level(logging.DEBUG)
+
+    def stamp(record):
+        record.request_id = get_request_id()
+        return True
+
+    caplog.handler.addFilter(stamp)
+    yield
+    caplog.handler.removeFilter(stamp)
+
+
+def test_http_request_id_header(client):
+    assert client.get("/api/health", headers={"X-Request-Id": "abc123"}).headers["x-request-id"] == "abc123"
+    assert HEX12.fullmatch(client.get("/api/health").headers["x-request-id"])
+
+
+@pytest.mark.parametrize("bad", ["a" * 300, "x\ny", "../x", ""])
+def test_bad_request_id_replaced(client, bad):
+    try:
+        response = client.get("/api/health", headers={"X-Request-Id": bad})
+    except Exception:  # an HTTP client may refuse a header with a newline before it is sent
+        pytest.skip("client refuses to send this header")
+    assert HEX12.fullmatch(response.headers["x-request-id"])
+
+
+def test_valid_request_id_rules():
+    assert valid_request_id("a.b_c-1") == "a.b_c-1" and valid_request_id("a" * 64)
+    assert valid_request_id("a" * 65) is None and valid_request_id("x\ny") is None and valid_request_id(None) is None
+
+
+def test_http_access_line(client, caplog):
+    client.get("/api/health?x=1", headers={"X-Request-Id": "rid-http"})
+    seen = [r for r in caplog.records if r.name == "orchestrator.request_log"]
+    assert seen and re.fullmatch(r"GET /api/health -> 200 \d+ms user=-", seen[-1].getMessage())
+    assert seen[-1].levelno == logging.DEBUG and seen[-1].request_id == "rid-http"  # health checks are not worth INFO
+
+
+def _access(caplog, rpc):
+    return [r for r in caplog.records if r.name == "services.common.server" and r.getMessage().startswith(rpc)]
+
+
+def test_grpc_continues_request_id(loop_thread, catalog_running, caplog):
+    async def call():
+        set_request_id("rid1")
+        async with authchan.aio_channel(catalog_running.addr) as ch:
+            await pb_grpc.CatalogServiceStub(ch).ListProducts(pb.ListProductsRequest())
+
+    loop_thread.call(call())
+    seen = _access(caplog, "CatalogService/ListProducts")
+    assert seen and seen[-1].request_id == "rid1" and "OK" in seen[-1].getMessage()
+    assert "caller=orchestrator" in seen[-1].getMessage() and seen[-1].levelno == logging.INFO
+
+
+def test_grpc_error_is_warning(loop_thread, catalog_running, caplog):
+    async def call():
+        set_request_id("rid-miss")
+        async with authchan.aio_channel(catalog_running.addr) as ch:
+            with pytest.raises(grpc.aio.AioRpcError):
+                await pb_grpc.CatalogServiceStub(ch).GetProduct(pb.GetProductRequest(product_id="P-0000"))
+
+    loop_thread.call(call())
+    seen = _access(caplog, "CatalogService/GetProduct")
+    assert seen and seen[-1].levelno == logging.WARNING and "NOT_FOUND" in seen[-1].getMessage()
+    assert seen[-1].request_id == "rid-miss"
+
+
+def test_ids_isolated_between_concurrent_calls(loop_thread, catalog_running, caplog):
+    async def call(ch, rid):
+        set_request_id(rid)
+        await pb_grpc.CatalogServiceStub(ch).ListProducts(pb.ListProductsRequest())
+
+    async def both():
+        async with authchan.aio_channel(catalog_running.addr) as ch:
+            await asyncio.gather(*(asyncio.create_task(call(ch, rid)) for rid in ("rid-a", "rid-b") * 5))
+
+    loop_thread.call(both())
+    ids = [r.request_id for r in _access(caplog, "CatalogService/ListProducts")]
+    assert sorted(ids) == ["rid-a"] * 5 + ["rid-b"] * 5
+
+
+def test_unexpected_exception_is_logged_with_traceback(loop_thread, catalog_running, caplog):
+    from services.common.server import RequestIdInterceptor
+
+    class Details:
+        method = "/shopassist.v2.CatalogService/Boom"
+        invocation_metadata = (("x-request-id", "rid-boom"),)
+
+    async def boom(request, context):
+        raise RuntimeError("kaput")
+
+    async def scenario():
+        handler = await RequestIdInterceptor().intercept_service(
+            lambda details: _ready(grpc.unary_unary_rpc_method_handler(boom)), Details())
+        with pytest.raises(RuntimeError):
+            await handler.unary_unary(None, None)
+
+    async def _ready(value):
+        return value
+
+    loop_thread.call(scenario())
+    seen = [r for r in caplog.records if r.name == "services.common.server" and "Boom failed" in r.getMessage()]
+    assert seen and seen[0].levelno == logging.ERROR and seen[0].exc_info and seen[0].request_id == "rid-boom"
+
+
+def test_chat_turn_lines_share_id(make_shop, caplog):
+    class LoudLLM(FakeLLM):
+        async def chat(self, messages, tools, **kw):
+            logging.getLogger("orchestrator.llm").info("llm call fake")
+            return await super().chat(messages, tools, **kw)
+
+    shop = make_shop(llm=LoudLLM(uses(("search", {"query": "shirt"})), says("Here you go.")))
+    headers, ws = open_chat(shop)
+    posted = shop.client.post("/api/chat", json={"message": "a shirt please", "context": {"path": "/shop"}}, headers=headers)
+    assert posted.status_code == 202
+    http_id = posted.headers["x-request-id"]
+    turn(ws)
+    started = [r for r in caplog.records if r.getMessage().startswith("chat turn started")]
+    assert started and f"http_request={http_id}" in started[-1].getMessage()
+    turn_id = started[-1].request_id
+    assert turn_id != http_id
+    llm_lines = [r for r in caplog.records if r.getMessage() == "llm call fake"]
+    rpc_lines = _access(caplog, "CatalogService/ListProducts")
+    assert llm_lines and all(r.request_id == turn_id for r in llm_lines)
+    assert any(r.request_id == turn_id for r in rpc_lines)

@@ -15,6 +15,7 @@ import psycopg
 from psycopg_pool import AsyncConnectionPool
 
 from services.order import db
+from shared_common.common.log import set_request_id
 
 log = logging.getLogger(__name__)
 CHANNEL = "order_events"
@@ -79,6 +80,8 @@ class WatchHub:
                         self.publish(await db.events_since(self.pool, self._last_id))  # what happened while we were away
                     self.ready.set()
                     async for notification in conn.notifies():
+                        set_request_id()  # one trace per notification
+                        log.info("order event %s", notification.payload)
                         self.publish(await db.events_by_id(self.pool, [int(notification.payload)]))
             except asyncio.CancelledError:
                 raise
