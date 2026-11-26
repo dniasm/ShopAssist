@@ -449,7 +449,7 @@ def test_turn_logs_calls_and_tokens_in_the_audit_line_only(make_shop, caplog):
         time.sleep(0.05)
     turn_lines = [r.getMessage() for r in caplog.records if r.name == "audit" and r.getMessage().startswith("assistant_turn ")]
     assert len(turn_lines) == 1 and "llm_calls=2 tokens=42" in turn_lines[0]
-    assert not any("secret" in r.getMessage() for r in caplog.records if r.name == "orchestrator.agent.loop")  # the content goes to the audit line only
+    assert not any("secret" in r.getMessage() for r in caplog.records if r.name != "audit")  # the content goes to the audit line only, in no other record
 
 
 def restart(shop, llm):

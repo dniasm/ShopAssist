@@ -102,3 +102,67 @@ def test_proposal_audit(make_shop, caplog):
     assert shop.client.post(f"/api/chat/proposals/{pid2}/dismiss", headers=headers).status_code == 200
     d = parsed(audit_lines(caplog, "proposal_dismissed")[0])
     assert d["proposal"] == pid2 and d["action"] == "checkout_redirect"
+
+
+def test_a_turn_that_raises_writes_one_error_line(make_shop, caplog):
+    from orchestrator.agent.tools import AgentTools
+    original = AgentTools.run
+    n = {"calls": 0}
+
+    async def boom(self, *a, **kw):
+        n["calls"] += 1
+        if n["calls"] == 2:
+            raise RuntimeError("tool exploded")
+        return await original(self, *a, **kw)
+
+    AgentTools.run = boom
+    try:
+        run_turn(make_shop, uses(("search", {"category": "hoodies"})), uses(("search", {"category": "shoes"})), says("never"))
+    finally:
+        AgentTools.run = original
+    lines = audit_lines(caplog, "assistant_turn")
+    time.sleep(0.3)
+    lines = audit_lines(caplog, "assistant_turn", wait=0)
+    assert len(lines) == 1
+    f = parsed(lines[0])
+    trace = json.loads(f["tools"])
+    assert f["outcome"] == "error" and f["error"] == "RuntimeError" and f["llm_calls"] == "2"
+    assert [t["args"] for t in trace] == [{"category": "hoodies"}, {"category": "shoes"}] and trace[-1]["error"] is True
+
+
+def test_outcome_rules_without_a_model(make_shop, caplog):
+    shop = make_shop()
+    headers, ws = open_chat(shop)
+    say(shop, headers, "show me hoodies")
+    turn(ws)
+    f = parsed(audit_lines(caplog, "assistant_turn")[0])
+    assert f["outcome"] == "rules" and f["llm_calls"] == "0"
+
+
+def test_the_turn_line_is_capped(make_shop, caplog):
+    big = {"category": "hoodies", "brand": "b" * 800}
+    calls = [("search", {**big, "n": i}) for i in range(25)]
+    from orchestrator.agent import loop
+    shop = make_shop(llm=FakeLLM(uses(*calls[:3]), says("r" * 2000)))
+    headers, ws = open_chat(shop)
+    say(shop, headers, "m" * 450)
+    turn(ws)
+    f = parsed(audit_lines(caplog, "assistant_turn")[0])
+    assert len(f["reply"]) <= 1000 and len(f["message"]) <= 450
+    tools = json.loads(f["tools"])
+    assert all(isinstance(t["args"], str) and len(t["args"]) <= loop.LINE_ARGS_CHARS for t in tools)
+    saved = {"trace": [{"tool": "t", "args": {}, "result": "", "ms": 0, "error": False}] * 25}
+    caplog.clear()
+    loop.AgentLoop.audit_turn(saved, "T-x", "C-x", "m" * 2000, "r", "ok")
+    g = parsed(audit_lines(caplog, "assistant_turn")[0])
+    assert len(g["message"]) == 1000 and len(json.loads(g["tools"])) == 20 and g["tools_dropped"] == "5"
+
+
+def test_login_rate_limited_is_audited(make_shop, caplog):
+    from orchestrator.login_limits import MAX_FAILURES
+    from tests.fixtures import EMAIL_OF
+    shop = make_shop()
+    for _ in range(MAX_FAILURES):
+        assert shop.client.post("/api/session", json={"email": EMAIL_OF["U-04"], "password": "guess-guess"}).status_code == 401
+    assert shop.client.post("/api/session", json={"email": EMAIL_OF["U-04"], "password": "guess-guess"}).status_code == 429
+    assert parsed(audit_lines(caplog, "login_rate_limited")[0])["email"] == EMAIL_OF["U-04"]
