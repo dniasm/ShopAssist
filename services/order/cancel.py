@@ -70,7 +70,8 @@ class Canceller:
         """The steps after the claim: restock, refund, CANCELLED. All idempotent, so recovery just calls this again."""
         order_id, timeout = order["order_id"], self.deps.call_timeout
         lines = [pb.StockLine(sku_id=l["sku_id"], quantity=l["quantity"]) for l in order["lines"]]
-        await remote_call(self.deps.inventory.Restock, pb.RestockRequest(idempotency_key=f"cancel:{order_id}", lines=lines), timeout)
+        await remote_call(self.deps.inventory.Restock, pb.RestockRequest(idempotency_key=f"cancel:{order_id}", lines=lines), timeout,
+                          user_id=order["user_id"])
         crash_point(self.deps, "cancel_after_restock", recovering)
         if order["payment_id"]:
             await remote_call(
