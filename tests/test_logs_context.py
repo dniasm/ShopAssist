@@ -193,3 +193,60 @@ def test_unhandled_error_has_header_and_one_traceback(settings, caplog):
     assert len(tracebacks) == 1 and tracebacks[0].request_id == "rid-500"
     access = [r for r in caplog.records if r.name == "orchestrator.request_log"]
     assert access and access[-1].levelno == logging.ERROR and "-> 500" in access[-1].getMessage()
+
+
+def _recovery_with_orders(monkeypatch, caplog):
+    from services.order import recovery
+
+    orders = [{"order_id": "O-1", "saga_step": "X"}, {"order_id": "O-2", "saga_step": "X"}]
+
+    async def unsettled(pool, min_age):
+        return orders
+
+    class NoSaga:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def resume(self):
+            pass
+
+    class NoRuns:
+        def is_live(self, order_id):
+            return False
+
+    monkeypatch.setattr(recovery.db, "unsettled_older_than", unsettled)
+    monkeypatch.setattr(recovery, "Saga", NoSaga)
+    rec = recovery.Recovery(deps=type("D", (), {"pool": None})(), runs=NoRuns(), canceller=None, min_age_seconds=0, interval_seconds=1)
+
+    def ids():
+        return {r.getMessage().split()[2]: r.request_id for r in caplog.records if r.getMessage().startswith("recovered order")}
+
+    return rec, ids
+
+
+def test_recovery_passes_each_get_fresh_ids_and_leave_the_context_clean(monkeypatch, caplog):
+    rec, ids = _recovery_with_orders(monkeypatch, caplog)
+
+    async def two_passes():
+        await rec.recover_now()
+        first = dict(ids())
+        caplog.clear()
+        after_first = get_request_id()
+        await rec.recover_now()
+        return first, after_first, ids(), get_request_id()
+
+    first, after_first, second, after_second = asyncio.run(two_passes())
+    assert after_first == after_second == "-"  # nothing leaks out of a pass into the next one
+    everything = [*first.values(), *second.values()]
+    assert len(set(everything)) == 4 and all(HEX12.fullmatch(i) for i in everything)
+
+
+def test_recovery_keeps_a_caller_set_id(monkeypatch, caplog):
+    rec, ids = _recovery_with_orders(monkeypatch, caplog)
+
+    async def direct():
+        set_request_id("operator-1")
+        await rec.recover_now()
+
+    asyncio.run(direct())
+    assert set(ids().values()) == {"operator-1"}

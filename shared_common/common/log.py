@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date
 from pathlib import Path
@@ -165,6 +166,16 @@ _VALID_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
 def valid_request_id(value: str | None) -> str | None:
     """The incoming id when it is safe to log and echo (letters, digits, . _ -, 1-64 long), else None (callers then start a new one)."""
     return value if value and _VALID_ID.fullmatch(value) else None
+
+
+@contextmanager
+def request_id_scope(value: str | None = None):
+    """A trace for the `with` block only: the id from before it comes back afterwards (for loops that handle many units in one task)."""
+    token = _request_id.set(value or uuid.uuid4().hex[:12])
+    try:
+        yield _request_id.get()
+    finally:
+        _request_id.reset(token)
 
 
 def get_request_id() -> str:
