@@ -585,3 +585,31 @@ def test_a_loose_wish_searches_neighbouring_sizes_and_leaves_the_saved_fit_alone
     recalled = next(m for m in llm.requests[1] if m["role"] == "tool")["content"]
     assert recalled == "size_top: L\nfit (t-shirts): tight"
     assert shop.client.portal.call(seed) == [("fit", "tight", "t-shirts"), ("size_top", "L", "")]
+
+
+def test_a_browse_search_without_browse_words_ends_the_turn_with_cards(make_shop):
+    shop, llm = llm_shop(make_shop, uses(("search", {"category": "hoodies", "sort": "rating"})), says("never used"))
+    headers, ws = open_chat(shop)
+    say(shop, headers, "top-rated hoodies")
+    message = message_of(turn(ws))
+    assert len(llm.requests) == 1 and message["cards"][0]["kind"] == "products" and message["cards"][0]["data"]["products"]
+    assert message["text"].startswith("I found ")
+def test_a_search_answering_the_assistants_question_does_not_end_the_turn(make_shop):
+    shop, llm = llm_shop(make_shop, says("Which kind would you like?"), uses(("search", {"category": "hoodies"})), says("Here you go."))
+    headers, ws = open_chat(shop)
+    say(shop, headers, "I want something warm")
+    cid = next(m for m in turn(ws) if m["type"] == "conversation")["data"]["conversation_id"]
+    say(shop, headers, "hoodies then", conversation_id=cid)
+    message = message_of(turn(ws))
+    assert len(llm.requests) == 3 and message["text"] == "Here you go."
+
+
+def test_a_search_with_no_results_goes_back_to_the_model_and_shows_no_empty_card(make_shop):
+    shop, llm = llm_shop(make_shop, uses(("search", {"brand": "Nosuchbrand", "color": "black"})), says("None under that brand; want hoodies?"))
+    headers, ws = open_chat(shop)
+    say(shop, headers, "black??")
+    message = message_of(turn(ws))
+    tool_text = next(m for m in llm.requests[1] if m["role"] == "tool")["content"]
+    assert "brand Nosuchbrand" in tool_text and "colour black" in tool_text and "fewer filters" in tool_text
+    assert message["text"] == "None under that brand; want hoodies?" and message["cards"] == [] and message["closing"] == ""  # not a canned "No results."
+    assert len(llm.requests) == 2

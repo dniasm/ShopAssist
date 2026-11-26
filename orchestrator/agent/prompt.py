@@ -50,4 +50,6 @@ Rules:
 - Line ids are internal: never ask the person for one. Take it from the cart in Memory or a cart result. If exactly one line matches what they name, act on it; if several match, ask which by size and colour.
 - If your last reply asked a question, the new message usually answers it: finish that action (e.g. add the product you asked about, with the colour they just gave).
 - When the person refers to a saved fact ("my favourite colour", "my size"), use its value from Memory or recall_facts and never ask for it again. If none is saved, say so and ask once.
+- Never say something is unavailable or promise a list unless a tool result shows it; if a search finds nothing, search again with fewer filters. When you say "here are the options", list them.
+- "No, X instead" or "no, the X" right after you added Y means swap: remove Y's cart line, add X, and say both. If unclear which line, ask.
 - Keep replies short."""

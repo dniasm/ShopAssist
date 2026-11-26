@@ -109,7 +109,11 @@ class AgentTools:
         stock = await stock_by_product(self.clients, [p.product_id for p in reply.products])
         cards = [{**serialize.product(p), "in_stock": stock.get(p.product_id, 0) > 0} for p in reply.products]
         if not cards:
-            return result(f"No results{fit_note}.", card("products", {"products": [], "total": 0}))
+            applied = ", ".join(f"{k} {v}" for k, v in (("query", a.get("query")), ("category", a.get("category")), ("brand", a.get("brand")),
+                                                         ("colour", a.get("color")), ("size", ", ".join(sizes)),
+                                                         ("min price", a.get("min_price")), ("max price", a.get("max_price"))) if v)
+            return result(f"No results for {applied or 'everything'}{fit_note}. Nothing is shown. Search again with fewer filters "
+                          "(drop colour, size or brand, or shorten the query) before saying it is unavailable.")
         intro, _, shown = product_list(card("products", {"products": cards, "total": reply.total}), page_product)
         head = f"{reply.total} results" + (", closest matches" if reply.fuzzy else "") + f" (page {page})" + fit_note
         more = f"\nMore on page {page + 1}." if reply.next_page_token else ""
@@ -141,7 +145,8 @@ class AgentTools:
                     first = card("product", {"product": {**serialize.product(product), "skus": [serialize.sku(s) for s in product.skus]},
                                              "stock": options})
             head = (f"{product.name} [{product.product_id}] {money(product.price_cents)} · rated {product.rating:.1f}/5 · "
-                    f"{', '.join(product.colors)} · {', '.join(product.sizes)}")
+                    f"{', '.join(product.colors)} · {', '.join(product.sizes)}"
+                    + (" (the only size: never ask for it)" if len(product.sizes) == 1 else ""))
             if rows:
                 stock_text = ", ".join(f"{o['size']} {o['color']} " + (str(o["available"]) if o["available"] else "sold out") for o in rows[:12])
             else:
@@ -169,8 +174,8 @@ class AgentTools:
     async def _add(self, a: dict, user_id: str) -> dict:
         product, available = await self._product(a["product_id"])
         sizes, colors = sorted({s.size for s in product.skus}), sorted({s.color for s in product.skus})
-        size = a.get("size") or (sizes[0] if len(sizes) == 1 else None)
-        color = a.get("color") or (colors[0] if len(colors) == 1 else None)
+        size = sizes[0] if len(sizes) == 1 else a.get("size")  # one size (or colour) is no choice: use it, never ask
+        color = colors[0] if len(colors) == 1 else a.get("color")
         sku = next((s for s in product.skus if size and color and s.size.lower() == str(size).lower() and s.color.lower() == str(color).lower()), None)
         if sku is None:
             size_ok = bool(size) and any(s.size.lower() == str(size).lower() for s in product.skus)

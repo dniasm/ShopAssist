@@ -112,7 +112,10 @@ def _where(f: Filters, exclude: str = "") -> tuple[str, dict]:
         clauses.append("category = ANY(%(categories)s)")
         params["categories"] = f.categories
     if f.brands and exclude != "brand":
-        clauses.append("brand = ANY(%(brands)s)")
+        # case-insensitive; a value that is no brand by itself also matches brands starting with it as a word ("mirelle" -> "Mirelle Ash")
+        clauses.append("EXISTS (SELECT 1 FROM unnest(%(brands)s::text[]) AS b WHERE lower(brand) = lower(b)"
+                       " OR (left(lower(brand), length(b) + 1) = lower(b) || ' '"
+                       " AND NOT EXISTS (SELECT 1 FROM products x WHERE lower(x.brand) = lower(b))))")
         params["brands"] = f.brands
     if f.colors and exclude != "color":
         clauses.append("colors && %(colors)s::text[]")

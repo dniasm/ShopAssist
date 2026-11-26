@@ -159,7 +159,7 @@ def test_search_pages_and_final_intro(env):
     assert out["final"].startswith("There are 11 similar products to Alpine Hoodie 1")
     assert page["product_id"] not in ids(out)
     none = env.run("search", {"query": "zzzzqqqq"})
-    assert none["final"] is None and none["card"]["data"]["products"] == []
+    assert none["final"] is None and none["card"] is None and "No results" in none["text"]  # no empty card (was: an empty products card)
 
 
 def test_product_details_and_stock(env):
@@ -271,3 +271,25 @@ def test_system_prompt_under_600_tokens():
     assert len(SYSTEM_PROMPT) // 4 < 600
     for must in ("never pay", "ambiguous", "latest message", "checkout"):
         assert must in SYSTEM_PROMPT.lower()
+
+
+def test_search_brand_matches_a_word_prefix_and_says_what_filters_found_nothing(env):
+    out = env.run("search", {"brand": "mirelle"})
+    assert out["card"]["data"]["total"] == 1 and out["card"]["data"]["products"][0]["brand"] == "Mirelle Ash"
+    out = env.run("search", {"brand": "Mirelle", "color": "white"})
+    assert out["card"] is None and out["final"] is None and out["error"] is False
+    assert "brand Mirelle" in out["text"] and "colour white" in out["text"] and "fewer filters" in out["text"]
+
+
+def test_adding_a_one_size_one_colour_product_needs_no_question(env):
+    out = env.run("cart", {"action": "add", "product_id": "P-2003"})  # sizes ONE, colours black
+    assert "Which" not in out["final"] and ("Added" in out["final"] or "sold out" in out["final"])
+    out = env.run("cart", {"action": "add", "product_id": "P-2003", "size": "M"})  # a size that does not exist: the only one is used
+    assert "Which" not in out["final"]
+    assert "only size" in env.run("product", {"ids": ["P-2003"]})["text"]
+
+
+def test_prompt_covers_the_swap_and_no_false_unavailable_rules():
+    low = SYSTEM_PROMPT.lower()
+    assert "unavailable" in low and "swap" in low and "remove y" in low
+    assert len(json.dumps(TOOLS)) // 4 <= 700 and len(SYSTEM_PROMPT) // 4 <= 600

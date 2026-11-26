@@ -31,8 +31,8 @@ TITLE_CHARS = 60
 LLM_DOWN = "I can't do that right now. Please try again in a minute."
 READ_ONLY = {"search_products", "get_product", "get_stock", "get_cart", "list_orders", "get_order"}  # the rules planner's read tools
 WRITE_WORDS = re.compile(r"\b(add|remove|delete|cancel|check ?out|buy|purchase|put|take out)\b", re.I)
-# A search's own reply ends the turn only for a plain browse; an answer to a question ("green then, M and L") goes on.
-BROWSE_WORDS = re.compile(r"\b(show|find|search|look(?:ing)? for|browse|list|any|anything|similar|got|have you|do you have|recommend|suggest)\b", re.I)
+# A search with results ends the turn with its own reply and cards unless the message changes the cart ("find X and add it")
+# or answers a question the assistant just asked ("green then, M and L").
 PRODUCT_ID = re.compile(r"P-\d+")
 BRACKETED_ID = re.compile(r"\s*[(\[]\s*(P-\d+)\s*[)\]]")
 
@@ -136,8 +136,9 @@ class AgentLoop:
         seen: set[str] = set()
         calls = tokens = 0
         message = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
-        # "find X and add it", or an answer to a question: a lookup alone does not finish the turn
-        lookup_ends_turn = bool(BROWSE_WORDS.search(message)) and not WRITE_WORDS.search(message)
+        asked = next((m["content"] for m in reversed(messages[:-1]) if m["role"] == "assistant"), "")
+        asked = asked.split("\n[Shown to the user:")[0].rstrip().removesuffix(CLOSING).rstrip().endswith("?")
+        lookup_ends_turn = not WRITE_WORDS.search(message) and not asked
         for _ in range(MAX_STEPS):
             reply = await self.llm.chat(messages, TOOLS)
             calls += 1

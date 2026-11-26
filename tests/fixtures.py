@@ -48,6 +48,12 @@ def build_products() -> list[dict]:
         "description": "Cut like a parka, warm like a parka, light like a parka.", "price_cents": 11000,
         "rating": 5.0, "rating_count": 5, "colors": ["navy"], "sizes": ["M"], "created_at": CREATED,
     })
+    # Brands that are word-prefixes of each other: a prefix matches only when no brand equals it exactly.
+    for pid, name, brand in (("P-2003", "Ash Weekend Studio", "Mirelle Ash"), ("P-2004", "Peak Shell", "Alpine Peak")):
+        products.append({
+            "product_id": pid, "name": name, "category": "jackets", "brand": brand, "description": "Seed.", "price_cents": 9000,
+            "rating": 3.0, "rating_count": 5, "colors": ["black"], "sizes": ["ONE"], "created_at": CREATED,
+        })
     return products
 
 

@@ -255,3 +255,17 @@ def test_get_skus_includes_the_products_category(catalog):
     sku = SKUS[0]
     item = catalog.GetSkus(pb.GetSkusRequest(sku_ids=[sku["sku_id"]])).items[0]
     assert item.category == next(p["category"] for p in PRODUCTS if p["product_id"] == sku["product_id"])
+
+
+def brand_ids(catalog, *brands):
+    return {p.product_id for p in catalog.ListProducts(pb.ListProductsRequest(brands=list(brands), page_size=100)).products}
+
+
+def test_brand_filter_ignores_case_and_matches_a_word_prefix_unless_the_value_is_a_brand(catalog):
+    assert brand_ids(catalog, "mirelle") == brand_ids(catalog, "Mirelle Ash") == {"P-2003"}  # prefix of one brand
+    assert brand_ids(catalog, "MIRELLE ASH") == {"P-2003"}
+    assert brand_ids(catalog, "Mirel") == set()  # a word-prefix, not a letter-prefix
+    # "Alpine" is a brand itself, so "Alpine Peak" does not leak into the exact filter the web facets use
+    assert brand_ids(catalog, "Alpine") == {p["product_id"] for p in PRODUCTS if p["brand"] == "Alpine"}
+    assert brand_ids(catalog, "alpine peak") == {"P-2004"}
+    assert brand_ids(catalog, "Northwind") == {p["product_id"] for p in PRODUCTS if p["brand"] == "Northwind"}
