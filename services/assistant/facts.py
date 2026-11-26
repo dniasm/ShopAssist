@@ -16,6 +16,16 @@ STOPWORDS = {"i", "me", "my", "am", "is", "are", "the", "a", "an", "what", "whic
              "and", "or", "it", "how", "your"}
 
 
+# A value made only of these words points at a saved fact ("my favorite color") and says nothing itself.
+VAGUE_WORDS = {"my", "favorite", "favourite", "preferred", "usual", "same", "one", "color", "colors", "colour", "colours", "size",
+               "fit", "the", "as", "before", "like", "that", "it"}
+
+
+def is_vague(key: str, value: str) -> bool:
+    words = _TOKEN.findall(value.lower())
+    return not words or all(w in VAGUE_WORDS or w in key.split("_") for w in words)
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -66,6 +76,8 @@ def plan_changes(existing: list[dict], changes: list[dict], now: datetime | None
         value = change.get("value", "").strip()
         if change["op"] == "forget":
             remove(lambda f: f["key"] == key and (value == "*" or _same(f["value"], value)))
+            continue
+        if is_vague(key, value):
             continue
         category = change.get("category", "").strip().lower()
         if is_single(key):

@@ -15,6 +15,12 @@ CATEGORIES = ("headphones", "hoodies", "backpacks", "watches", "sunglasses", "t-
 FACT_LIMIT, SUMMARY_WORDS = 5, 200
 STOPWORDS = {"i", "me", "my", "am", "is", "are", "the", "a", "an", "what", "which", "do", "you", "of", "for", "to", "in",
              "and", "or", "it", "how", "your", "s"}
+# Words are compared after this normalisation, so "favourite colour" finds `liked_colors`: UK spellings, synonyms, plurals.
+SPELLING = {"colour": "color", "favourite": "favorite"}
+SYNONYMS = {"favorite": "liked", "preferred": "liked", "usual": "liked"}
+# A remembered value made only of these words refers to a saved fact ("my favourite colour") instead of stating one.
+REFERENCE_WORDS = {"my", "favorite", "preferred", "usual", "same", "one", "color", "size", "fit", "the", "as", "before", "like",
+                   "that", "it"}
 QUEUE_MAX, CLOSE_WAIT_SECONDS = 100, 10.0
 SUMMARY_MESSAGES, MESSAGE_CHARS = 12, 600  # the last 6 exchanges, each message cut short
 
@@ -37,7 +43,7 @@ FACTS_SYSTEM = (
     "Temporal (kind=temporal), a current need or one-off wish: need, want, with the category when one fits. "
     "\"I feel like a loose t-shirt\", \"I need a loose fitting tee\", \"my shirt tore, I need a new one\" are temporal want/need "
     "and NEVER change the saved fit or sizes. Only lasting statements (\"from now on I wear loose hoodies\", \"I'm an L\") are permanent.\n"
-    "Only store what the user said about themselves; never invent. Return {\"changes\": []} when there is nothing to store."
+    "A reference to a saved fact without a value (\"my favourite colour\", \"my usual size\") stores nothing. Only store what the user said about themselves; never invent. Return {\"changes\": []} when there is nothing to store."
 )
 SUMMARY_SYSTEM = (
     f"Summarise these recent exchanges of a shopping chat in at most {SUMMARY_WORDS} words: what the user wants, "
@@ -70,6 +76,24 @@ def may_hold_fact(text: str) -> bool:
     return False
 
 
+def _normal_words(text: str) -> set[str]:
+    """Lowercase words with UK spellings unified, plurals cut ("colors" -> "color") and synonyms mapped."""
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", text.lower()):
+        w = SPELLING.get(w, w)
+        if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+            w = w[:-1]
+        out.add(SYNONYMS.get(w, w))
+    return out
+
+
+def is_vague_value(key: str, value: str) -> bool:
+    """True when the value only points at a saved fact ("my favorite colour") or only repeats the key, so it holds no information."""
+    words = _normal_words(value)
+    reference = _normal_words(" ".join(REFERENCE_WORDS)) | _normal_words(key.replace("_", " "))
+    return not words or words <= reference
+
+
 def _parse_changes(data) -> list[dict]:
     if not isinstance(data, dict) or not isinstance(data.get("changes"), list):
         raise LLMError("memory: bad shape")
@@ -81,7 +105,7 @@ def _parse_changes(data) -> list[dict]:
         key, value, category = str(c.get("key") or "").strip(), str(c.get("value") or "").strip(), str(c.get("category") or "")
         if op not in ("remember", "forget") or kind not in ("permanent", "temporal") or not key:
             continue
-        if category not in (*CATEGORIES, "") or (op == "remember" and not value):
+        if category not in (*CATEGORIES, "") or (op == "remember" and (not value or is_vague_value(key, value))):
             continue
         if key.lower().replace(" ", "_") in TEMPORAL_KEYS:
             kind = "temporal"
@@ -110,7 +134,7 @@ def fact_names(facts: list[dict]) -> str:
 
 
 def _words(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", text.lower()))
+    return _normal_words(text)
 
 
 def keyword_facts(facts: list[dict], query: str, limit: int = FACT_LIMIT) -> list[dict]:

@@ -114,7 +114,7 @@ async def list_messages(pool: AsyncConnectionPool, user_id: str, conversation_id
 async def _live_facts(conn: AsyncConnection, user_id: str, now: datetime) -> list[dict]:
     """The user's facts, after deleting the ones that have expired (expired facts are removed when read)."""
     await conn.execute("DELETE FROM facts WHERE user_id = %s AND expires_at IS NOT NULL AND expires_at <= %s", (user_id, now))
-    cur = await conn.execute(f"SELECT {FACT} FROM facts WHERE user_id = %s ORDER BY created_at, fact_id", (user_id,))
+    cur = await conn.execute(f"SELECT {FACT} FROM facts WHERE user_id = %s ORDER BY created_at, seq", (user_id,))
     return await cur.fetchall()
 
 

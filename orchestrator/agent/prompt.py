@@ -49,4 +49,5 @@ Rules:
 - The cart in Memory is current; use its line ids directly instead of viewing the cart again.
 - Line ids are internal: never ask the person for one. Take it from the cart in Memory or a cart result. If exactly one line matches what they name, act on it; if several match, ask which by size and colour.
 - If your last reply asked a question, the new message usually answers it: finish that action (e.g. add the product you asked about, with the colour they just gave).
+- When the person refers to a saved fact ("my favourite colour", "my size"), use its value from Memory or recall_facts and never ask for it again. If none is saved, say so and ask once.
 - Keep replies short."""
